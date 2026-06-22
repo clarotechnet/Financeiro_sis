@@ -30,11 +30,12 @@ const FOLHA_TABS: SubItem[] = [
 
 export const AppSidebar: React.FC = () => {
     const { pathname, search } = useLocation();
-    const { isAdmin } = useAuth();
+    const { isAdmin, profile } = useAuth();
     const { state } = useSidebar();
     const collapsed = state === 'collapsed';
 
     const currentTab = new URLSearchParams(search).get('tab') || 'kpis';
+    const canAccessSettings = isAdmin || profile?.role === 'rh';
 
     const renderModule = (
         basePath: string,
@@ -116,7 +117,7 @@ export const AppSidebar: React.FC = () => {
                         <SidebarMenu>
                             {renderModule('/comissionamento', 'Solicitação de Pagamento', DollarSign, COMISSIONAMENTO_TABS)}
                             {isAdmin && renderModule('/folha-pagamento', 'Folha de Pagamento', Wallet, FOLHA_TABS)}
-                            {isAdmin && (
+                            {canAccessSettings && (
                                 <SidebarMenuItem>
                                     <SidebarMenuButton
                                         asChild

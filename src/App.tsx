@@ -76,7 +76,7 @@ const App = () => (
                 <Route
                   path="/configuracoes"
                   element={
-                    <ProtectedRoute requireAdmin>
+                    <ProtectedRoute allowedRoles={['admin', 'rh']}>
                       <Admin />
                     </ProtectedRoute>
                   }

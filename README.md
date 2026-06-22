@@ -4,13 +4,6 @@ Esse projéto é para mostrar dados de produtividade mais visuais com graficos e
 fora que fica conectado com uma base de dados online para gravar novos dados e mostrar um consolidade mais amplo com filtros de data
 ```
 
-```bash
-git clone https://github.com/matheusfreitastechnet-afk/sheet-sync.git
-cd sheet-sync
-npm install
-npm run dev
-```
-
 ## 🚀 Tecnologias Usadas nesse Projeto
 - Vite
 - TypeScript

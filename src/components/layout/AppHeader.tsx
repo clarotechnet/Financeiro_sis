@@ -30,6 +30,7 @@ export const AppHeader: React.FC = () => {
         .map(s => s[0]?.toUpperCase())
         .join('') || 'U';
     const profileTypeLabel = profile?.role === 'admin' ? 'Administrador' : 'RH';
+    const canAccessSettings = isAdmin || profile?.role === 'rh';
 
     return (
         <header className="h-16 border-b border-border bg-surface/80 backdrop-blur-xl sticky top-0 z-40 flex items-center px-4 gap-3">
@@ -83,7 +84,7 @@ export const AppHeader: React.FC = () => {
                     <DropdownMenuItem onClick={() => navigate('/perfil')} className="gap-2 cursor-pointer">
                         <User className="w-4 h-4" /> Perfil
                     </DropdownMenuItem>
-                    {isAdmin && (
+                    {canAccessSettings && (
                         <DropdownMenuItem onClick={() => navigate('/configuracoes')} className="gap-2 cursor-pointer">
                             <Settings className="w-4 h-4" /> Configurações
                         </DropdownMenuItem>
