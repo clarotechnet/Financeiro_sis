@@ -64,7 +64,7 @@ const Perfil: React.FC = () => {
         !isSavingPassword;
     const name = currentDisplayName || profile?.email || user?.email || 'Usuário';
     const initials = name.split(' ').filter(Boolean).slice(0, 2).map(s => s[0]?.toUpperCase()).join('') || 'U';
-    const profileTypeLabel = profile?.role === 'admin' ? 'Administrador' : 'Usuário';
+    const profileTypeLabel = profile?.role === 'admin' ? 'Administrador' : 'RH';
     const cargoLabel = currentCargo || 'Cargo não informado';
     const activeTab = searchParams.get('tab') === 'senha' || searchParams.get('tab') === 'notif'
         ? searchParams.get('tab')!

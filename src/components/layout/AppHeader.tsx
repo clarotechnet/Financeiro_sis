@@ -29,7 +29,7 @@ export const AppHeader: React.FC = () => {
         .slice(0, 2)
         .map(s => s[0]?.toUpperCase())
         .join('') || 'U';
-    const profileTypeLabel = profile?.role === 'admin' ? 'Administrador' : 'Usuário';
+    const profileTypeLabel = profile?.role === 'admin' ? 'Administrador' : 'RH';
 
     return (
         <header className="h-16 border-b border-border bg-surface/80 backdrop-blur-xl sticky top-0 z-40 flex items-center px-4 gap-3">

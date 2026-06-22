@@ -51,6 +51,11 @@ interface AllUser {
   created_at: string;
 }
 
+type ProfileRole = 'rh' | 'admin';
+
+const getProfileRole = (role: string | null | undefined): ProfileRole =>
+  role === 'admin' ? 'admin' : 'rh';
+
 export default function Admin() {
   const navigate = useNavigate();
   const { isAdmin, isLoading: authLoading, user } = useAuth();
@@ -173,7 +178,7 @@ export default function Admin() {
       setApprovingId(null);
     }
   };
-  const changeRole = async (userId: string, newRole: string) => {
+  const changeRole = async (userId: string, newRole: ProfileRole) => {
     if (userId === user?.id) {
       toast({
         title: 'Ação não permitida',
@@ -411,20 +416,20 @@ export default function Admin() {
                           <TableCell>{u.display_name || '-'}</TableCell>
                           <TableCell>
                             {u.id === user?.id ? (
-                              <Badge variant={u.role === 'admin' ? 'default' : 'secondary'}>
-                                {u.role}
+                              <Badge variant={getProfileRole(u.role) === 'admin' ? 'default' : 'secondary'}>
+                                {getProfileRole(u.role)}
                               </Badge>
                             ) : (
                               <Select
-                                value={u.role}
-                                onValueChange={(value) => changeRole(u.id, value)}
+                                value={getProfileRole(u.role)}
+                                onValueChange={(value) => changeRole(u.id, value as ProfileRole)}
                                 disabled={approvingId === u.id}
                               >
                                 <SelectTrigger className="w-[120px] h-8">
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="user">user</SelectItem>
+                                  <SelectItem value="rh">rh</SelectItem>
                                   <SelectItem value="admin">admin</SelectItem>
                                 </SelectContent>
                               </Select>

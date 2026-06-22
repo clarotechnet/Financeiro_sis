@@ -126,6 +126,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               id: data.user.id,
               email: data.user.email ?? email,
               display_name: displayName ?? null,
+              role: 'rh',
             },
             { onConflict: 'id' }
           );
