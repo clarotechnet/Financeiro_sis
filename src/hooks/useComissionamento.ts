@@ -206,6 +206,9 @@ export function useComissionamento() {
     if (filters.banco.length > 0) {
       result = result.filter(r => filters.banco.includes(r.banco || ''));
     }
+    if (filters.status.length > 0) {
+      result = result.filter(r => filters.status.includes((r.status_pag || '').toUpperCase()));
+    }
     return result;
   }, [data, filters]);
 

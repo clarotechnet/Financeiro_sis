@@ -33,7 +33,7 @@ export const AppHeader: React.FC = () => {
     const canAccessSettings = isAdmin || profile?.role === 'rh';
 
     return (
-        <header className="h-16 border-b border-border bg-surface/80 backdrop-blur-xl sticky top-0 z-40 flex items-center px-4 gap-3">
+        <header className="h-16 border-b border-border bg-surface/80 backdrop-blur-xl sticky top-0 z-50 flex items-center px-4 gap-3">
             <SidebarTrigger className="text-foreground" />
 
             <div className="hidden md:flex items-center gap-2 text-muted-foreground text-sm ml-2">
