@@ -17,12 +17,22 @@ interface OpcoesData {
   categoria: OpcaoSelect[];
   secao_custeio: OpcaoSelect[];
   centro_custeio: OpcaoSelect[];
+  plano_contas: OpcaoSelect[];
+  bancos: OpcaoSelect[];
 }
 
 const EMPTY_OPCOES: OpcoesData = {
   cnpj: [], unidade: [], centro_de_custo: [],
-  categoria: [], secao_custeio: [], centro_custeio: []
+  categoria: [], secao_custeio: [], centro_custeio: [],
+  plano_contas: [], bancos: []
 };
+
+const normalizeLancamentoPix = (row: LancamentoPix): LancamentoPix => ({
+  ...row,
+  unidade: row.unidade_cadastro || row.unidade,
+  centro_de_custo: row.setor_nome || row.centro_de_custo,
+  banco: row.banco_cadastro || row.banco,
+});
 
 export function useComissionamento() {
   const [data, setData] = useState<LancamentoPix[]>([]);
@@ -32,7 +42,7 @@ export function useComissionamento() {
   const [filters, setFilters] = useState<ComissionamentoFilters>({
     cidade: [], dataInicio: '', dataFim: '', status: [], nome: [],
     frente: [], contrato: [], dataExecInicio: '', dataExecFim: '',
-    descricao: '', cnpj: [], centroCusteio: []
+    descricao: '', cnpj: [], contaAnalitica: [], banco: []
   });
 
   const fetchData = useCallback(async () => {
@@ -46,7 +56,7 @@ export function useComissionamento() {
 
       while (hasMore) {
         const { data: rows, error: fetchError } = await externalSupabase
-          .from('vw_lancamentos_pix')
+          .from('vw_lancamentos_pix_com_conta_analitica')
           .select('*')
           .range(page * pageSize, (page + 1) * pageSize - 1)
           .order('data_lancamento', { ascending: false });
@@ -60,7 +70,7 @@ export function useComissionamento() {
           hasMore = false;
         }
       }
-      setData(allData);
+      setData(allData.map(normalizeLancamentoPix));
     } catch (err: any) {
       console.error('Erro ao buscar lançamentos PIX:', err);
       setError(err.message || 'Erro ao carregar dados');
@@ -72,20 +82,88 @@ export function useComissionamento() {
   const fetchOpcoes = useCallback(async () => {
     const tables: { key: keyof OpcoesData; table: string }[] = [
       { key: 'cnpj', table: 'opcoes_cnpj' },
-      { key: 'unidade', table: 'opcoes_unidade' },
-      { key: 'centro_de_custo', table: 'opcoes_centro_de_custo' },
       { key: 'categoria', table: 'opcoes_categoria' },
       { key: 'secao_custeio', table: 'opcoes_secao_custeio' },
       { key: 'centro_custeio', table: 'opcoes_centro_custeio' },
     ];
     const next: OpcoesData = { ...EMPTY_OPCOES };
-    await Promise.all(tables.map(async ({ key, table }) => {
+
+    const optionsPromise = Promise.all(tables.map(async ({ key, table }) => {
       const { data: rows, error: err } = await externalSupabase
         .from(table)
         .select('id, nome, ordem')
         .order('ordem', { ascending: true });
       if (!err && rows) next[key] = rows as OpcaoSelect[];
     }));
+
+    const unidadesPromise = externalSupabase
+      .from('unidades')
+      .select('codigo, unidade')
+      .eq('ativo', true);
+
+    const setoresPromise = externalSupabase
+      .from('setor')
+      .select('codigo, setor')
+      .eq('ativo', true);
+
+    const bancosPromise = externalSupabase
+      .from('bancos')
+      .select('codigo, banco')
+      .eq('ativo', true);
+
+    const planoPromise = externalSupabase
+      .from('vw_plano_contas_relatorio')
+      .select('conta_id, conta_codigo, conta_descricao, conta_ordem')
+      .order('conta_codigo', { ascending: true });
+
+    const [, unidadesResult, setoresResult, bancosResult, planoResult] = await Promise.all([
+      optionsPromise,
+      unidadesPromise,
+      setoresPromise,
+      bancosPromise,
+      planoPromise,
+    ]);
+
+    if (!unidadesResult.error && unidadesResult.data) {
+      next.unidade = (unidadesResult.data as { codigo: string; unidade: string }[])
+        .map(row => ({
+          id: row.codigo,
+          nome: `${row.codigo} - ${row.unidade}`,
+          ordem: Number(row.codigo) || null,
+        }))
+        .sort((a, b) => a.id.localeCompare(b.id, 'pt-BR', { numeric: true }));
+    }
+
+    if (!setoresResult.error && setoresResult.data) {
+      next.centro_de_custo = (setoresResult.data as { codigo: string; setor: string }[])
+        .map(row => ({
+          id: row.codigo,
+          nome: row.setor,
+          ordem: Number(row.codigo.replace(/\D/g, '')) || null,
+        }))
+        .sort((a, b) => a.id.localeCompare(b.id, 'pt-BR', { numeric: true }));
+    }
+
+    if (!bancosResult.error && bancosResult.data) {
+      next.bancos = (bancosResult.data as { codigo: string; banco: string }[])
+        .map(row => ({
+          id: row.codigo,
+          nome: row.banco,
+          ordem: Number(row.codigo.replace(/\D/g, '')) || null,
+        }))
+        .sort((a, b) => a.id.localeCompare(b.id, 'pt-BR', { numeric: true }));
+    }
+
+    const { data: planoRows, error: planoErr } = planoResult;
+
+    if (!planoErr && planoRows) {
+      next.plano_contas = planoRows.map((row: any) => ({
+        id: row.conta_id,
+        nome: `${row.conta_codigo} - ${row.conta_descricao}`,
+        ordem: row.conta_ordem ?? null,
+      }));
+    }
+
     setOpcoes(next);
   }, []);
 
@@ -122,11 +200,11 @@ export function useComissionamento() {
       const q = filters.descricao.trim().toLowerCase();
       result = result.filter(r => (r.descricao || '').toLowerCase().includes(q));
     }
-    if (filters.cnpj.length > 0) {
-      result = result.filter(r => filters.cnpj.includes(r.cnpj || ''));
+    if (filters.contaAnalitica.length > 0) {
+      result = result.filter(r => filters.contaAnalitica.includes(r.conta_analitica || ''));
     }
-    if (filters.centroCusteio.length > 0) {
-      result = result.filter(r => filters.centroCusteio.includes(r.centro_custeio || ''));
+    if (filters.banco.length > 0) {
+      result = result.filter(r => filters.banco.includes(r.banco || ''));
     }
     return result;
   }, [data, filters]);
@@ -192,14 +270,15 @@ export function useComissionamento() {
   // "Frentes" agora = consolidado por favorecido
   const frentesData = useMemo<FrenteKPIData[]>(() => {
     const totalGeralValor = filteredData.reduce((s, r) => s + (r.valor || 0), 0);
-    const map = new Map<string, { qtd: number; valor: number; unidade: string; centroCusteio: string; favorecidos: Set<string> }>();
+    const map = new Map<string, { qtd: number; valor: number; unidade: string; contasAnaliticas: Set<string>; favorecidos: Set<string> }>();
     filteredData.forEach(r => {
       const k = r.categoria || 'Sem Categoria';
-      if (!map.has(k)) map.set(k, { qtd: 0, valor: 0, unidade: r.unidade || '', centroCusteio: r.centro_custeio || '', favorecidos: new Set() });
+      if (!map.has(k)) map.set(k, { qtd: 0, valor: 0, unidade: r.unidade || '', contasAnaliticas: new Set(), favorecidos: new Set() });
       const it = map.get(k)!;
       it.qtd += 1;
       it.valor += r.valor || 0;
       if (r.favorecido) it.favorecidos.add(r.favorecido);
+      if (r.conta_analitica) it.contasAnaliticas.add(r.conta_analitica);
     });
     return Array.from(map.entries())
       .map(([categoria, g]) => ({
@@ -213,7 +292,7 @@ export function useComissionamento() {
         tecNaoVenderam: [],
         totalValor: g.valor,
         unidade: g.unidade,
-        centroCusteio: g.centroCusteio,
+        contasAnaliticas: Array.from(g.contasAnaliticas),
       }))
       .sort((a, b) => (b.totalValor || 0) - (a.totalValor || 0));
   }, [filteredData]);
@@ -222,16 +301,22 @@ export function useComissionamento() {
     const record = {
       data_lancamento: formData.data_lancamento,
       nome: formData.nome,
-      chave_pix: formData.chave_pix,
+      chave_pix: formData.chave_pix || null,
       favorecido: formData.favorecido,
       descricao: formData.descricao || null,
+      plano_conta_id: formData.plano_conta_id,
       valor: formData.valor,
-      cnpj_id: formData.cnpj_id,
-      unidade_id: formData.unidade_id,
-      centro_de_custo_id: formData.centro_de_custo_id,
-      categoria_id: formData.categoria_id,
-      secao_custeio_id: formData.secao_custeio_id,
-      centro_custeio_id: formData.centro_custeio_id,
+      cnpj_id: formData.cnpj_id || null,
+      unidade_id: null,
+      unidade_codigo: formData.unidade_id,
+      centro_de_custo_id: null,
+      setor_codigo: formData.centro_de_custo_id,
+      categoria_id: null,
+      secao_custeio_id: formData.secao_custeio_id || null,
+      centro_custeio_id: formData.centro_custeio_id || null,
+      banco_codigo: formData.banco_codigo || null,
+      banco: formData.banco || null,
+      status_pag: formData.status_pag || 'A PAGAR',
     };
     const { error: insertError } = await externalSupabase
       .from('lancamentos_pix')
@@ -261,13 +346,18 @@ export function useComissionamento() {
   const importExcel = useCallback(async (rows: Record<string, any>[]) => {
     // Helper: resolve option name -> id, auto-creating when missing
     const resolverCache: Record<string, Map<string, string>> = {};
+    let unidadesCache: Map<string, string> | null = null;
+    let setoresCache: Map<string, string> | null = null;
+    let bancosCache: Map<string, { codigo: string; banco: string }> | null = null;
+    const normalizeLookup = (value: string) => value.toUpperCase().trim();
+
     const resolveOpcao = async (table: string, name: string | null): Promise<string | null> => {
       if (!name) return null;
-      const key = name.toUpperCase().trim();
+      const key = normalizeLookup(name);
       if (!resolverCache[table]) {
         resolverCache[table] = new Map();
         const { data: existing } = await externalSupabase.from(table).select('id, nome');
-        (existing || []).forEach((r: any) => resolverCache[table].set(String(r.nome).toUpperCase().trim(), r.id));
+        (existing || []).forEach((r: any) => resolverCache[table].set(normalizeLookup(String(r.nome)), r.id));
       }
       const cached = resolverCache[table].get(key);
       if (cached) return cached;
@@ -281,6 +371,103 @@ export function useComissionamento() {
       return inserted.id;
     };
 
+    const resolveUnidadeCodigo = async (value: string | null): Promise<string | null> => {
+      if (!value) return null;
+      if (!unidadesCache) {
+        unidadesCache = new Map();
+        const { data: existing } = await externalSupabase
+          .from('unidades')
+          .select('codigo, unidade')
+          .eq('ativo', true);
+
+        (existing || []).forEach((row: any) => {
+          const codigo = String(row.codigo || '').trim();
+          const unidade = String(row.unidade || '').trim();
+          if (!codigo) return;
+          unidadesCache!.set(normalizeLookup(codigo), codigo);
+          unidadesCache!.set(normalizeLookup(unidade), codigo);
+          unidadesCache!.set(normalizeLookup(`${codigo} - ${unidade}`), codigo);
+        });
+      }
+
+      const lookup = normalizeLookup(value);
+      const directMatch = unidadesCache.get(lookup);
+      if (directMatch) return directMatch;
+
+      if (lookup.length >= 3) {
+        for (const [key, codigo] of unidadesCache.entries()) {
+          if (key.endsWith(lookup) || key.includes(lookup)) return codigo;
+        }
+      }
+
+      return null;
+    };
+
+    const resolveSetorCodigo = async (value: string | null): Promise<string | null> => {
+      if (!value) return null;
+      if (!setoresCache) {
+        setoresCache = new Map();
+        const { data: existing } = await externalSupabase
+          .from('setor')
+          .select('codigo, setor')
+          .eq('ativo', true);
+
+        (existing || []).forEach((row: any) => {
+          const codigo = String(row.codigo || '').trim();
+          const setor = String(row.setor || '').trim();
+          if (!codigo) return;
+          setoresCache!.set(normalizeLookup(codigo), codigo);
+          setoresCache!.set(normalizeLookup(setor), codigo);
+          setoresCache!.set(normalizeLookup(`${codigo} - ${setor}`), codigo);
+        });
+      }
+
+      const lookup = normalizeLookup(value);
+      const directMatch = setoresCache.get(lookup);
+      if (directMatch) return directMatch;
+
+      if (lookup.length >= 3) {
+        for (const [key, codigo] of setoresCache.entries()) {
+          if (key.endsWith(lookup) || key.includes(lookup)) return codigo;
+        }
+      }
+
+      return null;
+    };
+
+    const resolveBanco = async (value: string | null): Promise<{ codigo: string | null; banco: string | null }> => {
+      if (!value) return { codigo: null, banco: null };
+      if (!bancosCache) {
+        bancosCache = new Map();
+        const { data: existing } = await externalSupabase
+          .from('bancos')
+          .select('codigo, banco')
+          .eq('ativo', true);
+
+        (existing || []).forEach((row: any) => {
+          const codigo = String(row.codigo || '').trim();
+          const banco = String(row.banco || '').trim();
+          if (!codigo || !banco) return;
+          const payload = { codigo, banco };
+          bancosCache!.set(normalizeLookup(codigo), payload);
+          bancosCache!.set(normalizeLookup(banco), payload);
+          bancosCache!.set(normalizeLookup(`${codigo} - ${banco}`), payload);
+        });
+      }
+
+      const lookup = normalizeLookup(value);
+      const directMatch = bancosCache.get(lookup);
+      if (directMatch) return directMatch;
+
+      if (lookup.length >= 3) {
+        for (const [key, banco] of bancosCache.entries()) {
+          if (key.endsWith(lookup) || key.includes(lookup)) return banco;
+        }
+      }
+
+      return { codigo: null, banco: value };
+    };
+
     const errors: string[] = [];
     let inserted = 0;
     let skipped = 0;
@@ -289,10 +476,11 @@ export function useComissionamento() {
     for (const r of rows) {
       if (!r.data_lancamento && r.valor == null && !r.descricao) { skipped++; continue; }
       try {
-        const unidade_id = await resolveOpcao('opcoes_unidade', r.unidade_name);
-        const centro_de_custo_id = await resolveOpcao('opcoes_centro_de_custo', r.centro_de_custo_name);
+        const unidade_codigo = await resolveUnidadeCodigo(r.unidade_name);
+        const setor_codigo = await resolveSetorCodigo(r.centro_de_custo_name);
         const categoria_id = await resolveOpcao('opcoes_categoria', r.categoria_name);
         const cnpj_id = await resolveOpcao('opcoes_cnpj', r.cnpj_name);
+        const bancoResolvido = await resolveBanco(r.banco);
 
         // Usa a UNIDADE também como CENTRO DE CUSTEIO
         const centro_custeio_id = await resolveOpcao('opcoes_centro_custeio', r.unidade_name);
@@ -304,12 +492,15 @@ export function useComissionamento() {
           favorecido: r.descricao || r.banco || 'IMPORTADO',
           descricao: r.descricao,
           valor: r.valor,
-          unidade_id,
-          centro_de_custo_id,
+          unidade_id: null,
+          unidade_codigo,
+          centro_de_custo_id: null,
+          setor_codigo,
           centro_custeio_id,
           categoria_id,
           cnpj_id,
-          banco: r.banco,
+          banco_codigo: bancoResolvido.codigo,
+          banco: bancoResolvido.banco,
           forma_pagamento: r.forma_pagamento,
           status_pag: r.status_pag,
         });
@@ -344,7 +535,7 @@ export function useComissionamento() {
     clearFilters: () => setFilters({
       cidade: [], dataInicio: '', dataFim: '', status: [], nome: [],
       frente: [], contrato: [], dataExecInicio: '', dataExecFim: '',
-      descricao: '', cnpj: [], centroCusteio: []
+      descricao: '', cnpj: [], contaAnalitica: [], banco: []
     }),
     fetchData,
     submitManualEntry,

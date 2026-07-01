@@ -23,6 +23,7 @@ const COLUMN_MAP: Record<string, string> = {
     'DATA': 'data',
     'BANCO': 'banco',
     'DESCRICAO': 'descricao',
+    'OBSERVACAO': 'descricao',
     'VALOR': 'valor',
     'UNIDADE': 'unidade',
     'CENTRO DE CUSTO': 'centro_de_custo',

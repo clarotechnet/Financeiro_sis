@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { LancamentoPix, OpcaoSelect } from '@/types/comissionamento';
 import { ChevronLeft, ChevronRight, Pencil, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -12,7 +12,8 @@ interface OpcoesData {
   centro_de_custo: OpcaoSelect[];
   categoria: OpcaoSelect[];
   secao_custeio: OpcaoSelect[];
-  centro_custeio: OpcaoSelect[];
+  plano_contas: OpcaoSelect[];
+  bancos: OpcaoSelect[];
 }
 
 interface Props {
@@ -34,6 +35,98 @@ const formatDate = (val: string | null) => {
 const fmtBRL = (v: number | null) =>
   v != null ? `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '-';
 
+const PDF_MARGIN = 10;
+const PDF_HEADER_BOTTOM = 30;
+
+const loadLogoDataUrl = async () => {
+  try {
+    const response = await fetch(`${import.meta.env.BASE_URL}LogoNovo.png`);
+    if (!response.ok) return null;
+    const blob = await response.blob();
+
+    return await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+};
+
+const addPdfHeader = (
+  doc: jsPDF,
+  logoDataUrl: string | null,
+  generatedAt: string,
+  rowCount: number
+) => {
+  const pageWidth = doc.internal.pageSize.getWidth();
+
+  if (logoDataUrl) {
+    doc.addImage(logoDataUrl, 'PNG', PDF_MARGIN, 6, 16, 16);
+  }
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(16);
+  doc.setTextColor(220, 53, 69);
+  doc.text('TechNET', PDF_MARGIN + 20, 13);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(90);
+  doc.text('Financeiro', PDF_MARGIN + 20, 18);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(14);
+  doc.setTextColor(20);
+  doc.text('Dados Detalhados', pageWidth / 2, 13, { align: 'center' });
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(90);
+  doc.text(`Gerado em: ${generatedAt}`, pageWidth - PDF_MARGIN, 12, { align: 'right' });
+  doc.text(`${rowCount} registro(s)`, pageWidth - PDF_MARGIN, 17, { align: 'right' });
+
+  doc.setDrawColor(220, 53, 69);
+  doc.setLineWidth(0.3);
+  doc.line(PDF_MARGIN, 25, pageWidth - PDF_MARGIN, 25);
+  doc.setTextColor(0);
+};
+
+const addTotalToLastPdfPage = (
+  doc: jsPDF,
+  finalY: number,
+  totalValor: number,
+  logoDataUrl: string | null,
+  generatedAt: string,
+  rowCount: number
+) => {
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const totalHeight = 10;
+  let totalY = finalY + 4;
+
+  if (totalY + totalHeight > pageHeight - PDF_MARGIN) {
+    doc.addPage();
+    addPdfHeader(doc, logoDataUrl, generatedAt, rowCount);
+    totalY = PDF_HEADER_BOTTOM + 4;
+  }
+
+  const boxWidth = 92;
+  const boxX = pageWidth - PDF_MARGIN - boxWidth;
+
+  doc.setFillColor(240, 240, 240);
+  doc.setDrawColor(210, 210, 210);
+  doc.rect(boxX, totalY, boxWidth, totalHeight, 'FD');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(20);
+  doc.text('TOTAL GERAL', boxX + 34, totalY + 6.5, { align: 'right' });
+  doc.text(fmtBRL(totalValor), pageWidth - PDF_MARGIN - 3, totalY + 6.5, { align: 'right' });
+};
+
 const renderBreakableText = (value: string) =>
   value.split(/([/-])/).map((part, index) => (
     part === '/' || part === '-'
@@ -46,6 +139,7 @@ export const ComissionamentoTable: React.FC<Props> = ({ data, onUpdate, onDelete
   const [sortField, setSortField] = useState<keyof LancamentoPix>('data_lancamento');
   const [sortAsc, setSortAsc] = useState(false);
   const [editRecord, setEditRecord] = useState<LancamentoPix | null>(null);
+  const [exportingPdf, setExportingPdf] = useState(false);
   const wrappedCellClass = 'whitespace-normal break-words leading-snug';
 
   const sorted = useMemo(() => {
@@ -69,6 +163,10 @@ export const ComissionamentoTable: React.FC<Props> = ({ data, onUpdate, onDelete
   const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   const pageData = sorted.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
+  useEffect(() => {
+    setPage(currentPage => Math.min(currentPage, totalPages - 1));
+  }, [totalPages]);
+
   const handleSort = (field: keyof LancamentoPix) => {
     if (sortField === field) setSortAsc(!sortAsc);
     else {
@@ -83,9 +181,9 @@ export const ComissionamentoTable: React.FC<Props> = ({ data, onUpdate, onDelete
     { key: 'unidade', label: 'Cidade/Unidade' },
     { key: 'favorecido', label: 'Favorecido' },
     { key: 'chave_pix', label: 'Chave PIX' },
-    { key: 'centro_custeio', label: 'Centro de Custeio' },
+    { key: 'conta_analitica', label: 'Conta Analítica' },
     { key: 'centro_de_custo', label: 'Centro de Custo' },
-    { key: 'categoria', label: 'Categoria' },
+    { key: 'descricao', label: 'Observação' },
     { key: 'banco', label: 'Banco' },
     { key: 'status_pag', label: 'Status' },
     { key: 'valor', label: 'Valor' },
@@ -93,67 +191,98 @@ export const ComissionamentoTable: React.FC<Props> = ({ data, onUpdate, onDelete
 
   const totalValor = useMemo(() => sorted.reduce((s, r) => s + (r.valor || 0), 0), [sorted]);
 
-  const exportPDF = () => {
-    const doc = new jsPDF();
-    doc.setFontSize(16);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Dados Detalhados', 14, 18);
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
-    doc.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, 14, 25);
+  const exportPDF = async () => {
+    if (exportingPdf) return;
 
-    autoTable(doc, {
-      startY: 30,
-      head: [['Data', 'Cidade/Unidade', 'Favorecido', 'Chave PIX', 'Centro de Custeio', 'Centro de Custo', 'Categoria', 'Banco', 'Status', 'Valor']],
+    setExportingPdf(true);
+    try {
+      const generatedAt = new Date().toLocaleString('pt-BR');
+      const logoDataUrl = await loadLogoDataUrl();
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+
+      autoTable(doc, {
+      startY: PDF_HEADER_BOTTOM,
+      head: [['Data', 'Cidade/Unidade', 'Favorecido', 'Chave PIX', 'Conta Analítica', 'Centro de Custo', 'Observação', 'Banco', 'Status', 'Valor']],
       body: sorted.map(r => [
         formatDate(r.data_lancamento),
         r.unidade || '-',
         r.favorecido || '-',
         r.chave_pix || '-',
-        r.centro_custeio || '-',
+        r.conta_analitica || '-',
         r.centro_de_custo || '-',
-        r.categoria || '-',
+        r.descricao || '-',
         r.banco || '-',
         r.status_pag || '-',
         fmtBRL(r.valor),
       ]),
-      foot: [[
-        { content: 'TOTAL GERAL', colSpan: 9, styles: { halign: 'right', fontStyle: 'bold' } },
-        { content: fmtBRL(totalValor), styles: { fontStyle: 'bold', halign: 'right' } },
-      ]],
-      styles: { fontSize: 7 },
+      margin: { top: PDF_HEADER_BOTTOM, right: PDF_MARGIN, bottom: 14, left: PDF_MARGIN },
+      styles: {
+        fontSize: 6.8,
+        cellPadding: 1.5,
+        overflow: 'linebreak',
+        valign: 'top',
+        lineColor: [235, 235, 235],
+        lineWidth: 0.1,
+      },
       headStyles: { fillColor: [31, 58, 95], textColor: 255 },
-      footStyles: { fillColor: [240, 240, 240], textColor: 30 },
-      columnStyles: { 9: { halign: 'right' } },
+      alternateRowStyles: { fillColor: [247, 247, 247] },
+      columnStyles: {
+        0: { cellWidth: 17 },
+        1: { cellWidth: 22 },
+        2: { cellWidth: 39 },
+        3: { cellWidth: 25 },
+        4: { cellWidth: 38 },
+        5: { cellWidth: 24 },
+        6: { cellWidth: 44 },
+        7: { cellWidth: 25 },
+        8: { cellWidth: 15 },
+        9: { cellWidth: 24, halign: 'right' },
+      },
+      didDrawPage: () => {
+        addPdfHeader(doc, logoDataUrl, generatedAt, sorted.length);
+      },
     });
 
-    doc.save(`dados-detalhados-${new Date().toISOString().slice(0, 10)}.pdf`);
+      const tableDoc = doc as jsPDF & { lastAutoTable?: { finalY: number } };
+      addTotalToLastPdfPage(
+        doc,
+        tableDoc.lastAutoTable?.finalY ?? PDF_HEADER_BOTTOM,
+        totalValor,
+        logoDataUrl,
+        generatedAt,
+        sorted.length
+      );
+
+      doc.save(`dados-detalhados-${new Date().toISOString().slice(0, 10)}.pdf`);
+    } finally {
+      setExportingPdf(false);
+    }
   };
 
   return (
     <>
       <div className="flex justify-end gap-2 mb-4">
-        <Button variant="outline" size="sm" onClick={exportPDF}>
+        <Button variant="outline" size="sm" onClick={exportPDF} disabled={exportingPdf}>
           <FileText className="w-4 h-4 mr-2" />
-          Exportar PDF
+          {exportingPdf ? 'Gerando PDF...' : 'Exportar PDF'}
         </Button>
       </div>
 
       <div className="card overflow-hidden">
-        <div className="w-full overflow-x-auto">
-          <table className="data-table min-w-[1264px] w-full table-fixed text-[11px] [&_th]:px-3 [&_th]:py-3 [&_td]:px-3 [&_td]:py-3 [&_td]:align-top">
+        <div className="max-h-[600px] w-full overflow-auto [scrollbar-gutter:stable]">
+          <table className="data-table min-w-[1160px] w-full table-fixed text-[11px] [&_th]:px-2.5 [&_th]:py-3 [&_td]:px-2.5 [&_td]:py-3 [&_td]:align-top">
             <colgroup>
-              <col style={{ width: '40px' }} />
+              <col style={{ width: '30px' }} />
               <col style={{ width: '88px' }} />
-              <col style={{ width: '108px' }} />
-              <col style={{ width: '190px' }} />
+              <col style={{ width: '92px' }} />
+              <col style={{ width: '150px' }} />
+              <col style={{ width: '72px' }} />
+              <col style={{ width: '210px' }} />
               <col style={{ width: '100px' }} />
-              <col style={{ width: '125px' }} />
-              <col style={{ width: '120px' }} />
-              <col style={{ width: '185px' }} />
-              <col style={{ width: '110px' }} />
-              <col style={{ width: '78px' }} />
-              <col style={{ width: '120px' }} />
+              <col style={{ width: '160px' }} />
+              <col style={{ width: '80px' }} />
+              <col style={{ width: '60px' }} />
+              <col style={{ width: '105px' }} />
             </colgroup>
             <thead>
               <tr>
@@ -191,9 +320,9 @@ export const ComissionamentoTable: React.FC<Props> = ({ data, onUpdate, onDelete
                   <td className={wrappedCellClass}>{row.unidade || '-'}</td>
                   <td className={`font-medium ${wrappedCellClass}`}>{row.favorecido || '-'}</td>
                   <td className="text-xs text-muted-foreground truncate" title={row.chave_pix || ''}>{row.chave_pix || '-'}</td>
-                  <td className={wrappedCellClass}>{row.centro_custeio || '-'}</td>
+                  <td className={wrappedCellClass}>{row.conta_analitica || '-'}</td>
                   <td className={wrappedCellClass}>{row.centro_de_custo || '-'}</td>
-                  <td className={wrappedCellClass}>{row.categoria ? renderBreakableText(row.categoria) : '-'}</td>
+                  <td className={wrappedCellClass}>{row.descricao || '-'}</td>
                   <td className={wrappedCellClass}>{row.banco || '-'}</td>
                   <td>
                     {row.status_pag ? (

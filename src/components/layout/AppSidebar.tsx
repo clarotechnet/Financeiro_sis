@@ -1,7 +1,7 @@
 import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
-    DollarSign, Wallet, BarChart3, PieChart, Layers, Table as TableIcon, Coins, ChevronDown, Settings, FileBarChart,
+    DollarSign, Wallet, BarChart3, PieChart, Layers, Table as TableIcon, Coins, ChevronDown, Settings, FileBarChart, TrendingUp,
 } from 'lucide-react';
 import {
     Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
@@ -115,6 +115,18 @@ export const AppSidebar: React.FC = () => {
                     {!collapsed && <SidebarGroupLabel>Módulos</SidebarGroupLabel>}
                     <SidebarGroupContent>
                         <SidebarMenu>
+                            <SidebarMenuItem>
+                                <SidebarMenuButton
+                                    asChild
+                                    isActive={pathname === '/receitas'}
+                                    className="data-[active=true]:bg-primary data-[active=true]:text-primary-foreground"
+                                >
+                                    <NavLink to="/receitas">
+                                        <TrendingUp className="h-4 w-4 flex-shrink-0" />
+                                        {!collapsed && <span className="text-[13px]">Receitas</span>}
+                                    </NavLink>
+                                </SidebarMenuButton>
+                            </SidebarMenuItem>
                             {renderModule('/comissionamento', 'Solicitação de Pagamento', DollarSign, COMISSIONAMENTO_TABS)}
                             {isAdmin && renderModule('/folha-pagamento', 'Folha de Pagamento', Wallet, FOLHA_TABS)}
                             {canAccessSettings && (

@@ -52,7 +52,6 @@ const Comissionamento: React.FC = () => {
           clearFilters={hook.clearFilters}
           uniqueCidades={hook.uniqueCidades}
           uniqueNomes={hook.uniqueNomes}
-          uniqueFrente={hook.uniqueFrente}
           totalFiltered={hook.data.length}
           onManualSubmit={hook.submitManualEntry}
           filteredData={hook.data}

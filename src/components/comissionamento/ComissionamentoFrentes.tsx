@@ -61,7 +61,7 @@ export const ComissionamentoFrentes: React.FC<Props> = ({ frentesData, selectedF
                 </div>
               </div>
 
-              {(f.unidade || f.centroCusteio) && (
+              {(f.unidade || (f.contasAnaliticas && f.contasAnaliticas.length > 0)) && (
                 <div className="pt-2 border-t border-border space-y-1">
                   {f.unidade && (
                     <div className="text-xs flex items-center gap-1 text-muted-foreground">
@@ -69,9 +69,14 @@ export const ComissionamentoFrentes: React.FC<Props> = ({ frentesData, selectedF
                       <span className="truncate" title={f.unidade}>{f.unidade}</span>
                     </div>
                   )}
-                  {f.centroCusteio && (
-                    <div className="text-xs text-muted-foreground truncate" title={f.centroCusteio}>
-                      Centro Custeio: {f.centroCusteio}
+                  {f.contasAnaliticas && f.contasAnaliticas.length > 0 && (
+                    <div
+                      className="text-xs text-muted-foreground truncate"
+                      title={f.contasAnaliticas.join(', ')}
+                    >
+                      Conta Analítica: {f.contasAnaliticas.length === 1
+                        ? f.contasAnaliticas[0]
+                        : `${f.contasAnaliticas.length} contas classificadas`}
                     </div>
                   )}
                 </div>

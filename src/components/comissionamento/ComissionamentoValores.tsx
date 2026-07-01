@@ -13,7 +13,7 @@ interface Props {
 interface Row {
   favorecido: string;
   cidade: string;
-  centroCusteio: string;
+  contaAnalitica: string;
   // totalOS: number;
   totalValor: number;
 }
@@ -27,12 +27,13 @@ export const ComissionamentoValores: React.FC<Props> = ({ data }) => {
     data.forEach(r => {
       const fav = r.favorecido || '';
       if (!fav) return;
-      const key = fav;
+      const contaAnalitica = r.conta_analitica || '-';
+      const key = `${fav}|${contaAnalitica}`;
       if (!map.has(key)) {
         map.set(key, {
           favorecido: fav,
           cidade: r.unidade || '-',
-          centroCusteio: r.centro_custeio || '-',
+          contaAnalitica,
           // totalOS: 0,
           totalValor: 0,
         });
@@ -41,7 +42,6 @@ export const ComissionamentoValores: React.FC<Props> = ({ data }) => {
       // it.totalOS += 1;
       it.totalValor += r.valor || 0;
       if (r.unidade && it.cidade === '-') it.cidade = r.unidade;
-      if (r.centro_custeio && it.centroCusteio === '-') it.centroCusteio = r.centro_custeio;
     });
     return Array.from(map.values()).sort((a, b) => b.totalValor - a.totalValor);
   }, [data]);
@@ -53,14 +53,14 @@ export const ComissionamentoValores: React.FC<Props> = ({ data }) => {
     const exportData = rows.map(r => ({
       Favorecido: r.favorecido,
       Cidade: r.cidade,
-      'Centro de Custeio': r.centroCusteio,
+      'Conta Analítica': r.contaAnalitica,
       // 'Total OS': r.totalOS,
       'Total R$': r.totalValor,
     }));
     exportData.push({
       Favorecido: 'TOTAL GERAL',
       Cidade: '',
-      'Centro de Custeio': '',
+      'Conta Analítica': '',
       // 'Total OS': totalGeralOS,
       'Total R$': totalGeralValor,
     });
@@ -81,11 +81,11 @@ export const ComissionamentoValores: React.FC<Props> = ({ data }) => {
 
     autoTable(doc, {
       startY: 30,
-      head: [['Favorecido', 'Cidade', 'Centro de Custeio', 'Total R$']],
+      head: [['Favorecido', 'Cidade', 'Conta Analítica', 'Total R$']],
       body: rows.map(r => [
         r.favorecido,
         r.cidade,
-        r.centroCusteio,
+        r.contaAnalitica,
         // r.totalOS.toString(),
         fmtBRL(r.totalValor),
       ]),
@@ -122,7 +122,7 @@ export const ComissionamentoValores: React.FC<Props> = ({ data }) => {
               <tr className=''>
                 <th className="text-left">Favorecido</th>
                 <th className="text-left">Cidade</th>
-                <th className="text-left">Centro de Custeio</th>
+                <th className="text-left">Conta Analítica</th>
                 {/* <th className="text-right">Total OS</th> */}
                 <th className="text-right ">Total R$</th>
               </tr>
@@ -132,7 +132,7 @@ export const ComissionamentoValores: React.FC<Props> = ({ data }) => {
                 <tr key={i}>
                   <td className="font-medium text-primary">{r.favorecido}</td>
                   <td className="text-accent">{r.cidade}</td>
-                  <td>{r.centroCusteio}</td>
+                  <td>{r.contaAnalitica}</td>
                   {/* <td className="text-right font-bold">{r.totalOS}</td> */}
                   <td className="text-right font-bold text-destructive">{fmtBRL(r.totalValor)}</td>
                 </tr>

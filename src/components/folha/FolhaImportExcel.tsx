@@ -17,6 +17,9 @@ const COLUMN_MAP: Record<string, string> = {
     'SAL. FOLHA': 'sal_folha',
     'SAL FOLHA': 'sal_folha',
     'SALARIO FOLHA': 'sal_folha',
+    'SAL FAMILIA': 'sal_familia',
+    'SAL. FAMILIA': 'sal_familia',
+    'SALARIO FAMILIA': 'sal_familia',
     'DESC INSS': 'desc_inss',
     'DESC. INSS': 'desc_inss',
     'IRRF': 'irrf',
@@ -42,6 +45,10 @@ const COLUMN_MAP: Record<string, string> = {
     'VT': 'vale_transporte',
     'DESC PLANO SAUDE': 'desc_plano_saude',
     'DESC. PLANO SAUDE': 'desc_plano_saude',
+    'DESC VALE ALIMENTACAO': 'desc_vale_alimentacao',
+    'DESC. VALE ALIMENTACAO': 'desc_vale_alimentacao',
+    'DESC ALIMENTACAO': 'desc_vale_alimentacao',
+    'VALE ALIMENTACAO': 'desc_vale_alimentacao',
     'DESC ODONTO': 'desc_odonto',
     'DESC. ODONTO': 'desc_odonto',
     'DESC FALTAS': 'desc_faltas',
@@ -59,6 +66,9 @@ const COLUMN_MAP: Record<string, string> = {
     'DESC FARDAMENTO': 'desc_fardamento',
     'DESC. FARDAMENTO': 'desc_fardamento',
     'FARDAMENTO': 'desc_fardamento',
+    'DEMAIS DESC': 'demais_desc',
+    'DEMAIS DESCONTOS': 'demais_desc',
+    'OUTROS DESCONTOS': 'demais_desc',
     'T. PROVENTOS': 'total_proventos',
     'T PROVENTOS': 'total_proventos',
     'TOTAL PROVENTOS': 'total_proventos',
@@ -71,11 +81,11 @@ const COLUMN_MAP: Record<string, string> = {
 };
 
 const NUMERIC_FIELDS = new Set([
-    'sal_folha', 'desc_inss', 'irrf', 'ferias', 'decimo_terceiro', 'periculosidade',
+    'sal_folha', 'sal_familia', 'desc_inss', 'irrf', 'ferias', 'decimo_terceiro', 'periculosidade',
     'hora_extra_50', 'hora_extra_60', 'hora_extra_70', 'hora_extra_100', 'dsr',
     'sal_maternidade', 'vale_transporte',
-    'desc_plano_saude', 'desc_odonto', 'desc_faltas', 'desc_adiantamento',
-    'contribuicao', 'desc_pensao', 'dif_salario', 'emprestimo', 'desc_fardamento',
+    'desc_plano_saude', 'desc_vale_alimentacao', 'desc_odonto', 'desc_faltas', 'desc_adiantamento',
+    'contribuicao', 'desc_pensao', 'dif_salario', 'emprestimo', 'desc_fardamento', 'demais_desc',
     'total_proventos', 'total_descontos', 'salario_liquido',
 ]);
 

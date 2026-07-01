@@ -17,6 +17,8 @@ interface OpcoesData {
   categoria: OpcaoSelect[];
   secao_custeio: OpcaoSelect[];
   centro_custeio: OpcaoSelect[];
+  plano_contas: OpcaoSelect[];
+  bancos: OpcaoSelect[];
 }
 
 interface MultiSelectProps {
@@ -92,7 +94,6 @@ interface Props {
   clearFilters: () => void;
   uniqueCidades: string[];
   uniqueNomes: string[];
-  uniqueFrente: string[];
   totalFiltered: number;
   onManualSubmit: (data: Record<string, any>) => Promise<void>;
   filteredData: LancamentoPix[];
@@ -101,29 +102,29 @@ interface Props {
 }
 
 export const ComissionamentoFilters: React.FC<Props> = ({
-  filters, setFilters, clearFilters, uniqueCidades, uniqueNomes, uniqueFrente, totalFiltered,
+  filters, setFilters, clearFilters, uniqueCidades, uniqueNomes, totalFiltered,
   onManualSubmit, filteredData, opcoes, onImportExcel
 }) => {
   const { isAdmin } = useAuth();
   const hasFilters = filters.cidade.length > 0 || filters.dataInicio || filters.dataFim
-    || filters.nome.length > 0 || filters.frente.length > 0 || filters.contrato.length > 0
+    || filters.nome.length > 0 || filters.contrato.length > 0
     || (filters.descricao && filters.descricao.trim().length > 0)
-    || filters.cnpj.length > 0 || filters.centroCusteio.length > 0;
+    || filters.contaAnalitica.length > 0 || filters.banco.length > 0;
 
   const [formOpen, setFormOpen] = useState(false);
 
   const uniqueCentroCusto = React.useMemo(
-    () => [...new Set(filteredData.map(r => r.centro_de_custo).filter(Boolean))].sort() as string[],
-    [filteredData]
+    () => opcoes.centro_de_custo.map(option => option.nome).filter(Boolean).sort(),
+    [opcoes.centro_de_custo]
   );
 
-  const uniqueCnpj = React.useMemo(
-    () => [...new Set(filteredData.map(r => r.cnpj).filter(Boolean))].sort() as string[],
-    [filteredData]
+  const uniqueBancos = React.useMemo(
+    () => opcoes.bancos.map(option => option.nome).filter(Boolean).sort(),
+    [opcoes.bancos]
   );
 
-  const uniqueCentroCusteio = React.useMemo(
-    () => [...new Set(filteredData.map(r => r.centro_custeio).filter(Boolean))].sort() as string[],
+  const uniqueContasAnaliticas = React.useMemo(
+    () => [...new Set(filteredData.map(r => r.conta_analitica).filter(Boolean))].sort() as string[],
     [filteredData]
   );
 
@@ -141,10 +142,10 @@ export const ComissionamentoFilters: React.FC<Props> = ({
       'CNPJ': r.cnpj || '',
       'Unidade': r.unidade || '',
       'Centro de Custo': r.centro_de_custo || '',
-      'Categoria': r.categoria || '',
       'Seção de Custeio': r.secao_custeio || '',
-      'Centro de Custeio': r.centro_custeio || '',
-      'Descrição': r.descricao || '',
+      'Conta Analítica': r.conta_analitica || '',
+      'Observação': r.descricao || '',
+      'Banco': r.banco || '',
       'Valor': r.valor ?? '',
     }));
     const ws = XLSX.utils.json_to_sheet(exportRows);
@@ -156,11 +157,11 @@ export const ComissionamentoFilters: React.FC<Props> = ({
     const fmtBRL = (v: number) =>
       `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-    // Agrupa despesas por categoria
+    // Agrupa despesas por conta analítica
     const map = new Map<string, { qtd: number; valor: number }>();
     let totalDespesas = 0;
     filteredData.forEach(r => {
-      const k = r.categoria || 'Sem Categoria';
+      const k = r.conta_analitica || 'Sem Conta Analítica';
       if (!map.has(k)) map.set(k, { qtd: 0, valor: 0 });
       const it = map.get(k)!;
       it.qtd += 1;
@@ -168,7 +169,7 @@ export const ComissionamentoFilters: React.FC<Props> = ({
       totalDespesas += r.valor || 0;
     });
     const linhas = Array.from(map.entries())
-      .map(([cat, v]) => ({ cat, qtd: v.qtd, valor: v.valor, pct: totalDespesas > 0 ? (v.valor / totalDespesas) * 100 : 0 }))
+      .map(([conta, v]) => ({ conta, qtd: v.qtd, valor: v.valor, pct: totalDespesas > 0 ? (v.valor / totalDespesas) * 100 : 0 }))
       .sort((a, b) => b.valor - a.valor);
 
     // Período (a partir dos filtros ou do range dos dados)
@@ -209,9 +210,9 @@ export const ComissionamentoFilters: React.FC<Props> = ({
     // Despesas detalhadas
     autoTable(doc, {
       startY: 56,
-      head: [['(-) Despesas por Categoria', 'Qtd', 'Valor (R$)', '% Despesas']],
+      head: [['(-) Despesas por Conta Analítica', 'Qtd', 'Valor (R$)', '% Despesas']],
       body: linhas.map(l => [
-        l.cat,
+        l.conta,
         String(l.qtd),
         fmtBRL(l.valor),
         `${l.pct.toFixed(2)}%`,
@@ -267,7 +268,7 @@ export const ComissionamentoFilters: React.FC<Props> = ({
               <Button variant="outline" size="sm" onClick={handleExportExcel} disabled={filteredData.length === 0} className="gap-1">
                 <Download className="w-4 h-4" /> Exportar Excel
               </Button>
-              <Button
+              {/* <Button
                 variant="outline"
                 size="sm"
                 onClick={handleGerarDRE}
@@ -276,7 +277,7 @@ export const ComissionamentoFilters: React.FC<Props> = ({
                 title="Demonstração do Resultado do Exercício"
               >
                 <FileText className="w-4 h-4" /> Gerar DRE
-              </Button>
+              </Button> */}
               <span className="text-sm text-muted-foreground">
                 Total: <strong className="text-foreground">{totalFiltered}</strong> registros
               </span>
@@ -334,13 +335,6 @@ export const ComissionamentoFilters: React.FC<Props> = ({
           />
 
           <MultiSelect
-            label="Categoria"
-            options={uniqueFrente}
-            selected={filters.frente}
-            onChange={(val) => setFilters({ frente: val })}
-          />
-
-          <MultiSelect
             label="Centro de Custo"
             options={uniqueCentroCusto}
             selected={filters.contrato}
@@ -348,17 +342,17 @@ export const ComissionamentoFilters: React.FC<Props> = ({
           />
 
           <MultiSelect
-            label="CNPJ"
-            options={uniqueCnpj}
-            selected={filters.cnpj}
-            onChange={(val) => setFilters({ cnpj: val })}
+            label="Conta Analítica"
+            options={uniqueContasAnaliticas}
+            selected={filters.contaAnalitica}
+            onChange={(val) => setFilters({ contaAnalitica: val })}
           />
 
           <MultiSelect
-            label="Centro de Custeio"
-            options={uniqueCentroCusteio}
-            selected={filters.centroCusteio}
-            onChange={(val) => setFilters({ centroCusteio: val })}
+            label="Banco"
+            options={uniqueBancos}
+            selected={filters.banco}
+            onChange={(val) => setFilters({ banco: val })}
           />
         </div>
       )}

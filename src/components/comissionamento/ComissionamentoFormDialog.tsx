@@ -28,6 +28,8 @@ interface OpcoesData {
   categoria: OpcaoSelect[];
   secao_custeio: OpcaoSelect[];
   centro_custeio: OpcaoSelect[];
+  plano_contas: OpcaoSelect[];
+  bancos: OpcaoSelect[];
 }
 
 interface Props {
@@ -36,16 +38,20 @@ interface Props {
   onSubmit: (data: {
     data_lancamento: string;
     nome: string;
-    chave_pix: string;
+    chave_pix: string | null;
     favorecido: string;
     descricao: string | null;
+    plano_conta_id: string;
     valor: number;
-    cnpj_id: string;
+    cnpj_id: string | null;
     unidade_id: string;
     centro_de_custo_id: string;
-    categoria_id: string;
-    secao_custeio_id: string;
-    centro_custeio_id: string;
+    categoria_id: string | null;
+    secao_custeio_id: string | null;
+    centro_custeio_id: string | null;
+    banco_codigo: string | null;
+    banco: string | null;
+    status_pag: string;
   }) => Promise<void>;
   opcoes: OpcoesData;
   existingRecords?: LancamentoPix[];
@@ -57,19 +63,19 @@ const emptyForm = {
   chave_pix: '',
   favorecido: '',
   descricao: '',
+  plano_conta_id: '',
   valor: '',
   cnpj_id: '',
   unidade_id: '',
   centro_de_custo_id: '',
-  categoria_id: '',
   secao_custeio_id: '',
   centro_custeio_id: '',
+  banco_codigo: '',
 };
 
 const requiredFields = [
-  'data_lancamento', 'nome', 'chave_pix', 'favorecido', 'valor',
-  'cnpj_id', 'unidade_id', 'centro_de_custo_id', 'categoria_id',
-  'secao_custeio_id', 'centro_custeio_id'
+  'data_lancamento', 'nome', 'favorecido', 'valor',
+  'unidade_id', 'centro_de_custo_id', 'plano_conta_id'
 ];
 
 const DRAFT_KEY = 'technet-pix-form-draft';
@@ -79,7 +85,17 @@ const getErrorMessage = (err: unknown) => err instanceof Error ? err.message : '
 
 const findIdByName = (opts: OpcaoSelect[], name: string | null | undefined): string => {
   if (!name) return '';
-  const match = opts.find(o => (o.nome || '').trim().toLowerCase() === name.trim().toLowerCase());
+  const target = name.trim().toLowerCase();
+  const normalizeLabel = (value: string) =>
+    value.replace(/^\s*\d+\s*-\s*/, '').trim().toLowerCase();
+  const normalizedTarget = normalizeLabel(name);
+  const match = opts.find(o => {
+    const option = (o.nome || '').trim().toLowerCase();
+    const normalizedOption = normalizeLabel(o.nome || '');
+    return option === target
+      || normalizedOption === normalizedTarget
+      || normalizedOption.endsWith(normalizedTarget);
+  });
   return match?.id || '';
 };
 
@@ -219,12 +235,13 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
       favorecido: r.favorecido || prev.favorecido,
       chave_pix: r.chave_pix || prev.chave_pix,
       cnpj_id: findIdByName(opcoes.cnpj, r.cnpj) || prev.cnpj_id,
-      unidade_id: findIdByName(opcoes.unidade, r.unidade) || prev.unidade_id,
-      centro_de_custo_id: findIdByName(opcoes.centro_de_custo, r.centro_de_custo) || prev.centro_de_custo_id,
-      categoria_id: findIdByName(opcoes.categoria, r.categoria) || prev.categoria_id,
+      unidade_id: r.unidade_codigo || findIdByName(opcoes.unidade, r.unidade) || prev.unidade_id,
+      centro_de_custo_id: r.setor_codigo || findIdByName(opcoes.centro_de_custo, r.centro_de_custo) || prev.centro_de_custo_id,
+      plano_conta_id: r.plano_conta_id || prev.plano_conta_id,
+      banco_codigo: r.banco_codigo || findIdByName(opcoes.bancos, r.banco) || prev.banco_codigo,
       secao_custeio_id: findIdByName(opcoes.secao_custeio, r.secao_custeio) || prev.secao_custeio_id,
       centro_custeio_id: findIdByName(opcoes.centro_custeio, r.centro_custeio) || prev.centro_custeio_id,
-      // mantém data, valor e descrição em branco/inalterados
+      // mantem data, valor e observacao em branco/inalterados
     }));
     setActiveSuggest(null);
   };
@@ -242,19 +259,24 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
     setSubmitting(true);
     setError('');
     try {
+      const bancoSelecionado = opcoes.bancos.find(option => option.id === form.banco_codigo);
       const payload = {
         data_lancamento: form.data_lancamento,
         nome: form.nome.trim(),
-        chave_pix: form.chave_pix.trim(),
+        chave_pix: form.chave_pix.trim() || null,
         favorecido: form.favorecido.trim(),
         descricao: form.descricao?.trim() || null,
+        plano_conta_id: form.plano_conta_id,
         valor: parseFloat(form.valor.replace(/[^\d]/g, '')) / 100,
-        cnpj_id: form.cnpj_id,
+        cnpj_id: null,
         unidade_id: form.unidade_id,
         centro_de_custo_id: form.centro_de_custo_id,
-        categoria_id: form.categoria_id,
-        secao_custeio_id: form.secao_custeio_id,
-        centro_custeio_id: form.centro_custeio_id,
+        categoria_id: null,
+        secao_custeio_id: null,
+        centro_custeio_id: null,
+        banco_codigo: bancoSelecionado?.id || null,
+        banco: bancoSelecionado?.nome || null,
+        status_pag: 'A PAGAR',
       };
       await onSubmit(payload);
       window.localStorage.removeItem(DRAFT_KEY);
@@ -272,7 +294,14 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
     }
   };
 
-  const handleClear = () => { window.localStorage.removeItem(DRAFT_KEY); setForm({ ...emptyForm }); setValorDisplay(''); setError(''); };
+  const handleClear = () => {
+    window.localStorage.removeItem(DRAFT_KEY);
+    setForm({ ...emptyForm, nome: userName || form.nome });
+    setCpfQuery('');
+    setActiveSuggest(null);
+    setValorDisplay('');
+    setError('');
+  };
 
   const selectClass = "w-full bg-card border border-border rounded-lg px-3 py-2 text-foreground text-sm";
 
@@ -295,9 +324,14 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
     </div>
   );
 
-  const renderAutocomplete = (field: 'favorecido' | 'chave_pix', label: string, placeholder: string) => (
+  const renderAutocomplete = (
+    field: 'favorecido' | 'chave_pix',
+    label: string,
+    placeholder: string,
+    required = true
+  ) => (
     <div className="space-y-1 relative" ref={activeSuggest === field ? suggestRef : undefined}>
-      <Label className="text-sm font-medium">{label} *</Label>
+      <Label className="text-sm font-medium">{label} {required && '*'}</Label>
       <Input
         placeholder={placeholder}
         value={form[field]}
@@ -327,7 +361,7 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Novo Lançamento PIX</DialogTitle>
+          <DialogTitle>Novo Lançamento</DialogTitle>
         </DialogHeader>
 
         {success ? (
@@ -341,7 +375,7 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
               <div className="space-y-1 md:col-span-2 relative" ref={activeSuggest === 'cpf_cadastro' ? suggestRef : undefined}>
                 <Label className="text-sm font-medium">Buscar cadastrado (CPF / Nome)</Label>
                 <Input
-                  placeholder="Digite CPF ou nome cadastrado em registros_dados"
+                  placeholder="Digite CPF ou nome cadastrado"
                   value={cpfQuery}
                   onChange={e => { setCpfQuery(e.target.value); setActiveSuggest('cpf_cadastro'); }}
                   onFocus={() => setActiveSuggest('cpf_cadastro')}
@@ -370,7 +404,7 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
               </div>
 
               <div className="space-y-1">
-                <Label className="text-sm font-medium">Nome *</Label>
+                <Label className="text-sm font-medium">Nome Do Lançador*</Label>
                 <Input
                   placeholder="Nome do lançamento"
                   value={form.nome}
@@ -380,7 +414,7 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
                 />
               </div>
 
-              {renderAutocomplete('chave_pix', 'Chave PIX', 'CPF/CNPJ/E-mail/Telefone/Aleatória')}
+              {renderAutocomplete('chave_pix', 'Chave PIX', 'CPF/CNPJ/E-mail/Telefone/Aleatória', false)}
               {renderAutocomplete('favorecido', 'Favorecido', 'Nome do favorecido')}
 
               <div className="space-y-1">
@@ -396,16 +430,14 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
                 />
               </div>
 
-              {renderSelect('cnpj_id', 'CNPJ', opcoes.cnpj)}
               {renderSelect('unidade_id', 'Unidade', opcoes.unidade)}
               {renderSelect('centro_de_custo_id', 'Centro de Custo', opcoes.centro_de_custo)}
-              {renderSelect('categoria_id', 'Categoria', opcoes.categoria)}
-              {renderSelect('secao_custeio_id', 'Seção de Custeio', opcoes.secao_custeio)}
-              {renderSelect('centro_custeio_id', 'Centro de Custeio', opcoes.centro_custeio)}
+              {renderSelect('plano_conta_id', 'Conta Analítica', opcoes.plano_contas)}
+              {renderSelect('banco_codigo', 'Banco', opcoes.bancos, false)}
 
               <div className="space-y-1 md:col-span-2">
-                <Label className="text-sm text-muted-foreground">Descrição</Label>
-                <Input placeholder="Descrição (opcional)" value={form.descricao} onChange={e => set('descricao', e.target.value)} />
+                <Label className="text-sm text-muted-foreground">Observação</Label>
+                <Input placeholder="Observação (opcional)" value={form.descricao} onChange={e => set('descricao', e.target.value)} />
               </div>
             </div>
 

@@ -7,12 +7,11 @@ import { Loader2, CheckCircle, Trash2 } from 'lucide-react';
 import { LancamentoPix, OpcaoSelect } from '@/types/comissionamento';
 
 interface OpcoesData {
-  cnpj: OpcaoSelect[];
   unidade: OpcaoSelect[];
   centro_de_custo: OpcaoSelect[];
   categoria: OpcaoSelect[];
-  secao_custeio: OpcaoSelect[];
-  centro_custeio: OpcaoSelect[];
+  plano_contas: OpcaoSelect[];
+  bancos: OpcaoSelect[];
 }
 
 interface Props {
@@ -33,7 +32,17 @@ const formatDateForInput = (val: string | null) => {
 // Resolve nome -> id em uma lista de opções
 const findIdByName = (opts: OpcaoSelect[], name: string | null): string => {
   if (!name) return '';
-  const match = opts.find(o => (o.nome || '').trim().toLowerCase() === name.trim().toLowerCase());
+  const target = name.trim().toLowerCase();
+  const normalizeLabel = (value: string) =>
+    value.replace(/^\s*\d+\s*-\s*/, '').trim().toLowerCase();
+  const normalizedTarget = normalizeLabel(name);
+  const match = opts.find(o => {
+    const option = (o.nome || '').trim().toLowerCase();
+    const normalizedOption = normalizeLabel(o.nome || '');
+    return option === target
+      || normalizedOption === normalizedTarget
+      || normalizedOption.endsWith(normalizedTarget);
+  });
   return match?.id || '';
 };
 
@@ -56,13 +65,11 @@ export const ComissionamentoEditDialog: React.FC<Props> = ({ open, onClose, onSa
         descricao: record.descricao || '',
         valor: record.valor != null ? String(record.valor) : '',
         banco: record.banco || '',
+        banco_codigo: record.banco_codigo || findIdByName(opcoes.bancos, record.banco),
         status_pag: record.status_pag || '',
-        cnpj_id: findIdByName(opcoes.cnpj, record.cnpj),
-        unidade_id: findIdByName(opcoes.unidade, record.unidade),
-        centro_de_custo_id: findIdByName(opcoes.centro_de_custo, record.centro_de_custo),
-        categoria_id: findIdByName(opcoes.categoria, record.categoria),
-        secao_custeio_id: findIdByName(opcoes.secao_custeio, record.secao_custeio),
-        centro_custeio_id: findIdByName(opcoes.centro_custeio, record.centro_custeio),
+        unidade_id: record.unidade_codigo || findIdByName(opcoes.unidade, record.unidade),
+        centro_de_custo_id: record.setor_codigo || findIdByName(opcoes.centro_de_custo, record.centro_de_custo),
+        plano_conta_id: record.plano_conta_id || '',
       });
       setError('');
       setSuccess(false);
@@ -77,6 +84,7 @@ export const ComissionamentoEditDialog: React.FC<Props> = ({ open, onClose, onSa
     setSubmitting(true);
     setError('');
     try {
+      const bancoSelecionado = opcoes.bancos.find(option => option.id === form.banco_codigo);
       const updates: Record<string, any> = {
         data_lancamento: form.data_lancamento || null,
         nome: form.nome,
@@ -84,14 +92,14 @@ export const ComissionamentoEditDialog: React.FC<Props> = ({ open, onClose, onSa
         favorecido: form.favorecido,
         descricao: form.descricao || null,
         valor: form.valor ? parseFloat(form.valor.replace(/[^\d.,\-]/g, '').replace(',', '.')) : null,
-        banco: form.banco || null,
+        banco_codigo: bancoSelecionado?.id || null,
+        banco: bancoSelecionado?.nome || form.banco || null,
         status_pag: form.status_pag || null,
-        cnpj_id: form.cnpj_id || null,
-        unidade_id: form.unidade_id || null,
-        centro_de_custo_id: form.centro_de_custo_id || null,
-        categoria_id: form.categoria_id || null,
-        secao_custeio_id: form.secao_custeio_id || null,
-        centro_custeio_id: form.centro_custeio_id || null,
+        unidade_id: null,
+        unidade_codigo: form.unidade_id || null,
+        centro_de_custo_id: null,
+        setor_codigo: form.centro_de_custo_id || null,
+        plano_conta_id: form.plano_conta_id || null,
       };
       await onSave(record.id, updates);
       setSuccessMsg('Registro atualizado com sucesso!');
@@ -169,17 +177,10 @@ export const ComissionamentoEditDialog: React.FC<Props> = ({ open, onClose, onSa
                 <Label className="text-sm font-medium">Valor</Label>
                 <Input value={form.valor || ''} onChange={e => set('valor', e.target.value)} />
               </div>
-              {renderSelect('cnpj_id', 'CNPJ', opcoes.cnpj)}
               {renderSelect('unidade_id', 'Unidade', opcoes.unidade)}
               {renderSelect('centro_de_custo_id', 'Centro de Custo', opcoes.centro_de_custo)}
-              {renderSelect('categoria_id', 'Categoria', opcoes.categoria)}
-              {renderSelect('secao_custeio_id', 'Seção de Custeio', opcoes.secao_custeio)}
-              {renderSelect('centro_custeio_id', 'Centro de Custeio', opcoes.centro_custeio)}
-
-               <div className="space-y-1">
-                <Label className="text-sm font-medium">Banco</Label>
-                <Input value={form.banco || ''} onChange={e => set('banco', e.target.value)} />
-              </div>
+              {renderSelect('plano_conta_id', 'Conta Analítica', opcoes.plano_contas)}
+              {renderSelect('banco_codigo', 'Banco', opcoes.bancos)}
               <div className="space-y-1">
                 <Label className="text-sm font-medium">Status Pagamento</Label>
                 <select className={selectClass} value={form.status_pag || ''} onChange={e => set('status_pag', e.target.value)}>
@@ -190,7 +191,7 @@ export const ComissionamentoEditDialog: React.FC<Props> = ({ open, onClose, onSa
               </div>
 
               <div className="space-y-1 md:col-span-2">
-                <Label className="text-sm text-muted-foreground">Descrição</Label>
+                <Label className="text-sm text-muted-foreground">Observação</Label>
                 <Input value={form.descricao || ''} onChange={e => set('descricao', e.target.value)} />
               </div>
             </div>

@@ -10,6 +10,7 @@ export interface DadoFinanceiro {
     setor: string | null;
     nome_registro: string | null;
     sal_folha: number;
+    sal_familia: number;
     desc_inss: number;
     irrf: number;
     ferias: number;
@@ -23,6 +24,7 @@ export interface DadoFinanceiro {
     sal_maternidade: number;
     vale_transporte: number;
     desc_plano_saude: number;
+    desc_vale_alimentacao: number;
     desc_odonto: number;
     desc_faltas: number;
     desc_adiantamento: number;
@@ -31,6 +33,7 @@ export interface DadoFinanceiro {
     dif_salario: number;
     emprestimo: number;
     desc_fardamento: number;
+    demais_desc: number;
     total_proventos: number;
     total_descontos: number;
     salario_liquido: number;
@@ -47,8 +50,10 @@ export const VERBA_FIELDS: { label: string; field: keyof DadoFinanceiro }[] = [
     { label: 'Hora extra 100%', field: 'hora_extra_100' },
     { label: 'DSR', field: 'dsr' },
     { label: 'Sal. Maternidade', field: 'sal_maternidade' },
+    { label: 'Sal. Família', field: 'sal_familia' },
     { label: 'Vale transporte', field: 'vale_transporte' },
     { label: 'Desc plano saúde', field: 'desc_plano_saude' },
+    { label: 'Desc vale alimentação', field: 'desc_vale_alimentacao' },
     { label: 'Desc odonto', field: 'desc_odonto' },
     { label: 'Desc faltas', field: 'desc_faltas' },
     { label: 'Desc adiantamento', field: 'desc_adiantamento' },
@@ -57,6 +62,7 @@ export const VERBA_FIELDS: { label: string; field: keyof DadoFinanceiro }[] = [
     { label: 'Dif. Salário', field: 'dif_salario' },
     { label: 'Empréstimo', field: 'emprestimo' },
     { label: 'Desc fardamento', field: 'desc_fardamento' },
+    { label: 'Demais desc', field: 'demais_desc' },
 ];
 
 export interface FolhaFilters {

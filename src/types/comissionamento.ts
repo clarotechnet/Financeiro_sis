@@ -5,16 +5,26 @@ export interface LancamentoPix {
   id?: string;
   data_lancamento: string | null;
   nome: string;
-  chave_pix: string;
+  chave_pix: string | null;
   favorecido: string;
   descricao: string | null;
+  plano_conta_id?: string | null;
+  conta_analitica_codigo?: string | null;
+  conta_analitica_descricao?: string | null;
+  conta_analitica?: string | null;
   valor: number | null;
   cnpj: string | null;
+  unidade_codigo?: string | null;
+  unidade_cadastro?: string | null;
   unidade: string | null;
+  setor_codigo?: string | null;
+  setor_nome?: string | null;
   centro_de_custo: string | null;
   categoria: string | null;
   secao_custeio: string | null;
   centro_custeio: string | null;
+  banco_codigo?: string | null;
+  banco_cadastro?: string | null;
   banco: string | null;
   forma_pagamento: string | null;
   status_pag: string | null;
@@ -43,7 +53,8 @@ export interface ComissionamentoFilters {
   dataExecFim: string;
   descricao: string;        // busca texto
   cnpj: string[];           // multi-select
-  centroCusteio: string[];  // multi-select
+  contaAnalitica: string[]; // multi-select
+  banco: string[];          // multi-select
 }
 
 export interface ComissionamentoKPIData {
@@ -78,5 +89,5 @@ export interface FrenteKPIData {
   tecNaoVenderam: string[];
   totalValor?: number;
   unidade?: string;
-  centroCusteio?: string;
+  contasAnaliticas?: string[];
 }

@@ -9,6 +9,7 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import Login from "./pages/Login";
 import Admin from "./pages/Admin";
 import Comissionamento from "./pages/Comissionamento";
+import Receitas from "./pages/Receitas";
 import AppLayout from "@/components/layout/AppLayout";
 import NotFound from "./pages/NotFound";
 import Perfil from "./pages/Perfil";
@@ -47,6 +48,7 @@ const App = () => (
                 }
               >
                 <Route path="/" element={<Navigate to="/comissionamento" replace />} />
+                <Route path="/receitas" element={<Receitas />} />
                 <Route path="/comissionamento" element={<Comissionamento />} />
                 <Route path="/perfil" element={<Perfil />} />
                 <Route
