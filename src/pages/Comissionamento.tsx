@@ -60,7 +60,7 @@ const Comissionamento: React.FC = () => {
         />
 
         {hook.isLoading && !hasData && (
-          <LoadingSpinner message="Carregando lançamentos PIX..." />
+          <LoadingSpinner message="Carregando lançamentos..." />
         )}
 
         {hasData && isAdmin && (
