@@ -80,7 +80,7 @@ const addPdfHeader = (
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(14);
   doc.setTextColor(20);
-  doc.text('Dados Detalhados', pageWidth / 2, 13, { align: 'center' });
+  doc.text('PAGAMENTOS', pageWidth / 2, 13, { align: 'center' });
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
@@ -201,47 +201,47 @@ export const ComissionamentoTable: React.FC<Props> = ({ data, onUpdate, onDelete
       const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
 
       autoTable(doc, {
-      startY: PDF_HEADER_BOTTOM,
-      head: [['Data', 'Cidade/Unidade', 'Favorecido', 'Chave PIX', 'Conta Analítica', 'Centro de Custo', 'Observação', 'Banco', 'Status', 'Valor']],
-      body: sorted.map(r => [
-        formatDate(r.data_lancamento),
-        r.unidade || '-',
-        r.favorecido || '-',
-        r.chave_pix || '-',
-        r.conta_analitica || '-',
-        r.centro_de_custo || '-',
-        r.descricao || '-',
-        r.banco || '-',
-        r.status_pag || '-',
-        fmtBRL(r.valor),
-      ]),
-      margin: { top: PDF_HEADER_BOTTOM, right: PDF_MARGIN, bottom: 14, left: PDF_MARGIN },
-      styles: {
-        fontSize: 6.8,
-        cellPadding: 1.5,
-        overflow: 'linebreak',
-        valign: 'top',
-        lineColor: [235, 235, 235],
-        lineWidth: 0.1,
-      },
-      headStyles: { fillColor: [31, 58, 95], textColor: 255 },
-      alternateRowStyles: { fillColor: [247, 247, 247] },
-      columnStyles: {
-        0: { cellWidth: 17 },
-        1: { cellWidth: 22 },
-        2: { cellWidth: 39 },
-        3: { cellWidth: 25 },
-        4: { cellWidth: 38 },
-        5: { cellWidth: 24 },
-        6: { cellWidth: 44 },
-        7: { cellWidth: 25 },
-        8: { cellWidth: 15 },
-        9: { cellWidth: 24, halign: 'right' },
-      },
-      didDrawPage: () => {
-        addPdfHeader(doc, logoDataUrl, generatedAt, sorted.length);
-      },
-    });
+        startY: PDF_HEADER_BOTTOM,
+        head: [['Data', 'Cidade/Unidade', 'Favorecido', 'Chave PIX', 'Conta Analítica', 'Centro de Custo', 'Observação', 'Banco', 'Status', 'Valor']],
+        body: sorted.map(r => [
+          formatDate(r.data_lancamento),
+          r.unidade || '-',
+          r.favorecido || '-',
+          r.chave_pix || '-',
+          r.conta_analitica || '-',
+          r.centro_de_custo || '-',
+          r.descricao || '-',
+          r.banco || '-',
+          r.status_pag || '-',
+          fmtBRL(r.valor),
+        ]),
+        margin: { top: PDF_HEADER_BOTTOM, right: PDF_MARGIN, bottom: 14, left: PDF_MARGIN },
+        styles: {
+          fontSize: 6.8,
+          cellPadding: 1.5,
+          overflow: 'linebreak',
+          valign: 'top',
+          lineColor: [235, 235, 235],
+          lineWidth: 0.1,
+        },
+        headStyles: { fillColor: [31, 58, 95], textColor: 255 },
+        alternateRowStyles: { fillColor: [247, 247, 247] },
+        columnStyles: {
+          0: { cellWidth: 17 },
+          1: { cellWidth: 22 },
+          2: { cellWidth: 39 },
+          3: { cellWidth: 25 },
+          4: { cellWidth: 38 },
+          5: { cellWidth: 24 },
+          6: { cellWidth: 44 },
+          7: { cellWidth: 25 },
+          8: { cellWidth: 15 },
+          9: { cellWidth: 24, halign: 'right' },
+        },
+        didDrawPage: () => {
+          addPdfHeader(doc, logoDataUrl, generatedAt, sorted.length);
+        },
+      });
 
       const tableDoc = doc as jsPDF & { lastAutoTable?: { finalY: number } };
       addTotalToLastPdfPage(

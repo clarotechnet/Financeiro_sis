@@ -49,6 +49,14 @@ interface OpcaoCodigoNome {
   nome: string;
 }
 
+interface PlanoContaOpcao {
+  id: string;
+  codigo: string;
+  descricao: string;
+  nivel: number;
+  e_analitica: boolean;
+}
+
 const PAGE_SIZE = 50;
 
 const fmtBRL = (value: number) =>
@@ -66,18 +74,16 @@ const fmtDate = (date: string | null | undefined) => {
   return parsed.toLocaleDateString('pt-BR');
 };
 
-const origemLabel = (origem: string) => {
-  if (origem === 'receitas') return 'Receitas';
-  if (origem === 'lancamentos_pix') return 'PIX';
-  if (origem === 'dados_financeiro') return 'Folha';
-  return origem || '-';
-};
-
 const contaLabel = (movimento: DreMovimento) => {
   if (movimento.conta_codigo && movimento.conta_descricao) {
     return `${movimento.conta_codigo} - ${movimento.conta_descricao}`;
   }
   return 'Sem conta analítica';
+};
+
+const planoContaLabel = (opcao: PlanoContaOpcao | undefined) => {
+  if (!opcao) return '';
+  return `${opcao.codigo} - ${opcao.descricao}`;
 };
 
 const dreDescricaoLabel = (row: DreLinha) => {
@@ -107,6 +113,9 @@ const fetchMovimentosDre = async (
   dataFim: string,
   unidadeCodigo: string,
   setorCodigo: string,
+  grupoCodigo: string,
+  subgrupoCodigo: string,
+  contaCodigo: string,
 ) => {
   const allRows: DreMovimento[] = [];
   let page = 0;
@@ -122,6 +131,9 @@ const fetchMovimentosDre = async (
     if (dataFim) query = query.lte('data_movimento', dataFim);
     if (unidadeCodigo) query = query.eq('unidade_codigo', unidadeCodigo);
     if (setorCodigo) query = query.eq('setor_codigo', setorCodigo);
+    if (grupoCodigo) query = query.eq('grupo_codigo', grupoCodigo);
+    if (subgrupoCodigo) query = query.eq('subgrupo_codigo', subgrupoCodigo);
+    if (contaCodigo) query = query.eq('conta_codigo', contaCodigo);
 
     const { data, error } = await query;
     if (error) throw error;
@@ -140,17 +152,21 @@ const DREConsolidado: React.FC = () => {
   const [movimentos, setMovimentos] = useState<DreMovimento[]>([]);
   const [opcoesUnidades, setOpcoesUnidades] = useState<OpcaoCodigoNome[]>([]);
   const [opcoesSetores, setOpcoesSetores] = useState<OpcaoCodigoNome[]>([]);
+  const [opcoesPlanoContas, setOpcoesPlanoContas] = useState<PlanoContaOpcao[]>([]);
   const [dataInicio, setDataInicio] = useState('');
   const [dataFim, setDataFim] = useState('');
   const [unidadeCodigo, setUnidadeCodigo] = useState('');
   const [setorCodigo, setSetorCodigo] = useState('');
+  const [grupoCodigo, setGrupoCodigo] = useState('');
+  const [subgrupoCodigo, setSubgrupoCodigo] = useState('');
+  const [contaCodigo, setContaCodigo] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
   const [generatedAt, setGeneratedAt] = useState<Date | null>(null);
 
   const fetchOpcoes = useCallback(async () => {
-    const [unidadesResult, setoresResult] = await Promise.all([
+    const [unidadesResult, setoresResult, planoContasResult] = await Promise.all([
       externalSupabase
         .from('unidades')
         .select('codigo, unidade')
@@ -161,10 +177,16 @@ const DREConsolidado: React.FC = () => {
         .select('codigo, setor')
         .eq('ativo', true)
         .order('codigo', { ascending: true }),
+      externalSupabase
+        .from('plano_contas')
+        .select('id, codigo, descricao, nivel, e_analitica')
+        .eq('ativo', true)
+        .order('codigo', { ascending: true }),
     ]);
 
     if (unidadesResult.error) throw unidadesResult.error;
     if (setoresResult.error) throw setoresResult.error;
+    if (planoContasResult.error) throw planoContasResult.error;
 
     setOpcoesUnidades((unidadesResult.data || []).map((row: any) => ({
       codigo: row.codigo,
@@ -175,6 +197,8 @@ const DREConsolidado: React.FC = () => {
       codigo: row.codigo,
       nome: row.setor,
     })));
+
+    setOpcoesPlanoContas((planoContasResult.data || []) as PlanoContaOpcao[]);
   }, []);
 
   const fetchDre = useCallback(async () => {
@@ -191,7 +215,15 @@ const DREConsolidado: React.FC = () => {
 
       const [dreResult, movimentosRows] = await Promise.all([
         externalSupabase.rpc('gerar_dre', params),
-        fetchMovimentosDre(dataInicio, dataFim, unidadeCodigo, setorCodigo),
+        fetchMovimentosDre(
+          dataInicio,
+          dataFim,
+          unidadeCodigo,
+          setorCodigo,
+          grupoCodigo,
+          subgrupoCodigo,
+          contaCodigo,
+        ),
       ]);
 
       if (dreResult.error) throw dreResult.error;
@@ -205,7 +237,7 @@ const DREConsolidado: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [dataFim, dataInicio, setorCodigo, unidadeCodigo]);
+  }, [contaCodigo, dataFim, dataInicio, grupoCodigo, setorCodigo, subgrupoCodigo, unidadeCodigo]);
 
   useEffect(() => {
     fetchOpcoes().catch((err: any) => {
@@ -218,7 +250,43 @@ const DREConsolidado: React.FC = () => {
     fetchDre();
   }, [fetchDre]);
 
-  const linhasCalculadas = useMemo(() => computeDreTotals(linhas), [linhas]);
+  const opcoesContasGerais = useMemo(
+    () => opcoesPlanoContas.filter(opcao => opcao.nivel === 1),
+    [opcoesPlanoContas],
+  );
+
+  const opcoesSubgrupos = useMemo(
+    () => opcoesPlanoContas.filter(opcao =>
+      opcao.nivel === 2 && (!grupoCodigo || opcao.codigo.slice(0, 2) === grupoCodigo.slice(0, 2))
+    ),
+    [grupoCodigo, opcoesPlanoContas],
+  );
+
+  const opcoesContasAnaliticas = useMemo(
+    () => opcoesPlanoContas.filter(opcao =>
+      opcao.e_analitica
+      && (!grupoCodigo || opcao.codigo.slice(0, 2) === grupoCodigo.slice(0, 2))
+      && (!subgrupoCodigo || opcao.codigo.slice(0, 5) === subgrupoCodigo.slice(0, 5))
+    ),
+    [grupoCodigo, opcoesPlanoContas, subgrupoCodigo],
+  );
+
+  const linhasComTotaisFiltrados = useMemo(() => {
+    const totaisPorLinha = new Map<string, number>();
+
+    movimentos.forEach(movimento => {
+      if (!movimento.dre_linha_id) return;
+      const totalAtual = totaisPorLinha.get(movimento.dre_linha_id) || 0;
+      totaisPorLinha.set(movimento.dre_linha_id, totalAtual + (Number(movimento.valor) || 0));
+    });
+
+    return linhas.map(row => ({
+      ...row,
+      total: totaisPorLinha.get(row.dre_linha_id) || 0,
+    }));
+  }, [linhas, movimentos]);
+
+  const linhasCalculadas = useMemo(() => computeDreTotals(linhasComTotaisFiltrados), [linhasComTotaisFiltrados]);
   const totalByCodigo = useMemo(
     () => new Map(linhasCalculadas.map(row => [row.codigo, Number(row.total) || 0])),
     [linhasCalculadas],
@@ -251,12 +319,29 @@ const DREConsolidado: React.FC = () => {
 
   const unidadeLabel = opcoesUnidades.find(opcao => opcao.codigo === unidadeCodigo)?.nome || 'Todas as unidades';
   const setorLabel = opcoesSetores.find(opcao => opcao.codigo === setorCodigo)?.nome || 'Todos os setores';
+  const contaGeralLabel = planoContaLabel(opcoesContasGerais.find(opcao => opcao.codigo === grupoCodigo)) || 'Todas as contas gerais';
+  const subgrupoLabel = planoContaLabel(opcoesSubgrupos.find(opcao => opcao.codigo === subgrupoCodigo)) || 'Todos os subgrupos';
+  const contaAnaliticaLabel = planoContaLabel(opcoesContasAnaliticas.find(opcao => opcao.codigo === contaCodigo)) || 'Todas as contas analíticas';
+
+  const handleGrupoChange = (value: string) => {
+    setGrupoCodigo(value);
+    setSubgrupoCodigo('');
+    setContaCodigo('');
+  };
+
+  const handleSubgrupoChange = (value: string) => {
+    setSubgrupoCodigo(value);
+    setContaCodigo('');
+  };
 
   const limpar = () => {
     setDataInicio('');
     setDataFim('');
     setUnidadeCodigo('');
     setSetorCodigo('');
+    setGrupoCodigo('');
+    setSubgrupoCodigo('');
+    setContaCodigo('');
   };
 
   const handlePrint = () => window.print();
@@ -276,7 +361,6 @@ const DREConsolidado: React.FC = () => {
 
     const detalheRows = movimentos.map(row => ({
       Data: fmtDate(row.data_movimento),
-      Origem: origemLabel(row.origem),
       Descrição: row.descricao || '-',
       Unidade: row.unidade_nome || row.unidade_codigo || '-',
       Setor: row.setor_nome || row.setor_codigo || '-',
@@ -295,7 +379,6 @@ const DREConsolidado: React.FC = () => {
     const wsDetalhe = XLSX.utils.json_to_sheet(detalheRows);
     wsDetalhe['!cols'] = [
       { wch: 12 },
-      { wch: 16 },
       { wch: 42 },
       { wch: 24 },
       { wch: 28 },
@@ -445,6 +528,45 @@ const DREConsolidado: React.FC = () => {
                 ))}
               </select>
             </div>
+            <div className="form-group">
+              <Label className="form-label">Conta Geral</Label>
+              <select
+                className="form-control bg-card border border-border rounded-lg px-3 py-2 text-foreground w-full"
+                value={grupoCodigo}
+                onChange={event => handleGrupoChange(event.target.value)}
+              >
+                <option value="">Todas</option>
+                {opcoesContasGerais.map(opcao => (
+                  <option key={opcao.codigo} value={opcao.codigo}>{planoContaLabel(opcao)}</option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group">
+              <Label className="form-label">Subgrupo</Label>
+              <select
+                className="form-control bg-card border border-border rounded-lg px-3 py-2 text-foreground w-full"
+                value={subgrupoCodigo}
+                onChange={event => handleSubgrupoChange(event.target.value)}
+              >
+                <option value="">Todos</option>
+                {opcoesSubgrupos.map(opcao => (
+                  <option key={opcao.codigo} value={opcao.codigo}>{planoContaLabel(opcao)}</option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group">
+              <Label className="form-label">Conta Analítica</Label>
+              <select
+                className="form-control bg-card border border-border rounded-lg px-3 py-2 text-foreground w-full"
+                value={contaCodigo}
+                onChange={event => setContaCodigo(event.target.value)}
+              >
+                <option value="">Todas</option>
+                {opcoesContasAnaliticas.map(opcao => (
+                  <option key={opcao.codigo} value={opcao.codigo}>{planoContaLabel(opcao)}</option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
 
@@ -478,6 +600,9 @@ const DREConsolidado: React.FC = () => {
                   <p className="text-sm text-muted-foreground">Período: {periodoLabel}</p>
                   <p className="text-sm text-muted-foreground">Unidade: {unidadeLabel}</p>
                   <p className="text-sm text-muted-foreground">Setor: {setorLabel}</p>
+                  <p className="text-sm text-muted-foreground">Conta Geral: {contaGeralLabel}</p>
+                  <p className="text-sm text-muted-foreground">Subgrupo: {subgrupoLabel}</p>
+                  <p className="text-sm text-muted-foreground">Conta Analítica: {contaAnaliticaLabel}</p>
                 </div>
               <div className="text-xs text-muted-foreground md:text-right">
                 <div>{movimentos.length} movimento(s) analisado(s)</div>
@@ -554,11 +679,10 @@ const DREConsolidado: React.FC = () => {
               </div>
 
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[1180px] text-sm">
+                <table className="w-full min-w-[1080px] text-sm">
                   <thead>
                     <tr className="border-b border-border text-left text-muted-foreground">
                       <th className="py-2 px-2">Data</th>
-                      <th className="py-2 px-2">Origem</th>
                       <th className="py-2 px-2">Descrição</th>
                       <th className="py-2 px-2">Unidade</th>
                       <th className="py-2 px-2">Setor</th>
@@ -573,7 +697,6 @@ const DREConsolidado: React.FC = () => {
                       return (
                         <tr key={row.id} className="border-b border-border/40 hover:bg-muted/30">
                           <td className="py-2 px-2 whitespace-nowrap">{fmtDate(row.data_movimento)}</td>
-                          <td className="py-2 px-2">{origemLabel(row.origem)}</td>
                           <td className="py-2 px-2 text-foreground">{row.descricao || '-'}</td>
                           <td className="py-2 px-2">{row.unidade_nome || row.unidade_codigo || '-'}</td>
                           <td className="py-2 px-2">{row.setor_nome || row.setor_codigo || '-'}</td>
@@ -598,7 +721,7 @@ const DREConsolidado: React.FC = () => {
                     })}
                     {movimentos.length === 0 && (
                       <tr>
-                        <td colSpan={8} className="py-6 text-center text-muted-foreground">
+                        <td colSpan={7} className="py-6 text-center text-muted-foreground">
                           Sem movimentos para os filtros selecionados.
                         </td>
                       </tr>

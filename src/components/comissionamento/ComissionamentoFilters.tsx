@@ -51,7 +51,7 @@ const MultiSelect: React.FC<MultiSelectProps> = ({ label, options, selected, onC
   );
 
   return (
-    <div className="form-group" ref={ref} style={{ zIndex: isOpen ? 30 : 1, position: 'relative' }}>
+    <div className="form-group" ref={ref} style={{ zIndex: isOpen ? 50 : 'auto', position: 'relative' }}>
       <Label className="form-label">{label}</Label>
       <div className="multi-select">
         <div className={`multi-select-button ${isOpen ? 'open' : ''}`} onClick={() => setIsOpen(!isOpen)}>
@@ -257,7 +257,7 @@ export const ComissionamentoFilters: React.FC<Props> = ({
     doc.save(`DRE_${new Date().toISOString().slice(0, 10)}.pdf`);
   };
   return (
-    <div className="card relative z-10">
+    <div className="card relative z-20">
       <div className="flex flex-wrap justify-between items-center mb-4 gap-3">
         <h3 className="text-lg font-bold text-foreground">Filtros</h3>
         <div className="flex items-center gap-3 flex-wrap">

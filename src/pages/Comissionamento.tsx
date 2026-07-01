@@ -64,7 +64,7 @@ const Comissionamento: React.FC = () => {
         )}
 
         {hasData && isAdmin && (
-          <div className="tab-content">
+          <div className="tab-content relative z-0">
             {activeTab === 'kpis' && <ComissionamentoKPIs kpis={hook.kpis} />}
             {activeTab === 'charts' && (
               <ComissionamentoCharts chartData={hook.chartData} ranking={hook.ranking} frentesData={hook.frentesData} />
