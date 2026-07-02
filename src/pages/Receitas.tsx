@@ -6,6 +6,7 @@ import {
   ChevronRight,
   FileEdit,
   Loader2,
+  Pencil,
   RefreshCw,
   TrendingUp,
   X,
@@ -38,6 +39,11 @@ const fmtCurrencyDisplay = (digits: string): string => {
   const decPart = padded.slice(-2);
   const formattedInt = parseInt(intPart, 10).toLocaleString('pt-BR');
   return `R$ ${formattedInt},${decPart}`;
+};
+
+const currencyDigitsFromValue = (value: number | null | undefined) => {
+  if (value == null) return '';
+  return String(Math.round(Number(value) * 100));
 };
 
 interface MultiSelectProps {
@@ -135,6 +141,7 @@ type ReceitaFormState = typeof emptyForm;
 interface ReceitaFormDialogProps {
   open: boolean;
   onClose: () => void;
+  receita: Receita | null;
   opcoesContas: ReceitaContaOpcao[];
   opcoesUnidades: ReceitaUnidadeOpcao[];
   opcoesSetores: ReceitaSetorOpcao[];
@@ -144,6 +151,7 @@ interface ReceitaFormDialogProps {
 const ReceitaFormDialog: React.FC<ReceitaFormDialogProps> = ({
   open,
   onClose,
+  receita,
   opcoesContas,
   opcoesUnidades,
   opcoesSetores,
@@ -151,6 +159,7 @@ const ReceitaFormDialog: React.FC<ReceitaFormDialogProps> = ({
 }) => {
   const { profile, user } = useAuth();
   const userName = profile?.display_name || user?.email || '';
+  const isEditing = Boolean(receita);
   const [form, setForm] = useState<ReceitaFormState>({ ...emptyForm, nome: userName });
   const [valorDisplay, setValorDisplay] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -158,9 +167,32 @@ const ReceitaFormDialog: React.FC<ReceitaFormDialogProps> = ({
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (!open || !userName) return;
-    setForm(prev => prev.nome === userName ? prev : { ...prev, nome: userName });
-  }, [open, userName]);
+    if (!open) return;
+    setError('');
+    setSuccess(false);
+
+    if (receita) {
+      const digits = currencyDigitsFromValue(receita.valor);
+      setForm({
+        data_recebimento: receita.data_recebimento?.slice(0, 10) || '',
+        nome: receita.nome || '',
+        cliente: receita.cliente || '',
+        valor: digits,
+        unidade_codigo: receita.unidade_codigo || '',
+        setor_codigo: receita.setor_codigo || '',
+        plano_conta_id: receita.plano_conta_id || '',
+        banco: receita.banco || '',
+        forma_recebimento: receita.forma_recebimento || '',
+        documento: receita.documento || '',
+        descricao: receita.descricao || '',
+      });
+      setValorDisplay(fmtCurrencyDisplay(digits));
+      return;
+    }
+
+    setForm({ ...emptyForm, nome: userName });
+    setValorDisplay('');
+  }, [open, receita, userName]);
 
   const set = (field: keyof ReceitaFormState, value: string) => {
     setForm(prev => ({ ...prev, [field]: value }));
@@ -183,6 +215,26 @@ const ReceitaFormDialog: React.FC<ReceitaFormDialogProps> = ({
   );
 
   const handleClear = () => {
+    if (receita) {
+      const digits = currencyDigitsFromValue(receita.valor);
+      setForm({
+        data_recebimento: receita.data_recebimento?.slice(0, 10) || '',
+        nome: receita.nome || '',
+        cliente: receita.cliente || '',
+        valor: digits,
+        unidade_codigo: receita.unidade_codigo || '',
+        setor_codigo: receita.setor_codigo || '',
+        plano_conta_id: receita.plano_conta_id || '',
+        banco: receita.banco || '',
+        forma_recebimento: receita.forma_recebimento || '',
+        documento: receita.documento || '',
+        descricao: receita.descricao || '',
+      });
+      setValorDisplay(fmtCurrencyDisplay(digits));
+      setError('');
+      return;
+    }
+
     setForm({ ...emptyForm, nome: userName });
     setValorDisplay('');
     setError('');
@@ -231,13 +283,15 @@ const ReceitaFormDialog: React.FC<ReceitaFormDialogProps> = ({
     <Dialog open={open} onOpenChange={(value) => { if (!value) onClose(); }}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Novo Lançamento de Receita</DialogTitle>
+          <DialogTitle>{isEditing ? 'Editar Lançamento de Receita' : 'Novo Lançamento de Receita'}</DialogTitle>
         </DialogHeader>
 
         {success ? (
           <div className="flex flex-col items-center gap-3 py-8">
             <CheckCircle className="w-12 h-12 text-success" />
-            <p className="text-lg font-semibold text-foreground">Receita registrada com sucesso!</p>
+            <p className="text-lg font-semibold text-foreground">
+              {isEditing ? 'Receita atualizada com sucesso!' : 'Receita registrada com sucesso!'}
+            </p>
           </div>
         ) : (
           <>
@@ -374,10 +428,12 @@ const ReceitaFormDialog: React.FC<ReceitaFormDialogProps> = ({
 
             <DialogFooter className="flex gap-2 sm:gap-2">
               <Button variant="ghost" onClick={onClose} disabled={submitting}>Fechar</Button>
-              <Button variant="outline" onClick={handleClear} disabled={submitting}>Limpar</Button>
+              <Button variant="outline" onClick={handleClear} disabled={submitting}>
+                {isEditing ? 'Restaurar' : 'Limpar'}
+              </Button>
               <Button onClick={handleSubmit} disabled={submitting || !isValid}>
                 {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                Salvar
+                {isEditing ? 'Salvar Alterações' : 'Salvar'}
               </Button>
             </DialogFooter>
           </>
@@ -390,6 +446,7 @@ const ReceitaFormDialog: React.FC<ReceitaFormDialogProps> = ({
 const Receitas: React.FC = () => {
   const hook = useReceitas();
   const [formOpen, setFormOpen] = useState(false);
+  const [editingReceita, setEditingReceita] = useState<Receita | null>(null);
   const [page, setPage] = useState(0);
 
   useEffect(() => {
@@ -439,6 +496,24 @@ const Receitas: React.FC = () => {
     );
   };
 
+  const handleCloseForm = () => {
+    setFormOpen(false);
+    setEditingReceita(null);
+  };
+
+  const handleOpenNew = () => {
+    setEditingReceita(null);
+    setFormOpen(true);
+  };
+
+  const handleSubmitReceita = (payload: ReceitaFormPayload) => {
+    if (editingReceita?.id) {
+      return hook.updateReceita(editingReceita.id, payload);
+    }
+
+    return hook.submitReceita(payload);
+  };
+
   return (
     <div className="min-h-full">
       <div className="max-w-[1400px] mx-auto p-6 md:p-8 space-y-6">
@@ -465,7 +540,7 @@ const Receitas: React.FC = () => {
           <div className="flex flex-wrap justify-between items-center mb-4 gap-3">
             <h3 className="text-lg font-bold text-foreground">Filtros</h3>
             <div className="flex items-center gap-3 flex-wrap">
-              <Button variant="outline" size="sm" onClick={() => setFormOpen(true)} className="gap-1">
+              <Button variant="outline" size="sm" onClick={handleOpenNew} className="gap-1">
                 <FileEdit className="w-4 h-4" /> Novo Lançamento
               </Button>
               <Button variant="outline" size="sm" onClick={hook.fetchData} className="gap-1">
@@ -484,11 +559,12 @@ const Receitas: React.FC = () => {
 
           <ReceitaFormDialog
             open={formOpen}
-            onClose={() => setFormOpen(false)}
+            onClose={handleCloseForm}
+            receita={editingReceita}
             opcoesContas={hook.opcoesContas}
             opcoesUnidades={hook.opcoesUnidades}
             opcoesSetores={hook.opcoesSetores}
-            onSubmit={hook.submitReceita}
+            onSubmit={handleSubmitReceita}
           />
 
           <div className="filter-section">
@@ -551,9 +627,10 @@ const Receitas: React.FC = () => {
               </div>
 
               <div className="max-h-[620px] w-full overflow-auto [scrollbar-gutter:stable]">
-                <table className="data-table min-w-[1180px] w-full text-xs">
+                <table className="data-table min-w-[1240px] w-full text-xs">
                   <thead>
                     <tr>
+                      <th>Ação</th>
                       <th>Data</th>
                       <th>Cliente / Origem</th>
                       <th>Unidade</th>
@@ -570,6 +647,20 @@ const Receitas: React.FC = () => {
                   <tbody>
                     {pageData.map(row => (
                       <tr key={row.id}>
+                        <td>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0"
+                            onClick={() => {
+                              setEditingReceita(row);
+                              setFormOpen(true);
+                            }}
+                            title="Editar receita"
+                          >
+                            <Pencil className="w-3 h-3 text-muted-foreground hover:text-primary" />
+                          </Button>
+                        </td>
                         <td className="whitespace-nowrap font-medium">{fmtDate(row.data_recebimento)}</td>
                         <td className="font-medium">{row.cliente || '-'}</td>
                         <td>{row.unidade_nome ? `${row.unidade_codigo} - ${row.unidade_nome}` : '-'}</td>
@@ -590,7 +681,7 @@ const Receitas: React.FC = () => {
                     ))}
                     {pageData.length === 0 && (
                       <tr>
-                        <td colSpan={11} className="text-center py-8 text-muted-foreground">
+                        <td colSpan={12} className="text-center py-8 text-muted-foreground">
                           Nenhuma receita encontrada.
                         </td>
                       </tr>

@@ -14,10 +14,10 @@ import { useAuth } from '@/contexts/useAuth';
 interface SubItem { id: string; label: string; icon: React.ComponentType<{ className?: string }>; }
 
 const COMISSIONAMENTO_TABS: SubItem[] = [
-    { id: 'kpis', label: 'KPIs', icon: BarChart3 },
-    { id: 'charts', label: 'Gráficos', icon: PieChart },
-    { id: 'frentes', label: 'Frentes', icon: Layers },
-    { id: 'table', label: 'Dados Detalhados', icon: TableIcon },
+    { id: 'kpis', label: 'Inclusão de Pagamento', icon: BarChart3 },
+    { id: 'charts', label: 'KPIs', icon: PieChart },
+    { id: 'frentes', label: 'Dashboard', icon: Layers },
+    { id: 'table', label: 'Relatorios', icon: TableIcon },
     { id: 'valores', label: 'Valores', icon: Coins },
 ];
 
@@ -127,7 +127,7 @@ export const AppSidebar: React.FC = () => {
                                     </NavLink>
                                 </SidebarMenuButton>
                             </SidebarMenuItem>
-                            {renderModule('/comissionamento', 'Solicitação de Pagamento', DollarSign, COMISSIONAMENTO_TABS)}
+                            {renderModule('/comissionamento', 'Despesas', DollarSign, COMISSIONAMENTO_TABS)}
                             {isAdmin && renderModule('/folha-pagamento', 'Folha de Pagamento', Wallet, FOLHA_TABS)}
                             {canAccessSettings && (
                                 <SidebarMenuItem>

@@ -162,6 +162,18 @@ export function useReceitas() {
     await fetchData();
   }, [fetchData, user?.id]);
 
+  const updateReceita = useCallback(async (id: string, payload: ReceitaFormPayload) => {
+    if (!user?.id) throw new Error('Usuário não autenticado.');
+
+    const { error: updateError } = await externalSupabase
+      .from('receitas')
+      .update(payload)
+      .eq('id', id);
+
+    if (updateError) throw updateError;
+    await fetchData();
+  }, [fetchData, user?.id]);
+
   const setFilters = (next: Partial<ReceitaFilters>) => {
     setFiltersState(prev => ({ ...prev, ...next }));
   };
@@ -179,6 +191,7 @@ export function useReceitas() {
     clearFilters,
     fetchData,
     submitReceita,
+    updateReceita,
     isLoading,
     error,
     kpis,

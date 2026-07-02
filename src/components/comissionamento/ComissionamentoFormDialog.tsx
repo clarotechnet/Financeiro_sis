@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, CheckCircle } from 'lucide-react';
+import { ChevronDown, CheckCircle, Loader2, Search, X } from 'lucide-react';
 import { LancamentoPix, OpcaoSelect } from '@/types/comissionamento';
 import { useAuth } from '@/contexts/useAuth';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
@@ -15,10 +15,35 @@ interface RegistroDados {
   setor: string | null;
 }
 
+interface FornecedorResumo {
+  id: string;
+  cnpj: string;
+  nome: string;
+  unidade_codigo: string | null;
+  unidade_nome: string | null;
+  setor_codigo: string | null;
+  setor_nome: string | null;
+  chave_pix: string | null;
+}
+
+interface SearchableSelectProps {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: OpcaoSelect[];
+  required?: boolean;
+}
+
 const formatCpf = (cpf: string): string => {
   const d = (cpf || '').replace(/\D/g, '');
   if (d.length !== 11) return cpf;
   return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
+};
+
+const formatCnpj = (cnpj: string): string => {
+  const d = (cnpj || '').replace(/\D/g, '').slice(0, 14);
+  if (d.length !== 14) return cnpj;
+  return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
 };
 
 interface OpcoesData {
@@ -48,6 +73,7 @@ interface Props {
     categoria_id: string | null;
     secao_custeio_id: string | null;
     centro_custeio_id: string | null;
+    status_pag: string;
   }) => Promise<void>;
   opcoes: OpcoesData;
   existingRecords?: LancamentoPix[];
@@ -66,6 +92,7 @@ const emptyForm = {
   centro_de_custo_id: '',
   secao_custeio_id: '',
   centro_custeio_id: '',
+  status_pag: 'A PAGAR',
 };
 
 const requiredFields = [
@@ -75,6 +102,13 @@ const requiredFields = [
 
 const DRAFT_KEY = 'technet-pix-form-draft';
 type FormState = typeof emptyForm;
+
+type ActiveSuggest = 'favorecido' | 'chave_pix' | 'cpf_cadastro' | 'fornecedor_cadastro' | null;
+
+const STATUS_OPTIONS: OpcaoSelect[] = [
+  { id: 'A PAGAR', nome: 'A PAGAR' },
+  { id: 'PAGO', nome: 'PAGO' },
+];
 
 const getErrorMessage = (err: unknown) => err instanceof Error ? err.message : 'Erro ao enviar';
 
@@ -108,6 +142,112 @@ const fmtCurrencyDisplay = (digits: string): string => {
 // Extrai apenas os dígitos de um valor já formatado
 const extractDigits = (raw: string): string => raw.replace(/\D/g, '');
 
+const SearchableSelect: React.FC<SearchableSelectProps> = ({
+  label,
+  value,
+  onChange,
+  options,
+  required = true,
+}) => {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const ref = useRef<HTMLDivElement>(null);
+  const selectedOption = options.find(option => option.id === value);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    if (!open) setSearch('');
+  }, [open]);
+
+  const filteredOptions = options.filter(option =>
+    option.nome.toLowerCase().includes(search.trim().toLowerCase())
+  );
+
+  return (
+    <div className={`space-y-1 relative ${open ? 'z-50' : 'z-auto'}`} ref={ref}>
+      <Label className="text-sm font-medium">{label} {required && '*'}</Label>
+      <button
+        type="button"
+        className={`w-full bg-card border rounded-lg px-3 py-2 text-left text-sm text-foreground flex items-center justify-between gap-2 ${open ? 'border-primary' : 'border-border'}`}
+        onClick={() => setOpen(prev => !prev)}
+      >
+        <span className={selectedOption ? 'truncate' : 'text-muted-foreground truncate'}>
+          {selectedOption?.nome || 'Selecione...'}
+        </span>
+        <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open && (
+        <div className="absolute left-0 right-0 top-full mt-1 rounded-lg border border-border bg-popover shadow-lg overflow-hidden">
+          <div className="relative border-b border-border">
+            <Input
+              className="h-9 rounded-none border-0 pr-9 focus-visible:ring-0 focus-visible:ring-offset-0"
+              placeholder="Buscar..."
+              value={search}
+              onChange={event => setSearch(event.target.value)}
+              autoFocus
+            />
+            {search && (
+              <button
+                type="button"
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:text-foreground"
+                onClick={() => setSearch('')}
+                aria-label="Limpar busca"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+
+          <div className="max-h-56 overflow-y-auto py-1">
+            {selectedOption && (
+              <button
+                type="button"
+                className="w-full px-3 py-2 text-left text-sm text-muted-foreground hover:bg-accent flex items-center gap-2"
+                onClick={() => {
+                  onChange('');
+                  setOpen(false);
+                  setSearch('');
+                }}
+              >
+                <X className="w-4 h-4" />
+                Limpar selecao
+              </button>
+            )}
+
+            {filteredOptions.map(option => (
+              <button
+                key={option.id}
+                type="button"
+                className="w-full px-3 py-2 text-left text-sm hover:bg-accent flex items-center gap-2"
+                onClick={() => {
+                  onChange(option.id);
+                  setOpen(false);
+                  setSearch('');
+                }}
+              >
+                <span className={`h-4 w-4 rounded border border-border ${value === option.id ? 'bg-primary border-primary' : ''}`} />
+                <span>{option.nome}</span>
+              </button>
+            ))}
+
+            {filteredOptions.length === 0 && (
+              <div className="px-3 py-2 text-sm text-muted-foreground">Nenhum resultado</div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSubmit, opcoes, existingRecords = [] }) => {
   const { profile } = useAuth();
   const userName = profile?.display_name || '';
@@ -135,11 +275,14 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
-  const [activeSuggest, setActiveSuggest] = useState<'favorecido' | 'chave_pix' | 'cpf_cadastro' | null>(null);
+  const [activeSuggest, setActiveSuggest] = useState<ActiveSuggest>(null);
   const suggestRef = useRef<HTMLDivElement>(null);
 
   const [cpfQuery, setCpfQuery] = useState('');
   const [registros, setRegistros] = useState<RegistroDados[]>([]);
+  const [fornecedorQuery, setFornecedorQuery] = useState('');
+  const [fornecedores, setFornecedores] = useState<FornecedorResumo[]>([]);
+  const [fornecedorSearchError, setFornecedorSearchError] = useState('');
 
   useEffect(() => {
     if (!open) return;
@@ -156,10 +299,67 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
     return () => { cancelled = true; clearTimeout(t); };
   }, [open, cpfQuery]);
 
+  useEffect(() => {
+    if (!open) return;
+    const term = fornecedorQuery.trim();
+    const digits = term.replace(/\D/g, '');
+    if (term.length < 2) {
+      setFornecedores([]);
+      setFornecedorSearchError('');
+      return;
+    }
+
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      setFornecedorSearchError('');
+
+      const nomeQuery = externalSupabase
+        .from('vw_fornecedores')
+        .select('id, cnpj, nome, unidade_codigo, unidade_nome, setor_codigo, setor_nome, chave_pix')
+        .eq('ativo', true)
+        .ilike('nome', `%${term}%`)
+        .order('nome', { ascending: true })
+        .limit(8);
+
+      const cnpjQuery = digits.length >= 2
+        ? externalSupabase
+          .from('vw_fornecedores')
+          .select('id, cnpj, nome, unidade_codigo, unidade_nome, setor_codigo, setor_nome, chave_pix')
+          .eq('ativo', true)
+          .ilike('cnpj', `%${digits}%`)
+          .order('nome', { ascending: true })
+          .limit(8)
+        : Promise.resolve({ data: [], error: null });
+
+      const [nomeResult, cnpjResult] = await Promise.all([nomeQuery, cnpjQuery]);
+      if (cancelled) return;
+
+      if (nomeResult.error || cnpjResult.error) {
+        console.error('Erro ao buscar fornecedor:', nomeResult.error || cnpjResult.error);
+        setFornecedorSearchError('Nao foi possivel buscar fornecedores.');
+        setFornecedores([]);
+        return;
+      }
+
+      const byId = new Map<string, FornecedorResumo>();
+      [...(nomeResult.data || []), ...(cnpjResult.data || [])].forEach((row: any) => {
+        byId.set(row.id, row as FornecedorResumo);
+      });
+      setFornecedores(Array.from(byId.values()).slice(0, 8));
+    }, 250);
+
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [open, fornecedorQuery]);
+
   const cpfSuggestions = useMemo(() => {
     if (cpfQuery.trim().length < 2) return [];
     return registros.slice(0, 8);
   }, [cpfQuery, registros]);
+
+  const fornecedorSuggestions = useMemo(() => {
+    if (fornecedorQuery.trim().length < 2) return [];
+    return fornecedores.slice(0, 8);
+  }, [fornecedorQuery, fornecedores]);
 
   const applyRegistro = (r: RegistroDados) => {
     setForm(prev => ({
@@ -168,6 +368,18 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
       chave_pix: r.cpf || prev.chave_pix,
     }));
     setCpfQuery(`${r.nome} — ${formatCpf(r.cpf)}`);
+    setActiveSuggest(null);
+  };
+
+  const applyFornecedor = (fornecedor: FornecedorResumo) => {
+    setForm(prev => ({
+      ...prev,
+      favorecido: fornecedor.nome || prev.favorecido,
+      chave_pix: fornecedor.chave_pix || '',
+      unidade_id: fornecedor.unidade_codigo || prev.unidade_id,
+      centro_de_custo_id: fornecedor.setor_codigo || prev.centro_de_custo_id,
+    }));
+    setFornecedorQuery(`${fornecedor.nome} - ${formatCnpj(fornecedor.cnpj)}`);
     setActiveSuggest(null);
   };
 
@@ -213,7 +425,7 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
   }, [existingRecords]);
 
   const suggestions = useMemo(() => {
-    if (!activeSuggest) return [];
+    if (activeSuggest !== 'favorecido' && activeSuggest !== 'chave_pix') return [];
     const term = (form[activeSuggest] || '').trim().toLowerCase();
     if (term.length < 2) return [];
     return uniqueRecords.filter(r => {
@@ -265,6 +477,7 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
         categoria_id: null,
         secao_custeio_id: null,
         centro_custeio_id: null,
+        status_pag: form.status_pag || 'A PAGAR',
       };
       await onSubmit(payload);
       window.localStorage.removeItem(DRAFT_KEY);
@@ -286,31 +499,13 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
     window.localStorage.removeItem(DRAFT_KEY);
     setForm({ ...emptyForm, nome: userName || form.nome });
     setCpfQuery('');
+    setFornecedorQuery('');
+    setFornecedores([]);
+    setFornecedorSearchError('');
     setActiveSuggest(null);
     setValorDisplay('');
     setError('');
   };
-
-  const selectClass = "w-full bg-card border border-border rounded-lg px-3 py-2 text-foreground text-sm";
-
-  const renderSelect = (
-    field: keyof typeof emptyForm,
-    label: string,
-    options: OpcaoSelect[],
-    required = true
-  ) => (
-    <div className="space-y-1">
-      <Label className="text-sm font-medium">{label} {required && '*'}</Label>
-      <select
-        className={selectClass}
-        value={form[field]}
-        onChange={e => set(field, e.target.value)}
-      >
-        <option value="">Selecione...</option>
-        {options.map(o => <option key={o.id} value={o.id}>{o.nome}</option>)}
-      </select>
-    </div>
-  );
 
   const renderAutocomplete = (
     field: 'favorecido' | 'chave_pix',
@@ -360,7 +555,7 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
         ) : (
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
-              <div className="space-y-1 md:col-span-2 relative" ref={activeSuggest === 'cpf_cadastro' ? suggestRef : undefined}>
+              <div className="space-y-1 relative" ref={activeSuggest === 'cpf_cadastro' ? suggestRef : undefined}>
                 <Label className="text-sm font-medium">Buscar cadastrado (CPF / Nome)</Label>
                 <Input
                   placeholder="Digite CPF ou nome cadastrado"
@@ -385,6 +580,45 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
                   </div>
                 )}
                 <p className="text-xs text-muted-foreground">Preenche automaticamente Favorecido e Chave PIX (CPF).</p>
+              </div>
+
+              <div className="space-y-1 relative" ref={activeSuggest === 'fornecedor_cadastro' ? suggestRef : undefined}>
+                <Label className="text-sm font-medium">Buscar Fornecedor</Label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 w-4 h-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    className="pl-9"
+                    placeholder="Digite nome ou CNPJ do fornecedor"
+                    value={fornecedorQuery}
+                    onChange={e => { setFornecedorQuery(e.target.value); setActiveSuggest('fornecedor_cadastro'); }}
+                    onFocus={() => setActiveSuggest('fornecedor_cadastro')}
+                    autoComplete="off"
+                  />
+                </div>
+                {activeSuggest === 'fornecedor_cadastro' && fornecedorQuery.trim().length >= 2 && (
+                  <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-popover border border-border rounded-lg shadow-lg max-h-64 overflow-y-auto">
+                    {fornecedorSearchError && (
+                      <div className="px-3 py-2 text-sm text-destructive">{fornecedorSearchError}</div>
+                    )}
+                    {!fornecedorSearchError && fornecedorSuggestions.length === 0 && (
+                      <div className="px-3 py-2 text-sm text-muted-foreground">Nenhum fornecedor encontrado</div>
+                    )}
+                    {!fornecedorSearchError && fornecedorSuggestions.map((fornecedor) => (
+                      <button
+                        key={fornecedor.id}
+                        type="button"
+                        onClick={() => applyFornecedor(fornecedor)}
+                        className="w-full text-left px-3 py-2 hover:bg-accent text-sm border-b border-border last:border-0"
+                      >
+                        <div className="font-medium text-foreground">{fornecedor.nome}</div>
+                        <div className="text-xs text-muted-foreground truncate">
+                          CNPJ: {formatCnpj(fornecedor.cnpj)} - {fornecedor.unidade_nome || '-'} - {fornecedor.setor_nome || '-'}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground">Preenche Favorecido, Chave PIX, Unidade e Centro de Custo.</p>
               </div>
               <div className="space-y-1">
                 <Label className="text-sm font-medium">Data Para Pagamento*</Label>
@@ -418,9 +652,31 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
                 />
               </div>
 
-              {renderSelect('unidade_id', 'Unidade', opcoes.unidade)}
-              {renderSelect('centro_de_custo_id', 'Centro de Custo', opcoes.centro_de_custo)}
-              {renderSelect('plano_conta_id', 'Conta Analítica', opcoes.plano_contas)}
+              <SearchableSelect
+                label="Unidade"
+                value={form.unidade_id}
+                onChange={value => set('unidade_id', value)}
+                options={opcoes.unidade}
+              />
+              <SearchableSelect
+                label="Centro de Custo"
+                value={form.centro_de_custo_id}
+                onChange={value => set('centro_de_custo_id', value)}
+                options={opcoes.centro_de_custo}
+              />
+              <SearchableSelect
+                label="Conta Analítica"
+                value={form.plano_conta_id}
+                onChange={value => set('plano_conta_id', value)}
+                options={opcoes.plano_contas}
+              />
+
+              <SearchableSelect
+                label="Status Pagamento"
+                value={form.status_pag}
+                onChange={value => set('status_pag', value)}
+                options={STATUS_OPTIONS}
+              />
 
               <div className="space-y-1 md:col-span-2">
                 <Label className="text-sm text-muted-foreground">Observação</Label>

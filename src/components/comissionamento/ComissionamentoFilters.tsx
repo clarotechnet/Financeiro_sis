@@ -1,10 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Label } from '@/components/ui/label';
 import { ComissionamentoFilters as FiltersType, LancamentoPix, OpcaoSelect } from '@/types/comissionamento';
-import { X, FileEdit, Download, FileText } from 'lucide-react';
+import { X, FileEdit, Download, FileText, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ComissionamentoFormDialog } from './ComissionamentoFormDialog';
 import { ComissionamentoImportExcel } from './ComissionamentoImportExcel';
+import { FornecedorDialog } from './FornecedorDialog';
 import { useAuth } from '@/contexts/useAuth';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
@@ -113,6 +114,7 @@ export const ComissionamentoFilters: React.FC<Props> = ({
     || filters.status.length > 0;
 
   const [formOpen, setFormOpen] = useState(false);
+  const [fornecedorOpen, setFornecedorOpen] = useState(false);
   const statusOptions = ['PAGO', 'A PAGAR'];
 
   const uniqueCentroCusto = React.useMemo(
@@ -271,6 +273,9 @@ export const ComissionamentoFilters: React.FC<Props> = ({
           </Button>
           {isAdmin && (
             <>
+              <Button variant="outline" size="sm" onClick={() => setFornecedorOpen(true)} className="gap-1">
+                <UserPlus className="w-4 h-4" /> Cadastrar Fornecedor
+              </Button>
               {onImportExcel && <ComissionamentoImportExcel onImport={onImportExcel} />}
               <Button variant="outline" size="sm" onClick={handleExportExcel} disabled={filteredData.length === 0} className="gap-1">
                 <Download className="w-4 h-4" /> Exportar Excel
@@ -295,6 +300,14 @@ export const ComissionamentoFilters: React.FC<Props> = ({
         onSubmit={onManualSubmit}
         opcoes={opcoes}
         existingRecords={filteredData}
+      />
+      <FornecedorDialog
+        open={fornecedorOpen}
+        onClose={() => setFornecedorOpen(false)}
+        opcoes={{
+          unidade: opcoes.unidade,
+          centro_de_custo: opcoes.centro_de_custo,
+        }}
       />
       {isAdmin && (
         <div className="filter-section">
