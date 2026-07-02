@@ -54,6 +54,7 @@ interface OpcoesData {
   secao_custeio: OpcaoSelect[];
   centro_custeio: OpcaoSelect[];
   plano_contas: OpcaoSelect[];
+  bancos: OpcaoSelect[];
 }
 
 interface Props {
@@ -73,6 +74,8 @@ interface Props {
     categoria_id: string | null;
     secao_custeio_id: string | null;
     centro_custeio_id: string | null;
+    banco_codigo: string | null;
+    banco: string | null;
     status_pag: string;
   }) => Promise<void>;
   opcoes: OpcoesData;
@@ -92,6 +95,7 @@ const emptyForm = {
   centro_de_custo_id: '',
   secao_custeio_id: '',
   centro_custeio_id: '',
+  banco_codigo: '',
   status_pag: 'A PAGAR',
 };
 
@@ -443,6 +447,7 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
       unidade_id: findIdByName(opcoes.unidade, r.unidade) || prev.unidade_id,
       centro_de_custo_id: findIdByName(opcoes.centro_de_custo, r.centro_de_custo) || prev.centro_de_custo_id,
       plano_conta_id: r.plano_conta_id || prev.plano_conta_id,
+      banco_codigo: r.banco_codigo || findIdByName(opcoes.bancos, r.banco) || prev.banco_codigo,
       secao_custeio_id: findIdByName(opcoes.secao_custeio, r.secao_custeio) || prev.secao_custeio_id,
       centro_custeio_id: findIdByName(opcoes.centro_custeio, r.centro_custeio) || prev.centro_custeio_id,
       // mantem data, valor e observacao em branco/inalterados
@@ -463,6 +468,7 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
     setSubmitting(true);
     setError('');
     try {
+      const bancoSelecionado = opcoes.bancos.find(option => option.id === form.banco_codigo);
       const payload = {
         data_lancamento: form.data_lancamento,
         nome: form.nome.trim(),
@@ -477,6 +483,8 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
         categoria_id: null,
         secao_custeio_id: null,
         centro_custeio_id: null,
+        banco_codigo: bancoSelecionado?.id || null,
+        banco: bancoSelecionado?.nome || null,
         status_pag: form.status_pag || 'A PAGAR',
       };
       await onSubmit(payload);
@@ -669,6 +677,14 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
                 value={form.plano_conta_id}
                 onChange={value => set('plano_conta_id', value)}
                 options={opcoes.plano_contas}
+              />
+
+              <SearchableSelect
+                label="Banco"
+                value={form.banco_codigo}
+                onChange={value => set('banco_codigo', value)}
+                options={opcoes.bancos}
+                required={false}
               />
 
               <SearchableSelect
