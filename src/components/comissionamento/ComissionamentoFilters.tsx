@@ -120,6 +120,11 @@ export const ComissionamentoFilters: React.FC<Props> = ({
     [opcoes.centro_de_custo]
   );
 
+  const uniqueUnidades = React.useMemo(
+    () => opcoes.unidade.map(option => option.nome).filter(Boolean).sort(),
+    [opcoes.unidade]
+  );
+
   const uniqueBancos = React.useMemo(
     () => opcoes.bancos.map(option => option.nome).filter(Boolean).sort(),
     [opcoes.bancos]
@@ -270,16 +275,7 @@ export const ComissionamentoFilters: React.FC<Props> = ({
               <Button variant="outline" size="sm" onClick={handleExportExcel} disabled={filteredData.length === 0} className="gap-1">
                 <Download className="w-4 h-4" /> Exportar Excel
               </Button>
-              {/* <Button
-                variant="outline"
-                size="sm"
-                onClick={handleGerarDRE}
-                disabled={filteredData.length === 0}
-                className="gap-1 border-accent/40 text-accent hover:bg-accent/10"
-                title="Demonstração do Resultado do Exercício"
-              >
-                <FileText className="w-4 h-4" /> Gerar DRE
-              </Button> */}
+
               <span className="text-sm text-muted-foreground">
                 Total: <strong className="text-foreground">{totalFiltered}</strong> registros
               </span>
@@ -304,7 +300,7 @@ export const ComissionamentoFilters: React.FC<Props> = ({
         <div className="filter-section">
           <MultiSelect
             label="Unidade"
-            options={uniqueCidades}
+            options={uniqueUnidades}
             selected={filters.cidade}
             onChange={(val) => setFilters({ cidade: val })}
           />

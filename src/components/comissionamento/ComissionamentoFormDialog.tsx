@@ -29,7 +29,6 @@ interface OpcoesData {
   secao_custeio: OpcaoSelect[];
   centro_custeio: OpcaoSelect[];
   plano_contas: OpcaoSelect[];
-  bancos: OpcaoSelect[];
 }
 
 interface Props {
@@ -49,9 +48,6 @@ interface Props {
     categoria_id: string | null;
     secao_custeio_id: string | null;
     centro_custeio_id: string | null;
-    banco_codigo: string | null;
-    banco: string | null;
-    status_pag: string;
   }) => Promise<void>;
   opcoes: OpcoesData;
   existingRecords?: LancamentoPix[];
@@ -70,7 +66,6 @@ const emptyForm = {
   centro_de_custo_id: '',
   secao_custeio_id: '',
   centro_custeio_id: '',
-  banco_codigo: '',
 };
 
 const requiredFields = [
@@ -171,7 +166,6 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
       ...prev,
       favorecido: r.nome || prev.favorecido,
       chave_pix: r.cpf || prev.chave_pix,
-      nome: prev.nome || r.nome,
     }));
     setCpfQuery(`${r.nome} — ${formatCpf(r.cpf)}`);
     setActiveSuggest(null);
@@ -231,14 +225,12 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
   const applySuggestion = (r: LancamentoPix) => {
     setForm(prev => ({
       ...prev,
-      nome: r.nome || prev.nome,
       favorecido: r.favorecido || prev.favorecido,
       chave_pix: r.chave_pix || prev.chave_pix,
       cnpj_id: findIdByName(opcoes.cnpj, r.cnpj) || prev.cnpj_id,
-      unidade_id: r.unidade_codigo || findIdByName(opcoes.unidade, r.unidade) || prev.unidade_id,
-      centro_de_custo_id: r.setor_codigo || findIdByName(opcoes.centro_de_custo, r.centro_de_custo) || prev.centro_de_custo_id,
+      unidade_id: findIdByName(opcoes.unidade, r.unidade) || prev.unidade_id,
+      centro_de_custo_id: findIdByName(opcoes.centro_de_custo, r.centro_de_custo) || prev.centro_de_custo_id,
       plano_conta_id: r.plano_conta_id || prev.plano_conta_id,
-      banco_codigo: r.banco_codigo || findIdByName(opcoes.bancos, r.banco) || prev.banco_codigo,
       secao_custeio_id: findIdByName(opcoes.secao_custeio, r.secao_custeio) || prev.secao_custeio_id,
       centro_custeio_id: findIdByName(opcoes.centro_custeio, r.centro_custeio) || prev.centro_custeio_id,
       // mantem data, valor e observacao em branco/inalterados
@@ -259,7 +251,6 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
     setSubmitting(true);
     setError('');
     try {
-      const bancoSelecionado = opcoes.bancos.find(option => option.id === form.banco_codigo);
       const payload = {
         data_lancamento: form.data_lancamento,
         nome: form.nome.trim(),
@@ -274,9 +265,6 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
         categoria_id: null,
         secao_custeio_id: null,
         centro_custeio_id: null,
-        banco_codigo: bancoSelecionado?.id || null,
-        banco: bancoSelecionado?.nome || null,
-        status_pag: 'A PAGAR',
       };
       await onSubmit(payload);
       window.localStorage.removeItem(DRAFT_KEY);
@@ -433,7 +421,6 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
               {renderSelect('unidade_id', 'Unidade', opcoes.unidade)}
               {renderSelect('centro_de_custo_id', 'Centro de Custo', opcoes.centro_de_custo)}
               {renderSelect('plano_conta_id', 'Conta Analítica', opcoes.plano_contas)}
-              {renderSelect('banco_codigo', 'Banco', opcoes.bancos, false)}
 
               <div className="space-y-1 md:col-span-2">
                 <Label className="text-sm text-muted-foreground">Observação</Label>

@@ -55,6 +55,7 @@ export interface ComissionamentoFilters {
   cnpj: string[];           // multi-select
   contaAnalitica: string[]; // multi-select
   banco: string[];          // multi-select
+
 }
 
 export interface ComissionamentoKPIData {

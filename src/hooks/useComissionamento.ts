@@ -34,6 +34,22 @@ const normalizeLancamentoPix = (row: LancamentoPix): LancamentoPix => ({
   banco: row.banco_cadastro || row.banco,
 });
 
+const matchesUnidadeFilter = (row: LancamentoPix, selected: string) => {
+  const unidade = row.unidade || '';
+  const codigo = row.unidade_codigo || '';
+  const codigoNome = codigo && unidade ? `${codigo} - ${unidade}` : '';
+  const selectedLower = selected.toLowerCase();
+
+  return [unidade, codigo, codigoNome].some(value =>
+    value
+    && (
+      value.toLowerCase() === selectedLower
+      || value.toLowerCase().includes(selectedLower)
+      || selectedLower.includes(value.toLowerCase())
+    )
+  );
+};
+
 export function useComissionamento() {
   const [data, setData] = useState<LancamentoPix[]>([]);
   const [opcoes, setOpcoes] = useState<OpcoesData>(EMPTY_OPCOES);
@@ -128,7 +144,7 @@ export function useComissionamento() {
       next.unidade = (unidadesResult.data as { codigo: string; unidade: string }[])
         .map(row => ({
           id: row.codigo,
-          nome: `${row.codigo} - ${row.unidade}`,
+          nome: row.unidade,
           ordem: Number(row.codigo) || null,
         }))
         .sort((a, b) => a.id.localeCompare(b.id, 'pt-BR', { numeric: true }));
@@ -174,7 +190,7 @@ export function useComissionamento() {
 
     if (filters.cidade.length > 0) {
       result = result.filter(r =>
-        filters.cidade.some(c => (r.unidade || '').toLowerCase().includes(c.toLowerCase()))
+        filters.cidade.some(c => matchesUnidadeFilter(r, c))
       );
     }
     if (filters.dataInicio) {
