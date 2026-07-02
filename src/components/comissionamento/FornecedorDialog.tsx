@@ -253,8 +253,8 @@ export const FornecedorDialog: React.FC<Props> = ({ open, onClose, opcoes }) => 
     const cnpj = onlyDigits(form.cnpj);
     const nome = form.nome.trim();
 
-    if (!cnpj || !nome || !form.unidade_codigo || !form.setor_codigo) {
-      setError('Preencha CNPJ, nome, unidade e centro de custo.');
+    if (!cnpj || !nome) {
+      setError('Preencha CNPJ e nome.');
       return;
     }
 
@@ -267,8 +267,8 @@ export const FornecedorDialog: React.FC<Props> = ({ open, onClose, opcoes }) => 
       nome,
       telefone: emptyToNull(onlyDigits(form.telefone)),
       email: emptyToNull(form.email),
-      unidade_codigo: form.unidade_codigo,
-      setor_codigo: form.setor_codigo,
+      unidade_codigo: emptyToNull(form.unidade_codigo),
+      setor_codigo: emptyToNull(form.setor_codigo),
       banco: emptyToNull(form.banco),
       agencia: emptyToNull(form.agencia),
       conta: emptyToNull(form.conta),
@@ -360,18 +360,6 @@ export const FornecedorDialog: React.FC<Props> = ({ open, onClose, opcoes }) => 
               />
             </div>
 
-            <SearchableSelect
-              label="Unidade"
-              value={form.unidade_codigo}
-              onChange={value => set('unidade_codigo', value)}
-              options={opcoes.unidade}
-            />
-            <SearchableSelect
-              label="Centro de Custo"
-              value={form.setor_codigo}
-              onChange={value => set('setor_codigo', value)}
-              options={opcoes.centro_de_custo}
-            />
           </div>
 
           <div className="space-y-3 rounded-lg border border-border bg-card/40 p-3">
