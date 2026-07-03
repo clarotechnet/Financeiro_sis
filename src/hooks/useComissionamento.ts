@@ -75,7 +75,9 @@ export function useComissionamento() {
           .from('vw_lancamentos_pix_com_conta_analitica')
           .select('*')
           .range(page * pageSize, (page + 1) * pageSize - 1)
-          .order('data_lancamento', { ascending: false });
+          .order('data_lancamento', { ascending: false })
+          .order('created_at', { ascending: true })
+          .order('id', { ascending: true });
 
         if (fetchError) throw fetchError;
         if (rows && rows.length > 0) {

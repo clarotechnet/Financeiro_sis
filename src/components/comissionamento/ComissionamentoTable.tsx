@@ -175,6 +175,29 @@ const PDF_COLUMNS: PdfColumn[] = [
 
 const DEFAULT_PDF_COLUMNS = PDF_COLUMNS.map(column => column.key);
 
+const compareLaunchOrder = (a: LancamentoPix, b: LancamentoPix) => {
+  const createdA = a.created_at || '';
+  const createdB = b.created_at || '';
+  const createdCompare = createdA.localeCompare(createdB);
+  if (createdCompare !== 0) return createdCompare;
+  return (a.id || '').localeCompare(b.id || '');
+};
+
+const compareSortValues = (a: LancamentoPix, b: LancamentoPix, field: keyof LancamentoPix, ascending: boolean) => {
+  const va = (a as any)[field];
+  const vb = (b as any)[field];
+
+  let primaryCompare = 0;
+  if (va == null && vb == null) primaryCompare = 0;
+  else if (va == null) primaryCompare = -1;
+  else if (vb == null) primaryCompare = 1;
+  else if (typeof va === 'number' && typeof vb === 'number') primaryCompare = va - vb;
+  else primaryCompare = String(va).localeCompare(String(vb), 'pt-BR');
+
+  if (primaryCompare !== 0) return ascending ? primaryCompare : -primaryCompare;
+  return compareLaunchOrder(a, b);
+};
+
 export const ComissionamentoTable: React.FC<Props> = ({ data, onUpdate, onDelete, opcoes }) => {
   const [page, setPage] = useState(0);
   const [sortField, setSortField] = useState<keyof LancamentoPix>('data_lancamento');
@@ -188,19 +211,7 @@ export const ComissionamentoTable: React.FC<Props> = ({ data, onUpdate, onDelete
 
   const sorted = useMemo(() => {
     const arr = [...data];
-    arr.sort((a, b) => {
-      const va = (a as any)[sortField];
-      const vb = (b as any)[sortField];
-      if (va == null && vb == null) return 0;
-      if (va == null) return sortAsc ? -1 : 1;
-      if (vb == null) return sortAsc ? 1 : -1;
-      if (typeof va === 'number' && typeof vb === 'number') {
-        return sortAsc ? va - vb : vb - va;
-      }
-      return sortAsc
-        ? String(va).localeCompare(String(vb), 'pt-BR')
-        : String(vb).localeCompare(String(va), 'pt-BR');
-    });
+    arr.sort((a, b) => compareSortValues(a, b, sortField, sortAsc));
     return arr;
   }, [data, sortField, sortAsc]);
 
