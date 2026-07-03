@@ -504,6 +504,7 @@ export const ComissionamentoTable: React.FC<Props> = ({ data, onUpdate, onDelete
             ))}
           </div>
 
+
           <div className="rounded-lg bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
             Total em Valor: <strong className="text-foreground">{fmtBRL(totalValor)}</strong>
           </div>
