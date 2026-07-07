@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Loader2, CheckCircle, Trash2 } from 'lucide-react';
 import { LancamentoPix, OpcaoSelect } from '@/types/comissionamento';
+import { SearchableSelect } from './SearchableSelect';
 
 interface OpcoesData {
   unidade: OpcaoSelect[];
@@ -22,6 +23,11 @@ interface Props {
   record: LancamentoPix | null;
   opcoes: OpcoesData;
 }
+
+const STATUS_OPTIONS: OpcaoSelect[] = [
+  { id: 'A PAGAR', nome: 'A PAGAR' },
+  { id: 'PAGO', nome: 'PAGO' },
+];
 
 const formatDateForInput = (val: string | null) => {
   if (!val) return '';
@@ -130,23 +136,11 @@ export const ComissionamentoEditDialog: React.FC<Props> = ({ open, onClose, onSa
     }
   };
 
-  const selectClass = "w-full bg-card border border-border rounded-lg px-3 py-2 text-foreground text-sm";
-
-  const renderSelect = (field: string, label: string, opts: OpcaoSelect[]) => (
-    <div className="space-y-1">
-      <Label className="text-sm font-medium">{label}</Label>
-      <select className={selectClass} value={form[field] || ''} onChange={e => set(field, e.target.value)}>
-        <option value="">Selecione...</option>
-        {opts.map(o => <option key={o.id} value={o.id}>{o.nome}</option>)}
-      </select>
-    </div>
-  );
-
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) { setConfirmDelete(false); onClose(); } }}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Editar Lançamento PIX</DialogTitle>
+          <DialogTitle>Editar Lançamentos</DialogTitle>
         </DialogHeader>
 
         {success ? (
@@ -158,11 +152,11 @@ export const ComissionamentoEditDialog: React.FC<Props> = ({ open, onClose, onSa
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
               <div className="space-y-1">
-                <Label className="text-sm font-medium">Data</Label>
+                <Label className="text-sm font-medium">Data Para Pagamento*</Label>
                 <Input type="date" value={form.data_lancamento || ''} onChange={e => set('data_lancamento', e.target.value)} />
               </div>
               <div className="space-y-1">
-                <Label className="text-sm font-medium">Nome</Label>
+                <Label className="text-sm font-medium">Nome Do Lançador*</Label>
                 <Input value={form.nome || ''} onChange={e => set('nome', e.target.value)} />
               </div>
               <div className="space-y-1">
@@ -177,18 +171,37 @@ export const ComissionamentoEditDialog: React.FC<Props> = ({ open, onClose, onSa
                 <Label className="text-sm font-medium">Valor</Label>
                 <Input value={form.valor || ''} onChange={e => set('valor', e.target.value)} />
               </div>
-              {renderSelect('unidade_id', 'Unidade', opcoes.unidade)}
-              {renderSelect('centro_de_custo_id', 'Centro de Custo', opcoes.centro_de_custo)}
-              {renderSelect('plano_conta_id', 'Conta Analítica', opcoes.plano_contas)}
-              {renderSelect('banco_codigo', 'Banco', opcoes.bancos)}
-              <div className="space-y-1">
-                <Label className="text-sm font-medium">Status Pagamento</Label>
-                <select className={selectClass} value={form.status_pag || ''} onChange={e => set('status_pag', e.target.value)}>
-                  <option value="">Selecione...</option>
-                  <option value="PAGO">PAGO</option>
-                  <option value="A PAGAR">A PAGAR</option>
-                </select>
-              </div>
+              <SearchableSelect
+                label="Unidade"
+                value={form.unidade_id || ''}
+                onChange={value => set('unidade_id', value)}
+                options={opcoes.unidade}
+              />
+              <SearchableSelect
+                label="Centro de Custo"
+                value={form.centro_de_custo_id || ''}
+                onChange={value => set('centro_de_custo_id', value)}
+                options={opcoes.centro_de_custo}
+              />
+              <SearchableSelect
+                label="Conta Analítica"
+                value={form.plano_conta_id || ''}
+                onChange={value => set('plano_conta_id', value)}
+                options={opcoes.plano_contas}
+              />
+              <SearchableSelect
+                label="Banco"
+                value={form.banco_codigo || ''}
+                onChange={value => set('banco_codigo', value)}
+                options={opcoes.bancos}
+                required={false}
+              />
+              <SearchableSelect
+                label="Status Pagamento"
+                value={form.status_pag || ''}
+                onChange={value => set('status_pag', value)}
+                options={STATUS_OPTIONS}
+              />
 
               <div className="space-y-1 md:col-span-2">
                 <Label className="text-sm text-muted-foreground">Observação</Label>

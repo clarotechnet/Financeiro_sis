@@ -34,20 +34,30 @@ const normalizeLancamentoPix = (row: LancamentoPix): LancamentoPix => ({
   banco: row.banco_cadastro || row.banco,
 });
 
-const matchesUnidadeFilter = (row: LancamentoPix, selected: string) => {
-  const unidade = row.unidade || '';
-  const codigo = row.unidade_codigo || '';
-  const codigoNome = codigo && unidade ? `${codigo} - ${unidade}` : '';
-  const selectedLower = selected.toLowerCase();
+const normalizeFilterValue = (value: string) =>
+  value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
 
-  return [unidade, codigo, codigoNome].some(value =>
-    value
-    && (
-      value.toLowerCase() === selectedLower
-      || value.toLowerCase().includes(selectedLower)
-      || selectedLower.includes(value.toLowerCase())
-    )
-  );
+const stripUnidadePrefix = (value: string) =>
+  value
+    .replace(/^filial\s*\d+\s*-\s*/, '')
+    .replace(/^matriz\s*-\s*/, '')
+    .trim();
+
+const matchesUnidadeFilter = (row: LancamentoPix, selected: string) => {
+  const unidade = normalizeFilterValue(row.unidade || '');
+  const codigo = normalizeFilterValue(row.unidade_codigo || '');
+  const codigoNome = codigo && unidade ? normalizeFilterValue(`${codigo} - ${row.unidade}`) : '';
+  const selectedValue = normalizeFilterValue(selected);
+  const unidadeSemPrefixo = stripUnidadePrefix(unidade);
+  const selectedSemPrefixo = stripUnidadePrefix(selectedValue);
+
+  return [unidade, codigo, codigoNome].some(value => value && value === selectedValue)
+    || Boolean(unidadeSemPrefixo && selectedSemPrefixo && unidadeSemPrefixo === selectedSemPrefixo);
 };
 
 export function useComissionamento() {
