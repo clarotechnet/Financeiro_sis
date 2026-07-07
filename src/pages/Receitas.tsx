@@ -7,7 +7,9 @@ import {
   FileEdit,
   Loader2,
   Pencil,
+  Plus,
   RefreshCw,
+  Trash2,
   TrendingUp,
   X,
 } from 'lucide-react';
@@ -138,6 +140,22 @@ const emptyForm = {
 
 type ReceitaFormState = typeof emptyForm;
 
+interface ReceitaDeducaoFormState {
+  localId: string;
+  plano_conta_id: string;
+  valor: string;
+  valorDisplay: string;
+  descricao: string;
+}
+
+const createDeducaoItem = (): ReceitaDeducaoFormState => ({
+  localId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+  plano_conta_id: '',
+  valor: '',
+  valorDisplay: '',
+  descricao: '',
+});
+
 interface ReceitaFormDialogProps {
   open: boolean;
   onClose: () => void;
@@ -162,9 +180,22 @@ const ReceitaFormDialog: React.FC<ReceitaFormDialogProps> = ({
   const isEditing = Boolean(receita);
   const [form, setForm] = useState<ReceitaFormState>({ ...emptyForm, nome: userName });
   const [valorDisplay, setValorDisplay] = useState('');
+  const [deducoes, setDeducoes] = useState<ReceitaDeducaoFormState[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
+
+  const contasReceita = useMemo(
+    () => opcoesContas.filter(opcao => opcao.natureza === 'Receita'),
+    [opcoesContas]
+  );
+
+  const contasDeducao = useMemo(
+    () => opcoesContas.filter(opcao => opcao.natureza === 'Dedução'),
+    [opcoesContas]
+  );
+
+  const contasPrincipais = isEditing ? opcoesContas : contasReceita;
 
   useEffect(() => {
     if (!open) return;
@@ -187,11 +218,13 @@ const ReceitaFormDialog: React.FC<ReceitaFormDialogProps> = ({
         descricao: receita.descricao || '',
       });
       setValorDisplay(fmtCurrencyDisplay(digits));
+      setDeducoes([]);
       return;
     }
 
     setForm({ ...emptyForm, nome: userName });
     setValorDisplay('');
+    setDeducoes([]);
   }, [open, receita, userName]);
 
   const set = (field: keyof ReceitaFormState, value: string) => {
@@ -204,6 +237,43 @@ const ReceitaFormDialog: React.FC<ReceitaFormDialogProps> = ({
     setValorDisplay(fmtCurrencyDisplay(digits));
   };
 
+  const handleDeducaoChange = (
+    localId: string,
+    field: keyof Omit<ReceitaDeducaoFormState, 'localId' | 'valorDisplay'>,
+    value: string
+  ) => {
+    setDeducoes(prev => prev.map(item => (
+      item.localId === localId ? { ...item, [field]: value } : item
+    )));
+  };
+
+  const handleDeducaoValorChange = (localId: string, raw: string) => {
+    const digits = raw.replace(/\D/g, '');
+    setDeducoes(prev => prev.map(item => (
+      item.localId === localId
+        ? { ...item, valor: digits, valorDisplay: fmtCurrencyDisplay(digits) }
+        : item
+    )));
+  };
+
+  const addDeducao = () => {
+    setDeducoes(prev => [...prev, createDeducaoItem()]);
+  };
+
+  const removeDeducao = (localId: string) => {
+    setDeducoes(prev => prev.filter(item => item.localId !== localId));
+  };
+
+  const receitaBruta = Number(form.valor || 0) / 100;
+  const totalDeducoes = deducoes.reduce((sum, item) => sum + (Number(item.valor || 0) / 100), 0);
+  const receitaLiquida = receitaBruta - totalDeducoes;
+  const deducoesComDados = deducoes.filter(item =>
+    item.plano_conta_id || item.valor || item.descricao.trim()
+  );
+  const deducoesValidas = isEditing || deducoesComDados.every(item =>
+    item.plano_conta_id && Number(item.valor || 0) > 0
+  );
+
   const isValid = Boolean(
     form.data_recebimento &&
     form.nome.trim() &&
@@ -211,7 +281,9 @@ const ReceitaFormDialog: React.FC<ReceitaFormDialogProps> = ({
     form.valor &&
     form.unidade_codigo &&
     form.setor_codigo &&
-    form.plano_conta_id
+    form.plano_conta_id &&
+    deducoesValidas &&
+    totalDeducoes <= receitaBruta
   );
 
   const handleClear = () => {
@@ -231,18 +303,26 @@ const ReceitaFormDialog: React.FC<ReceitaFormDialogProps> = ({
         descricao: receita.descricao || '',
       });
       setValorDisplay(fmtCurrencyDisplay(digits));
+      setDeducoes([]);
       setError('');
       return;
     }
 
     setForm({ ...emptyForm, nome: userName });
     setValorDisplay('');
+    setDeducoes([]);
     setError('');
   };
 
   const handleSubmit = async () => {
     if (!isValid) {
-      setError('Preencha todos os campos obrigatórios.');
+      if (!deducoesValidas) {
+        setError('Preencha a conta e o valor de cada imposto/dedução adicionado.');
+      } else if (totalDeducoes > receitaBruta) {
+        setError('O total de impostos/deduções não pode ser maior que o valor da receita.');
+      } else {
+        setError('Preencha todos os campos obrigatórios.');
+      }
       return;
     }
 
@@ -262,6 +342,11 @@ const ReceitaFormDialog: React.FC<ReceitaFormDialogProps> = ({
         banco: form.banco.trim() || null,
         forma_recebimento: form.forma_recebimento.trim() || null,
         documento: form.documento.trim() || null,
+        deducoes: isEditing ? [] : deducoesComDados.map(item => ({
+          plano_conta_id: item.plano_conta_id,
+          valor: parseFloat(item.valor.replace(/\D/g, '')) / 100,
+          descricao: item.descricao.trim() || null,
+        })),
       });
 
       setSuccess(true);
@@ -374,14 +459,16 @@ const ReceitaFormDialog: React.FC<ReceitaFormDialogProps> = ({
                   onChange={event => set('plano_conta_id', event.target.value)}
                 >
                   <option value="">Selecione...</option>
-                  {opcoesContas.map(opcao => (
+                  {contasPrincipais.map(opcao => (
                     <option key={opcao.id} value={opcao.id}>
                       {opcao.nome}
                     </option>
                   ))}
                 </select>
                 <p className="text-xs text-muted-foreground">
-                  Somente contas analíticas de natureza Receita ou Dedução aparecem aqui.
+                  {isEditing
+                    ? 'Conta analítica já classificada no plano de contas.'
+                    : 'Somente contas analíticas de natureza Receita aparecem aqui. Impostos entram abaixo como Dedução.'}
                 </p>
               </div>
 
@@ -422,6 +509,117 @@ const ReceitaFormDialog: React.FC<ReceitaFormDialogProps> = ({
                   onChange={event => set('descricao', event.target.value)}
                 />
               </div>
+
+              {!isEditing && (
+                <div className="md:col-span-2 rounded-lg border border-border bg-muted/20 p-4 space-y-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <h4 className="text-sm font-bold text-foreground">Impostos / Deduções</h4>
+                      <p className="text-xs text-muted-foreground">
+                        Lance ISS, ICMS, PIS/COFINS ou outras deduções vinculadas a esta receita.
+                      </p>
+                    </div>
+                    <Button type="button" variant="outline" size="sm" onClick={addDeducao} className="gap-1">
+                      <Plus className="h-4 w-4" />
+                      Adicionar Dedução
+                    </Button>
+                  </div>
+
+                  {deducoes.length > 0 && (
+                    <div className="space-y-3">
+                      {deducoes.map((deducao, index) => (
+                        <div
+                          key={deducao.localId}
+                          className="grid grid-cols-1 gap-3 rounded-lg border border-border bg-background/70 p-3 md:grid-cols-[1fr_150px_1fr_auto]"
+                        >
+                          <div className="space-y-1">
+                            <Label className="text-xs text-muted-foreground">Conta de Dedução *</Label>
+                            <select
+                              className={selectClass}
+                              value={deducao.plano_conta_id}
+                              onChange={event => handleDeducaoChange(deducao.localId, 'plano_conta_id', event.target.value)}
+                            >
+                              <option value="">Selecione...</option>
+                              {contasDeducao.map(opcao => (
+                                <option key={opcao.id} value={opcao.id}>
+                                  {opcao.nome}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div className="space-y-1">
+                            <Label className="text-xs text-muted-foreground">Valor *</Label>
+                            <Input
+                              placeholder="R$ 0,00"
+                              inputMode="decimal"
+                              value={deducao.valorDisplay}
+                              onChange={event => handleDeducaoValorChange(deducao.localId, event.target.value)}
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <Label className="text-xs text-muted-foreground">Observação</Label>
+                            <Input
+                              placeholder={`Dedução ${index + 1}`}
+                              value={deducao.descricao}
+                              onChange={event => handleDeducaoChange(deducao.localId, 'descricao', event.target.value)}
+                            />
+                          </div>
+
+                          <div className="flex items-end">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-10 w-10 p-0 text-destructive hover:text-destructive"
+                              onClick={() => removeDeducao(deducao.localId)}
+                              title="Remover dedução"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    <div className="rounded-lg border border-border bg-background/70 px-3 py-2">
+                      <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Receita Bruta</div>
+                      <div className="font-bold text-emerald-500">{fmtBRL(receitaBruta)}</div>
+                    </div>
+                    <div className="rounded-lg border border-border bg-background/70 px-3 py-2">
+                      <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Total de Deduções</div>
+                      <div className="font-bold text-red-500">{fmtBRL(totalDeducoes)}</div>
+                    </div>
+                    <div className="rounded-lg border border-border bg-background/70 px-3 py-2">
+                      <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Receita Líquida</div>
+                      <div className={`font-bold ${receitaLiquida < 0 ? 'text-red-500' : 'text-primary'}`}>
+                        {fmtBRL(receitaLiquida)}
+                      </div>
+                    </div>
+                  </div>
+
+                  {deducoesComDados.length > 0 && !deducoesValidas && (
+                    <p className="text-xs text-destructive">
+                      Preencha a conta e o valor de cada imposto/dedução adicionada.
+                    </p>
+                  )}
+
+                  {totalDeducoes > receitaBruta && receitaBruta > 0 && (
+                    <p className="text-xs text-destructive">
+                      O total de impostos/deduções não pode ser maior que a receita bruta.
+                    </p>
+                  )}
+
+                  {contasDeducao.length === 0 && (
+                    <p className="text-xs text-destructive">
+                      Nenhuma conta analítica de natureza Dedução foi encontrada no plano de contas.
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
 
             {error && <p className="text-sm text-destructive">{error}</p>}

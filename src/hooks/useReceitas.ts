@@ -41,7 +41,8 @@ export function useReceitas() {
           .from('vw_receitas_plano_contas')
           .select('*')
           .range(page * pageSize, (page + 1) * pageSize - 1)
-          .order('data_recebimento', { ascending: false });
+          .order('data_recebimento', { ascending: false })
+          .order('created_at', { ascending: true });
 
         if (fetchError) throw fetchError;
         if (!rows || rows.length === 0) break;
@@ -151,23 +152,53 @@ export function useReceitas() {
   const submitReceita = useCallback(async (payload: ReceitaFormPayload) => {
     if (!user?.id) throw new Error('Usuário não autenticado.');
 
-    const { error: insertError } = await externalSupabase
+    const { deducoes = [], ...receitaPayload } = payload;
+
+    const { data: receitaCriada, error: insertError } = await externalSupabase
       .from('receitas')
       .insert([{
-        ...payload,
+        ...receitaPayload,
+        receita_pai_id: null,
         created_by: user.id,
-      }]);
+      }])
+      .select('id')
+      .single();
 
     if (insertError) throw insertError;
+
+    const deducoesValidas = deducoes.filter(deducao =>
+      deducao.plano_conta_id && Number(deducao.valor) > 0
+    );
+
+    if (deducoesValidas.length > 0 && receitaCriada?.id) {
+      const { error: deducoesError } = await externalSupabase
+        .from('receitas')
+        .insert(deducoesValidas.map(deducao => ({
+          ...receitaPayload,
+          plano_conta_id: deducao.plano_conta_id,
+          valor: deducao.valor,
+          descricao: deducao.descricao || `Dedução vinculada a ${receitaPayload.cliente}`,
+          receita_pai_id: receitaCriada.id,
+          created_by: user.id,
+        })));
+
+      if (deducoesError) {
+        await externalSupabase.from('receitas').delete().eq('id', receitaCriada.id);
+        throw deducoesError;
+      }
+    }
+
     await fetchData();
   }, [fetchData, user?.id]);
 
   const updateReceita = useCallback(async (id: string, payload: ReceitaFormPayload) => {
     if (!user?.id) throw new Error('Usuário não autenticado.');
 
+    const { deducoes: _deducoes, ...receitaPayload } = payload;
+
     const { error: updateError } = await externalSupabase
       .from('receitas')
-      .update(payload)
+      .update(receitaPayload)
       .eq('id', id);
 
     if (updateError) throw updateError;

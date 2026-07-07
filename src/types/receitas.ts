@@ -16,6 +16,7 @@ export interface Receita {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  receita_pai_id?: string | null;
   conta_codigo: string;
   conta_descricao: string;
   conta_natureza: string | null;
@@ -64,6 +65,12 @@ export interface ReceitaKpis {
   receitaLiquida: number;
 }
 
+export interface ReceitaDeducaoPayload {
+  plano_conta_id: string;
+  valor: number;
+  descricao: string | null;
+}
+
 export interface ReceitaFormPayload {
   data_recebimento: string;
   nome: string;
@@ -76,4 +83,5 @@ export interface ReceitaFormPayload {
   banco: string | null;
   forma_recebimento: string | null;
   documento: string | null;
+  deducoes?: ReceitaDeducaoPayload[];
 }
