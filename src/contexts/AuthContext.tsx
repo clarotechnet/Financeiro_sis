@@ -15,7 +15,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     error instanceof Error ? error.message : fallback;
 
   const getPasswordResetRedirectUrl = () => (
-    `${window.location.origin}${window.location.pathname}#/redefinir-senha`
+    `${window.location.origin}/redefinir-senha`
   );
 
   const fetchProfile = useCallback(async (userId: string) => {
