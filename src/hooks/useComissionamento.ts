@@ -27,6 +27,39 @@ const EMPTY_OPCOES: OpcoesData = {
   plano_contas: [], bancos: []
 };
 
+const formatDateInput = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getCurrentMonthFilters = (): Pick<ComissionamentoFilters, 'dataInicio' | 'dataFim'> => {
+  const today = new Date();
+  const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+  const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+
+  return {
+    dataInicio: formatDateInput(firstDay),
+    dataFim: formatDateInput(lastDay),
+  };
+};
+
+const getDefaultFilters = (): ComissionamentoFilters => ({
+  cidade: [],
+  ...getCurrentMonthFilters(),
+  status: [],
+  nome: [],
+  frente: [],
+  contrato: [],
+  dataExecInicio: '',
+  dataExecFim: '',
+  descricao: '',
+  cnpj: [],
+  contaAnalitica: [],
+  banco: [],
+});
+
 const normalizeLancamentoPix = (row: LancamentoPix): LancamentoPix => ({
   ...row,
   unidade: row.unidade_cadastro || row.unidade,
@@ -65,11 +98,7 @@ export function useComissionamento() {
   const [opcoes, setOpcoes] = useState<OpcoesData>(EMPTY_OPCOES);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [filters, setFilters] = useState<ComissionamentoFilters>({
-    cidade: [], dataInicio: '', dataFim: '', status: [], nome: [],
-    frente: [], contrato: [], dataExecInicio: '', dataExecFim: '',
-    descricao: '', cnpj: [], contaAnalitica: [], banco: []
-  });
+  const [filters, setFilters] = useState<ComissionamentoFilters>(() => getDefaultFilters());
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
@@ -563,11 +592,7 @@ export function useComissionamento() {
     error,
     filters,
     setFilters: (f: Partial<ComissionamentoFilters>) => setFilters(prev => ({ ...prev, ...f })),
-    clearFilters: () => setFilters({
-      cidade: [], dataInicio: '', dataFim: '', status: [], nome: [],
-      frente: [], contrato: [], dataExecInicio: '', dataExecFim: '',
-      descricao: '', cnpj: [], contaAnalitica: [], banco: []
-    }),
+    clearFilters: () => setFilters(getDefaultFilters()),
     fetchData,
     submitManualEntry,
     updateRecord,

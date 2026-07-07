@@ -26,6 +26,15 @@ import {
 } from '@/components/ui/select';
 import { toast } from '@/hooks/use-toast';
 import {
+  getProfileRole,
+  getProfileRoleLabel,
+  PROFILE_ROLE_OPTIONS,
+  ProfileRole,
+  ROLE_ADMIN,
+  ROLE_FINANCE_ASSISTANT,
+  ROLE_RH,
+} from '@/lib/profileRoles';
+import {
   Loader2,
   ChevronLeft,
   ChevronRight,
@@ -89,14 +98,10 @@ interface SubgrupoOpcao {
   natureza: string | null;
 }
 
-type ProfileRole = 'rh' | 'admin';
 type ExcelRow = Record<string, unknown>;
 
 const REGISTROS_TEMPLATE_HEADERS = ['nome', 'cpf', 'setor_codigo', 'unidade_codigo', 'subgrupo_codigo'];
 const REGISTROS_PAGE_SIZE = 50;
-
-const getProfileRole = (role: string | null | undefined): ProfileRole =>
-  role === 'admin' ? 'admin' : 'rh';
 
 const normalizeExcelKey = (value: string) =>
   value
@@ -129,8 +134,12 @@ export default function Admin() {
   const [registroSearch, setRegistroSearch] = useState('');
   const [registroPage, setRegistroPage] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const isRh = profile?.role === 'rh';
-  const canAccessDepartment = isAdmin || isRh;
+  const isRh = profile?.role === ROLE_RH;
+  const isFinanceAssistant = profile?.role === ROLE_FINANCE_ASSISTANT;
+  const canViewUsers = isAdmin || isFinanceAssistant;
+  const canManageUsers = isAdmin;
+  const canAccessDepartment = isAdmin || isRh || isFinanceAssistant;
+  const canAccessSettingsPage = canAccessDepartment || canViewUsers;
   const canEditDepartment = isAdmin || isRh;
 
   const fetchUnidades = useCallback(async () => {
@@ -216,13 +225,17 @@ export default function Admin() {
     setIsLoading(true);
     try {
       // Buscar usuários pendentes
-      const { data: pending, error: pendingError } = await externalSupabase
-        .from('pending_users')
-        .select('*')
-        .order('created_at', { ascending: true });
+      if (canManageUsers) {
+        const { data: pending, error: pendingError } = await externalSupabase
+          .from('pending_users')
+          .select('*')
+          .order('created_at', { ascending: true });
 
-      if (pendingError) throw pendingError;
-      setPendingUsers(pending || []);
+        if (pendingError) throw pendingError;
+        setPendingUsers(pending || []);
+      } else {
+        setPendingUsers([]);
+      }
 
       // Buscar todos os usuários
       const { data: all, error: allError } = await externalSupabase
@@ -242,7 +255,7 @@ export default function Admin() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [canManageUsers]);
 
   const fetchRegistrosDados = useCallback(async () => {
     if (!canAccessDepartment) {
@@ -275,12 +288,12 @@ export default function Admin() {
   useEffect(() => {
     if (authLoading) return;
 
-    if (!canAccessDepartment) {
+    if (!canAccessSettingsPage) {
       navigate('/');
       return;
     }
 
-    if (isAdmin) {
+    if (canViewUsers) {
       fetchUsers();
     } else {
       setPendingUsers([]);
@@ -292,7 +305,7 @@ export default function Admin() {
     fetchUnidades();
     fetchSetores();
     fetchSubgruposPlanoContas();
-  }, [authLoading, canAccessDepartment, isAdmin, navigate, fetchUsers, fetchRegistrosDados, fetchUnidades, fetchSetores, fetchSubgruposPlanoContas]);
+  }, [authLoading, canAccessDepartment, canAccessSettingsPage, canViewUsers, navigate, fetchUsers, fetchRegistrosDados, fetchUnidades, fetchSetores, fetchSubgruposPlanoContas]);
 
   useEffect(() => {
     if (opcoesSetores.length === 0) return;
@@ -403,7 +416,7 @@ export default function Admin() {
 
       toast({
         title: 'Tipo atualizado',
-        description: `Usuário agora é ${newRole}.`,
+        description: `Usuário agora é ${getProfileRoleLabel(newRole)}.`,
       });
 
       fetchUsers();
@@ -660,7 +673,7 @@ export default function Admin() {
     });
   };
 
-  if (authLoading || (isAdmin && isLoading)) {
+  if (authLoading || (canViewUsers && isLoading)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -689,10 +702,12 @@ export default function Admin() {
           <div className="flex items-center gap-2">
             <Button
               onClick={() => {
-                if (isAdmin) fetchUsers();
-                fetchRegistrosDados();
-                fetchUnidades();
-                fetchSubgruposPlanoContas();
+                if (canViewUsers) fetchUsers();
+                if (canAccessDepartment) {
+                  fetchRegistrosDados();
+                  fetchUnidades();
+                  fetchSubgruposPlanoContas();
+                }
               }}
               variant="outline"
               className="gap-2"
@@ -703,22 +718,24 @@ export default function Admin() {
           </div>
         </div>
 
-        <Tabs defaultValue={isAdmin ? 'controle-usuarios' : 'departamento-pessoal'} className="w-full">
+        <Tabs defaultValue={canViewUsers ? 'controle-usuarios' : 'departamento-pessoal'} className="w-full">
           <TabsList>
-            {isAdmin && (
+            {canViewUsers && (
               <TabsTrigger value="controle-usuarios">
                 Controle de Usuarios
               </TabsTrigger>
             )}
-            <TabsTrigger value="departamento-pessoal">
-              Departamento Pessoal
-            </TabsTrigger>
+            {canAccessDepartment && (
+              <TabsTrigger value="departamento-pessoal">
+                Departamento Pessoal
+              </TabsTrigger>
+            )}
           </TabsList>
 
-          {isAdmin && (
+          {canViewUsers && (
             <TabsContent value="controle-usuarios" className="flex flex-col gap-6">
               {/* Stats Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className={`grid grid-cols-1 ${canManageUsers ? 'md:grid-cols-3' : 'md:grid-cols-2'} gap-4`}>
                 <Card>
                   <CardHeader className="pb-2">
                     <CardDescription className="flex items-center gap-2">
@@ -745,6 +762,7 @@ export default function Admin() {
                   </CardContent>
                 </Card>
 
+                {canManageUsers && (
                 <Card>
                   <CardHeader className="pb-2">
                     <CardDescription className="flex items-center gap-2">
@@ -758,6 +776,7 @@ export default function Admin() {
                     </p>
                   </CardContent>
                 </Card>
+                )}
               </div>
 
               <Tabs defaultValue="aprovados" className="w-full">
@@ -765,6 +784,7 @@ export default function Admin() {
                   <TabsTrigger value="aprovados">
                     Usuários ({allUsers.filter((u) => u.approved).length})
                   </TabsTrigger>
+                  {canManageUsers && (
                   <TabsTrigger value="pendentes" className="gap-2">
                     Aprovações Pendentes
                     {pendingUsers.length > 0 && (
@@ -773,9 +793,11 @@ export default function Admin() {
                       </Badge>
                     )}
                   </TabsTrigger>
+                  )}
                 </TabsList>
 
                 {/* Pending Users */}
+                {canManageUsers && (
                 <TabsContent value="pendentes">
                   <Card className="border-warning/50">
                     <CardHeader>
@@ -833,6 +855,7 @@ export default function Admin() {
                     </CardContent>
                   </Card>
                 </TabsContent>
+                )}
 
                 {/* Approved Users */}
                 <TabsContent value="aprovados">
@@ -855,7 +878,7 @@ export default function Admin() {
                             <TableHead>Role</TableHead>
                             <TableHead>Status</TableHead>
                             <TableHead>Aprovado em</TableHead>
-                            <TableHead className="text-right">Ação</TableHead>
+                            {canManageUsers && <TableHead className="text-right">Ação</TableHead>}
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -873,9 +896,9 @@ export default function Admin() {
                                 </TableCell>
                                 <TableCell>{u.display_name || '-'}</TableCell>
                                 <TableCell>
-                                  {u.id === user?.id ? (
-                                    <Badge variant={getProfileRole(u.role) === 'admin' ? 'default' : 'secondary'}>
-                                      {getProfileRole(u.role)}
+                                  {u.id === user?.id || !canManageUsers ? (
+                                    <Badge variant={getProfileRole(u.role) === ROLE_ADMIN ? 'default' : 'secondary'}>
+                                      {getProfileRoleLabel(u.role)}
                                     </Badge>
                                   ) : (
                                     <Select
@@ -883,12 +906,15 @@ export default function Admin() {
                                       onValueChange={(value) => changeRole(u.id, value as ProfileRole)}
                                       disabled={approvingId === u.id}
                                     >
-                                      <SelectTrigger className="w-[120px] h-8">
+                                      <SelectTrigger className="w-[210px] h-8">
                                         <SelectValue />
                                       </SelectTrigger>
                                       <SelectContent>
-                                        <SelectItem value="rh">rh</SelectItem>
-                                        <SelectItem value="admin">admin</SelectItem>
+                                        {PROFILE_ROLE_OPTIONS.map(option => (
+                                          <SelectItem key={option.value} value={option.value}>
+                                            {option.label}
+                                          </SelectItem>
+                                        ))}
                                       </SelectContent>
                                     </Select>
                                   )}
@@ -902,6 +928,7 @@ export default function Admin() {
                                 <TableCell>
                                   {u.approved_at ? formatDate(u.approved_at) : '-'}
                                 </TableCell>
+                                {canManageUsers && (
                                 <TableCell className="text-right">
                                   {u.id !== user?.id && (
                                     <Button
@@ -920,6 +947,7 @@ export default function Admin() {
                                     </Button>
                                   )}
                                 </TableCell>
+                                )}
                               </TableRow>
                             ))}
                         </TableBody>

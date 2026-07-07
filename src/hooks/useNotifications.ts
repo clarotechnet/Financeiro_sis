@@ -81,7 +81,7 @@ export function useNotifications() {
           title: 'Solicitação de pagamento',
           description: `${paymentCount} novo(s) lançamento(s) desde a última visualização.`,
           count: paymentCount,
-          href: '/comissionamento',
+          href: '/comissionamento?tab=kpis',
         });
       }
 

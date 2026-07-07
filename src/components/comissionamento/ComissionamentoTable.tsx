@@ -30,6 +30,7 @@ interface Props {
   onUpdate: (id: string, updates: Record<string, any>) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   opcoes: OpcoesData;
+  canManage?: boolean;
 }
 
 const PAGE_SIZE = 50;
@@ -198,7 +199,7 @@ const compareSortValues = (a: LancamentoPix, b: LancamentoPix, field: keyof Lanc
   return compareLaunchOrder(a, b);
 };
 
-export const ComissionamentoTable: React.FC<Props> = ({ data, onUpdate, onDelete, opcoes }) => {
+export const ComissionamentoTable: React.FC<Props> = ({ data, onUpdate, onDelete, opcoes, canManage = true }) => {
   const [page, setPage] = useState(0);
   const [sortField, setSortField] = useState<keyof LancamentoPix>('data_lancamento');
   const [sortAsc, setSortAsc] = useState(false);
@@ -231,7 +232,7 @@ export const ComissionamentoTable: React.FC<Props> = ({ data, onUpdate, onDelete
   };
 
   const columns: { key: keyof LancamentoPix | 'actions'; label: string }[] = [
-    { key: 'actions', label: '' },
+    ...(canManage ? [{ key: 'actions' as const, label: '' }] : []),
     { key: 'data_lancamento', label: 'Data' },
     { key: 'unidade', label: 'Cidade/Unidade' },
     { key: 'favorecido', label: 'Favorecido' },
@@ -380,7 +381,7 @@ export const ComissionamentoTable: React.FC<Props> = ({ data, onUpdate, onDelete
         <div className="max-h-[600px] w-full overflow-auto [scrollbar-gutter:stable]">
           <table className="data-table min-w-[1160px] w-full table-fixed text-[11px] [&_th]:px-2.5 [&_th]:py-3 [&_td]:px-2.5 [&_td]:py-3 [&_td]:align-top">
             <colgroup>
-              <col style={{ width: '30px' }} />
+              {canManage && <col style={{ width: '30px' }} />}
               <col style={{ width: '88px' }} />
               <col style={{ width: '92px' }} />
               <col style={{ width: '150px' }} />
@@ -413,17 +414,19 @@ export const ComissionamentoTable: React.FC<Props> = ({ data, onUpdate, onDelete
             <tbody>
               {pageData.map((row, i) => (
                 <tr key={row.id || i}>
-                  <td>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 w-6 p-0"
-                      onClick={() => setEditRecord(row)}
-                      title="Editar"
-                    >
-                      <Pencil className="w-3 h-3 text-muted-foreground hover:text-primary" />
-                    </Button>
-                  </td>
+                  {canManage && (
+                    <td>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0"
+                        onClick={() => setEditRecord(row)}
+                        title="Editar"
+                      >
+                        <Pencil className="w-3 h-3 text-muted-foreground hover:text-primary" />
+                      </Button>
+                    </td>
+                  )}
                   <td className="whitespace-nowrap">{formatDate(row.data_lancamento)}</td>
                   <td className={wrappedCellClass}>{row.unidade || '-'}</td>
                   <td className={`font-medium ${wrappedCellClass}`}>{row.favorecido || '-'}</td>
@@ -471,14 +474,16 @@ export const ComissionamentoTable: React.FC<Props> = ({ data, onUpdate, onDelete
         )}
       </div>
 
-      <ComissionamentoEditDialog
-        open={!!editRecord}
-        onClose={() => setEditRecord(null)}
-        onSave={onUpdate}
-        onDelete={onDelete}
-        record={editRecord}
-        opcoes={opcoes}
-      />
+      {canManage && (
+        <ComissionamentoEditDialog
+          open={!!editRecord}
+          onClose={() => setEditRecord(null)}
+          onSave={onUpdate}
+          onDelete={onDelete}
+          record={editRecord}
+          opcoes={opcoes}
+        />
+      )}
 
       <Dialog open={columnDialogOpen} onOpenChange={setColumnDialogOpen}>
         <DialogContent className="max-w-lg">

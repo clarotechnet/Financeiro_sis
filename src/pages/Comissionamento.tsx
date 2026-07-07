@@ -9,13 +9,54 @@ import { ComissionamentoFrentes } from '@/components/comissionamento/Comissionam
 import { ComissionamentoValores } from '@/components/comissionamento/ComissionamentoValores';
 import { LoadingSpinner } from '@/components/comissionamento/LoadingSpinner';
 import { useAuth } from '@/contexts/useAuth';
-import { DollarSign } from 'lucide-react';
+import { BarChart3, DollarSign, FileText, Layers } from 'lucide-react';
+import { canManageExistingFinancialData } from '@/lib/profileRoles';
 
 const Comissionamento: React.FC = () => {
   const hook = useComissionamento();
   const [params] = useSearchParams();
-  const activeTab = params.get('tab') || 'kpis';
-  const { isAdmin } = useAuth();
+  const activeTab = params.get('tab') || 'frentes';
+  const { profile } = useAuth();
+  const canManageRecords = canManageExistingFinancialData(profile?.role);
+  const isDashboard = activeTab === 'frentes';
+  const pageMeta = {
+    frentes: {
+      title: 'Dashboard',
+      subtitle: 'Visão geral das solicitações de pagamento',
+      icon: Layers,
+      gradient: 'linear-gradient(135deg, #22c55e 0%, #0f766e 100%)',
+    },
+    kpis: {
+      title: 'Inclusão de Pagamentos',
+      subtitle: 'Controle de solicitações de pagamento',
+      icon: DollarSign,
+      gradient: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+    },
+    charts: {
+      title: 'KPIs',
+      subtitle: 'Indicadores das solicitações de pagamento',
+      icon: BarChart3,
+      gradient: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+    },
+    table: {
+      title: 'Lançamentos',
+      subtitle: 'Relatórios e dados detalhados de pagamentos',
+      icon: FileText,
+      gradient: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+    },
+    valores: {
+      title: 'Valores',
+      subtitle: 'Resumo financeiro por favorecido',
+      icon: DollarSign,
+      gradient: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+    },
+  }[activeTab] || {
+    title: 'Relatórios',
+    subtitle: 'Controle de pagamento',
+    icon: FileText,
+    gradient: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+  };
+  const HeaderIcon = pageMeta.icon;
 
   useEffect(() => {
     hook.fetchData();
@@ -30,13 +71,13 @@ const Comissionamento: React.FC = () => {
         <div className="flex items-center gap-3">
           <div
             className="w-11 h-11 rounded-xl flex items-center justify-center shadow-glow"
-            style={{ background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)' }}
+            style={{ background: pageMeta.gradient }}
           >
-            <DollarSign className="w-5 h-5 text-white" />
+            <HeaderIcon className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h1 className="text-xl md:text-2xl font-extrabold text-foreground">SOLICITAÇÃO DE PAGAMENTO</h1>
-            <p className="text-sm text-muted-foreground">Controle de Pagamento</p>
+            <h1 className="text-xl md:text-2xl font-extrabold text-foreground">{pageMeta.title}</h1>
+            <p className="text-sm text-muted-foreground">{pageMeta.subtitle}</p>
           </div>
         </div>
 
@@ -57,13 +98,14 @@ const Comissionamento: React.FC = () => {
           filteredData={hook.data}
           opcoes={hook.opcoes}
           onImportExcel={hook.importExcel}
+          showActions={!isDashboard}
         />
 
         {hook.isLoading && !hasData && (
           <LoadingSpinner message="Carregando lançamentos..." />
         )}
 
-        {hasData && isAdmin && (
+        {hasData && (
           <div className="tab-content relative z-0">
             {activeTab === 'kpis' && <ComissionamentoKPIs kpis={hook.kpis} />}
             {activeTab === 'charts' && (
@@ -81,6 +123,7 @@ const Comissionamento: React.FC = () => {
                 onUpdate={hook.updateRecord}
                 onDelete={hook.deleteRecord}
                 opcoes={hook.opcoes}
+                canManage={canManageRecords}
               />
             )}
             {activeTab === 'valores' && <ComissionamentoValores data={hook.data} />}

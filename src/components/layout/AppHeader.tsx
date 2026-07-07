@@ -11,6 +11,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuth } from '@/contexts/useAuth';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useNotifications } from '@/hooks/useNotifications';
+import { getProfileRoleLabel, ROLE_FINANCE_ASSISTANT, ROLE_RH } from '@/lib/profileRoles';
 
 export const AppHeader: React.FC = () => {
     const navigate = useNavigate();
@@ -29,8 +30,8 @@ export const AppHeader: React.FC = () => {
         .slice(0, 2)
         .map(s => s[0]?.toUpperCase())
         .join('') || 'U';
-    const profileTypeLabel = profile?.role === 'admin' ? 'Administrador' : 'RH';
-    const canAccessSettings = isAdmin || profile?.role === 'rh';
+    const profileTypeLabel = getProfileRoleLabel(profile?.role);
+    const canAccessSettings = isAdmin || profile?.role === ROLE_RH || profile?.role === ROLE_FINANCE_ASSISTANT;
 
     return (
         <header className="h-16 border-b border-border bg-surface/80 backdrop-blur-xl sticky top-0 z-50 flex items-center px-4 gap-3">

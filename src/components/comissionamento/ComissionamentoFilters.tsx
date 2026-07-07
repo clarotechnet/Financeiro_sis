@@ -100,11 +100,12 @@ interface Props {
   filteredData: LancamentoPix[];
   opcoes: OpcoesData;
   onImportExcel?: (rows: Record<string, any>[]) => Promise<{ inserted: number; skipped: number; errors: string[] }>;
+  showActions?: boolean;
 }
 
 export const ComissionamentoFilters: React.FC<Props> = ({
   filters, setFilters, clearFilters, uniqueCidades, uniqueNomes, totalFiltered,
-  onManualSubmit, filteredData, opcoes, onImportExcel
+  onManualSubmit, filteredData, opcoes, onImportExcel, showActions = true
 }) => {
   const { isAdmin } = useAuth();
   const hasFilters = filters.cidade.length > 0 || filters.dataInicio || filters.dataFim
@@ -268,49 +269,55 @@ export const ComissionamentoFilters: React.FC<Props> = ({
       <div className="flex flex-wrap justify-between items-center mb-4 gap-3">
         <h3 className="text-lg font-bold text-foreground">Filtros</h3>
         <div className="flex items-center gap-3 flex-wrap">
-          <Button variant="outline" size="sm" onClick={() => setFormOpen(true)} className="gap-1">
-            <FileEdit className="w-4 h-4" /> Novo Lançamento
-          </Button>
-          {isAdmin && (
+          {showActions && (
+            <Button variant="outline" size="sm" onClick={() => setFormOpen(true)} className="gap-1">
+              <FileEdit className="w-4 h-4" /> Novo Lançamento
+            </Button>
+          )}
+          {showActions && isAdmin && (
             <>
               <Button variant="outline" size="sm" onClick={() => setFornecedorOpen(true)} className="gap-1">
                 <UserPlus className="w-4 h-4" /> Cadastrar Fornecedor
               </Button>
               {onImportExcel && <ComissionamentoImportExcel onImport={onImportExcel} />}
-              <Button variant="outline" size="sm" onClick={handleExportExcel} disabled={filteredData.length === 0} className="gap-1">
-                <Download className="w-4 h-4" /> Exportar Excel
-              </Button>
-
-              <span className="text-sm text-muted-foreground">
-                Total: <strong className="text-foreground">{totalFiltered}</strong> registros
-              </span>
-              {hasFilters && (
-                <Button variant="outline" size="sm" onClick={clearFilters} className="gap-1">
-                  <X className="w-3 h-3" /> Limpar
-                </Button>
-              )}
             </>
+          )}
+          {showActions && (
+            <Button variant="outline" size="sm" onClick={handleExportExcel} disabled={filteredData.length === 0} className="gap-1">
+              <Download className="w-4 h-4" /> Exportar Excel
+            </Button>
+          )}
+          <span className="text-sm text-muted-foreground">
+            Total: <strong className="text-foreground">{totalFiltered}</strong> registros
+          </span>
+          {hasFilters && (
+            <Button variant="outline" size="sm" onClick={clearFilters} className="gap-1">
+              <X className="w-3 h-3" /> Limpar
+            </Button>
           )}
         </div>
       </div>
 
-      <ComissionamentoFormDialog
-        open={formOpen}
-        onClose={() => setFormOpen(false)}
-        onSubmit={onManualSubmit}
-        opcoes={opcoes}
-        existingRecords={filteredData}
-      />
-      <FornecedorDialog
-        open={fornecedorOpen}
-        onClose={() => setFornecedorOpen(false)}
-        opcoes={{
-          unidade: opcoes.unidade,
-          centro_de_custo: opcoes.centro_de_custo,
-        }}
-      />
-      {isAdmin && (
-        <div className="filter-section">
+      {showActions && (
+        <>
+          <ComissionamentoFormDialog
+            open={formOpen}
+            onClose={() => setFormOpen(false)}
+            onSubmit={onManualSubmit}
+            opcoes={opcoes}
+            existingRecords={filteredData}
+          />
+          <FornecedorDialog
+            open={fornecedorOpen}
+            onClose={() => setFornecedorOpen(false)}
+            opcoes={{
+              unidade: opcoes.unidade,
+              centro_de_custo: opcoes.centro_de_custo,
+            }}
+          />
+        </>
+      )}
+      <div className="filter-section">
           <MultiSelect
             label="Unidade"
             options={uniqueUnidades}
@@ -372,8 +379,7 @@ export const ComissionamentoFilters: React.FC<Props> = ({
             selected={filters.status}
             onChange={(val) => setFilters({ status: val })}
           />
-        </div>
-      )}
+      </div>
     </div>
   );
 };

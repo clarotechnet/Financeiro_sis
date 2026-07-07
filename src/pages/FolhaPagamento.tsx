@@ -12,6 +12,7 @@ import { FolhaKPIs } from '@/components/folha/FolhaKPIs';
 import { FolhaCharts } from '@/components/folha/FolhaCharts';
 import { FolhaFrentes } from '@/components/folha/FolhaFrentes';
 import { FolhaTable } from '@/components/folha/FolhaTable';
+import { useAuth } from '@/contexts/useAuth';
 
 interface MultiSelectProps {
   label: string;
@@ -80,6 +81,7 @@ const TABS = [
 const FolhaPagamento: React.FC = () => {
   const [params] = useSearchParams();
   const activeTab = params.get('tab') || 'kpis';
+  const { isAdmin } = useAuth();
   const {
     data, isLoading, error, filters, setFilters, clearFilters,
     fetchData, importExcel, opcoesCategoria, opcoesNomes, kpis
@@ -148,7 +150,7 @@ const FolhaPagamento: React.FC = () => {
           <div className="flex flex-wrap justify-between items-center mb-4 gap-3">
             <h3 className="text-lg font-bold text-foreground">Filtros</h3>
             <div className="flex items-center gap-3 flex-wrap">
-              <FolhaImportExcel onImport={importExcel} />
+              {isAdmin && <FolhaImportExcel onImport={importExcel} />}
               <Button variant="outline" size="sm" onClick={handleExport} className="gap-1">
                 <Download className="w-4 h-4" /> Exportar Excel
               </Button>

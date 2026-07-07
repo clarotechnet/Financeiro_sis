@@ -10,14 +10,13 @@ import {
 } from '@/components/ui/sidebar';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useAuth } from '@/contexts/useAuth';
+import { canAccessFinancialReports, ROLE_FINANCE_ASSISTANT, ROLE_RH } from '@/lib/profileRoles';
 
 interface SubItem { id: string; label: string; icon: React.ComponentType<{ className?: string }>; }
 
-const COMISSIONAMENTO_TABS: SubItem[] = [
-    { id: 'kpis', label: 'Inclusão de Pagamento', icon: BarChart3 },
+const RELATORIOS_TABS: SubItem[] = [
     { id: 'charts', label: 'KPIs', icon: PieChart },
-    { id: 'frentes', label: 'Dashboard', icon: Layers },
-    { id: 'table', label: 'Relatorios', icon: TableIcon },
+    { id: 'table', label: 'Lançamentos', icon: TableIcon },
     { id: 'valores', label: 'Valores', icon: Coins },
 ];
 
@@ -34,8 +33,9 @@ export const AppSidebar: React.FC = () => {
     const { state } = useSidebar();
     const collapsed = state === 'collapsed';
 
-    const currentTab = new URLSearchParams(search).get('tab') || 'kpis';
-    const canAccessSettings = isAdmin || profile?.role === 'rh';
+    const currentTab = new URLSearchParams(search).get('tab') || 'frentes';
+    const canAccessSettings = isAdmin || profile?.role === ROLE_RH || profile?.role === ROLE_FINANCE_ASSISTANT;
+    const canViewFinancialReports = canAccessFinancialReports(profile?.role);
 
     const renderModule = (
         basePath: string,
@@ -43,7 +43,7 @@ export const AppSidebar: React.FC = () => {
         Icon: React.ComponentType<{ className?: string }>,
         tabs: SubItem[],
     ) => {
-        const isOnRoute = pathname === basePath;
+        const isOnRoute = pathname === basePath && tabs.some(tab => tab.id === currentTab);
         return (
             <Collapsible defaultOpen={isOnRoute} className="group/collapsible">
                 <SidebarMenuItem>
@@ -118,6 +118,18 @@ export const AppSidebar: React.FC = () => {
                             <SidebarMenuItem>
                                 <SidebarMenuButton
                                     asChild
+                                    isActive={pathname === '/comissionamento' && currentTab === 'frentes'}
+                                    className="data-[active=true]:bg-primary data-[active=true]:text-primary-foreground"
+                                >
+                                    <NavLink to="/comissionamento?tab=frentes">
+                                        <Layers className="h-4 w-4 flex-shrink-0" />
+                                        {!collapsed && <span className="text-[13px]">Dashboard</span>}
+                                    </NavLink>
+                                </SidebarMenuButton>
+                            </SidebarMenuItem>
+                            <SidebarMenuItem>
+                                <SidebarMenuButton
+                                    asChild
                                     isActive={pathname === '/receitas'}
                                     className="data-[active=true]:bg-primary data-[active=true]:text-primary-foreground"
                                 >
@@ -127,9 +139,21 @@ export const AppSidebar: React.FC = () => {
                                     </NavLink>
                                 </SidebarMenuButton>
                             </SidebarMenuItem>
-                            {renderModule('/comissionamento', 'Despesas', DollarSign, COMISSIONAMENTO_TABS)}
-                            {isAdmin && renderModule('/folha-pagamento', 'Folha de Pagamento', Wallet, FOLHA_TABS)}
-                            {canAccessSettings && (
+                            <SidebarMenuItem>
+                                <SidebarMenuButton
+                                    asChild
+                                    isActive={pathname === '/comissionamento' && currentTab === 'kpis'}
+                                    className="data-[active=true]:bg-primary data-[active=true]:text-primary-foreground h-auto min-h-9 py-2"
+                                >
+                                    <NavLink to="/comissionamento?tab=kpis">
+                                        <DollarSign className="h-4 w-4 flex-shrink-0" />
+                                        {!collapsed && <span className="text-[13px] leading-tight whitespace-normal break-words">Inclusão de Pagamentos</span>}
+                                    </NavLink>
+                                </SidebarMenuButton>
+                            </SidebarMenuItem>
+                            {renderModule('/comissionamento', 'Relatórios', FileBarChart, RELATORIOS_TABS)}
+                            {canViewFinancialReports && renderModule('/folha-pagamento', 'Folha de Pagamento', Wallet, FOLHA_TABS)}
+                            {canViewFinancialReports && (
                                 <SidebarMenuItem>
                                     <SidebarMenuButton
                                         asChild
@@ -143,7 +167,7 @@ export const AppSidebar: React.FC = () => {
                                     </SidebarMenuButton>
                                 </SidebarMenuItem>
                             )}
-                            {isAdmin && (
+                            {canAccessSettings && (
                                 <SidebarMenuItem>
                                     <SidebarMenuButton
                                         asChild

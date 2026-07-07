@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { AuthContext, Profile } from '@/contexts/AuthContextCore';
+import { ROLE_ADMIN, ROLE_FINANCE_ASSISTANT } from '@/lib/profileRoles';
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -126,7 +127,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               id: data.user.id,
               email: data.user.email ?? email,
               display_name: displayName ?? null,
-              role: 'rh',
+              role: ROLE_FINANCE_ASSISTANT,
             },
             { onConflict: 'id' }
           );
@@ -213,7 +214,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const isAdmin = profile?.role === 'admin';
+  const isAdmin = profile?.role === ROLE_ADMIN;
   const isApproved = profile?.approved ?? false;
 
   return (

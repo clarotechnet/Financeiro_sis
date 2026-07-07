@@ -23,6 +23,7 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { useNotifications } from '@/hooks/useNotifications';
+import { getProfileRoleLabel } from '@/lib/profileRoles';
 
 const Perfil: React.FC = () => {
     const navigate = useNavigate();
@@ -64,7 +65,7 @@ const Perfil: React.FC = () => {
         !isSavingPassword;
     const name = currentDisplayName || profile?.email || user?.email || 'Usuário';
     const initials = name.split(' ').filter(Boolean).slice(0, 2).map(s => s[0]?.toUpperCase()).join('') || 'U';
-    const profileTypeLabel = profile?.role === 'admin' ? 'Administrador' : 'RH';
+    const profileTypeLabel = getProfileRoleLabel(profile?.role);
     const cargoLabel = currentCargo || 'Cargo não informado';
     const activeTab = searchParams.get('tab') === 'senha' || searchParams.get('tab') === 'notif'
         ? searchParams.get('tab')!

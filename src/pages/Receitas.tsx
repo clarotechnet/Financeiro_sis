@@ -21,6 +21,7 @@ import { LoadingSpinner } from '@/components/comissionamento/LoadingSpinner';
 import { useAuth } from '@/contexts/useAuth';
 import { useReceitas } from '@/hooks/useReceitas';
 import { Receita, ReceitaContaOpcao, ReceitaFormPayload, ReceitaSetorOpcao, ReceitaUnidadeOpcao } from '@/types/receitas';
+import { canManageExistingFinancialData } from '@/lib/profileRoles';
 
 const PAGE_SIZE = 50;
 
@@ -672,6 +673,8 @@ const ReceitaFormDialog: React.FC<ReceitaFormDialogProps> = ({
 
 const Receitas: React.FC = () => {
   const hook = useReceitas();
+  const { profile } = useAuth();
+  const canManageReceitas = canManageExistingFinancialData(profile?.role);
   const [formOpen, setFormOpen] = useState(false);
   const [editingReceita, setEditingReceita] = useState<Receita | null>(null);
   const [page, setPage] = useState(0);
@@ -735,6 +738,7 @@ const Receitas: React.FC = () => {
 
   const handleSubmitReceita = (payload: ReceitaFormPayload) => {
     if (editingReceita?.id) {
+      if (!canManageReceitas) throw new Error('Seu perfil pode lançar receitas, mas não pode editar registros existentes.');
       return hook.updateReceita(editingReceita.id, payload);
     }
 
@@ -858,7 +862,7 @@ const Receitas: React.FC = () => {
                 <table className="data-table min-w-[1240px] w-full text-xs">
                   <thead>
                     <tr>
-                      <th>Ação</th>
+                      {canManageReceitas && <th>Ação</th>}
                       <th>Data</th>
                       <th>Cliente / Origem</th>
                       <th>Unidade</th>
@@ -875,20 +879,22 @@ const Receitas: React.FC = () => {
                   <tbody>
                     {pageData.map(row => (
                       <tr key={row.id}>
-                        <td>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 w-6 p-0"
-                            onClick={() => {
-                              setEditingReceita(row);
-                              setFormOpen(true);
-                            }}
-                            title="Editar receita"
-                          >
-                            <Pencil className="w-3 h-3 text-muted-foreground hover:text-primary" />
-                          </Button>
-                        </td>
+                        {canManageReceitas && (
+                          <td>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 w-6 p-0"
+                              onClick={() => {
+                                setEditingReceita(row);
+                                setFormOpen(true);
+                              }}
+                              title="Editar receita"
+                            >
+                              <Pencil className="w-3 h-3 text-muted-foreground hover:text-primary" />
+                            </Button>
+                          </td>
+                        )}
                         <td className="whitespace-nowrap font-medium">{fmtDate(row.data_recebimento)}</td>
                         <td className="font-medium">{row.cliente || '-'}</td>
                         <td>{row.unidade_nome ? `${row.unidade_codigo} - ${row.unidade_nome}` : '-'}</td>
@@ -909,7 +915,7 @@ const Receitas: React.FC = () => {
                     ))}
                     {pageData.length === 0 && (
                       <tr>
-                        <td colSpan={12} className="text-center py-8 text-muted-foreground">
+                        <td colSpan={canManageReceitas ? 12 : 11} className="text-center py-8 text-muted-foreground">
                           Nenhuma receita encontrada.
                         </td>
                       </tr>

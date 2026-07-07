@@ -16,6 +16,7 @@ import Perfil from "./pages/Perfil";
 import FolhaPagamento from "./pages/FolhaPagamento";
 import ResetPassword from "./pages/ResetPassword";
 import DREConsolidado from "./pages/DREConsolidado";
+import { ROLE_ADMIN, ROLE_FINANCE_ASSISTANT, ROLE_RH } from "@/lib/profileRoles";
 
 const queryClient = new QueryClient();
 
@@ -47,14 +48,14 @@ const App = () => (
                   </ProtectedRoute>
                 }
               >
-                <Route path="/" element={<Navigate to="/comissionamento" replace />} />
+                <Route path="/" element={<Navigate to="/comissionamento?tab=frentes" replace />} />
                 <Route path="/receitas" element={<Receitas />} />
                 <Route path="/comissionamento" element={<Comissionamento />} />
                 <Route path="/perfil" element={<Perfil />} />
                 <Route
                   path="/folha-pagamento"
                   element={
-                    <ProtectedRoute requireAdmin>
+                    <ProtectedRoute allowedRoles={[ROLE_ADMIN, ROLE_RH, ROLE_FINANCE_ASSISTANT]}>
                       <FolhaPagamento />
                     </ProtectedRoute>
                   }
@@ -62,7 +63,7 @@ const App = () => (
                 <Route
                   path="/dre-consolidado"
                   element={
-                    <ProtectedRoute requireAdmin>
+                    <ProtectedRoute allowedRoles={[ROLE_ADMIN, ROLE_RH, ROLE_FINANCE_ASSISTANT]}>
                       <DREConsolidado />
                     </ProtectedRoute>
                   }
@@ -78,7 +79,7 @@ const App = () => (
                 <Route
                   path="/configuracoes"
                   element={
-                    <ProtectedRoute allowedRoles={['admin', 'rh']}>
+                    <ProtectedRoute allowedRoles={[ROLE_ADMIN, ROLE_RH, ROLE_FINANCE_ASSISTANT]}>
                       <Admin />
                     </ProtectedRoute>
                   }
