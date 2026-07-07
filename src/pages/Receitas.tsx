@@ -48,6 +48,13 @@ const currencyDigitsFromValue = (value: number | null | undefined) => {
   return String(Math.round(Number(value) * 100));
 };
 
+const normalizeNatureza = (value: string | null | undefined) =>
+  (value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+
 interface MultiSelectProps {
   label: string;
   options: string[];
@@ -156,10 +163,22 @@ const createDeducaoItem = (): ReceitaDeducaoFormState => ({
   descricao: '',
 });
 
+const createDeducaoItemFromReceita = (receita: Receita): ReceitaDeducaoFormState => {
+  const digits = currencyDigitsFromValue(receita.valor);
+  return {
+    localId: receita.id,
+    plano_conta_id: receita.plano_conta_id || '',
+    valor: digits,
+    valorDisplay: fmtCurrencyDisplay(digits),
+    descricao: receita.descricao || '',
+  };
+};
+
 interface ReceitaFormDialogProps {
   open: boolean;
   onClose: () => void;
   receita: Receita | null;
+  receitas: Receita[];
   opcoesContas: ReceitaContaOpcao[];
   opcoesUnidades: ReceitaUnidadeOpcao[];
   opcoesSetores: ReceitaSetorOpcao[];
@@ -170,6 +189,7 @@ const ReceitaFormDialog: React.FC<ReceitaFormDialogProps> = ({
   open,
   onClose,
   receita,
+  receitas,
   opcoesContas,
   opcoesUnidades,
   opcoesSetores,
@@ -178,6 +198,8 @@ const ReceitaFormDialog: React.FC<ReceitaFormDialogProps> = ({
   const { profile, user } = useAuth();
   const userName = profile?.display_name || user?.email || '';
   const isEditing = Boolean(receita);
+  const isDeducaoRow = normalizeNatureza(receita?.conta_natureza) === 'deducao';
+  const canManageDeducoes = !receita || (!receita.receita_pai_id && !isDeducaoRow);
   const [form, setForm] = useState<ReceitaFormState>({ ...emptyForm, nome: userName });
   const [valorDisplay, setValorDisplay] = useState('');
   const [deducoes, setDeducoes] = useState<ReceitaDeducaoFormState[]>([]);
@@ -186,16 +208,23 @@ const ReceitaFormDialog: React.FC<ReceitaFormDialogProps> = ({
   const [error, setError] = useState('');
 
   const contasReceita = useMemo(
-    () => opcoesContas.filter(opcao => opcao.natureza === 'Receita'),
+    () => opcoesContas.filter(opcao => normalizeNatureza(opcao.natureza) === 'receita'),
     [opcoesContas]
   );
 
   const contasDeducao = useMemo(
-    () => opcoesContas.filter(opcao => opcao.natureza === 'Dedução'),
+    () => opcoesContas.filter(opcao => normalizeNatureza(opcao.natureza) === 'deducao'),
     [opcoesContas]
   );
 
-  const contasPrincipais = isEditing ? opcoesContas : contasReceita;
+  const contasPrincipais = canManageDeducoes ? contasReceita : opcoesContas;
+
+  const deducoesVinculadas = useMemo(() => {
+    if (!receita?.id) return [];
+    return receitas
+      .filter(item => item.receita_pai_id === receita.id)
+      .sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''));
+  }, [receita?.id, receitas]);
 
   useEffect(() => {
     if (!open) return;
@@ -218,14 +247,14 @@ const ReceitaFormDialog: React.FC<ReceitaFormDialogProps> = ({
         descricao: receita.descricao || '',
       });
       setValorDisplay(fmtCurrencyDisplay(digits));
-      setDeducoes([]);
+      setDeducoes(deducoesVinculadas.map(createDeducaoItemFromReceita));
       return;
     }
 
     setForm({ ...emptyForm, nome: userName });
     setValorDisplay('');
     setDeducoes([]);
-  }, [open, receita, userName]);
+  }, [deducoesVinculadas, open, receita, userName]);
 
   const set = (field: keyof ReceitaFormState, value: string) => {
     setForm(prev => ({ ...prev, [field]: value }));
@@ -270,7 +299,7 @@ const ReceitaFormDialog: React.FC<ReceitaFormDialogProps> = ({
   const deducoesComDados = deducoes.filter(item =>
     item.plano_conta_id || item.valor || item.descricao.trim()
   );
-  const deducoesValidas = isEditing || deducoesComDados.every(item =>
+  const deducoesValidas = !canManageDeducoes || deducoesComDados.every(item =>
     item.plano_conta_id && Number(item.valor || 0) > 0
   );
 
@@ -303,7 +332,7 @@ const ReceitaFormDialog: React.FC<ReceitaFormDialogProps> = ({
         descricao: receita.descricao || '',
       });
       setValorDisplay(fmtCurrencyDisplay(digits));
-      setDeducoes([]);
+      setDeducoes(deducoesVinculadas.map(createDeducaoItemFromReceita));
       setError('');
       return;
     }
@@ -342,11 +371,11 @@ const ReceitaFormDialog: React.FC<ReceitaFormDialogProps> = ({
         banco: form.banco.trim() || null,
         forma_recebimento: form.forma_recebimento.trim() || null,
         documento: form.documento.trim() || null,
-        deducoes: isEditing ? [] : deducoesComDados.map(item => ({
+        deducoes: canManageDeducoes ? deducoesComDados.map(item => ({
           plano_conta_id: item.plano_conta_id,
           valor: parseFloat(item.valor.replace(/\D/g, '')) / 100,
           descricao: item.descricao.trim() || null,
-        })),
+        })) : [],
       });
 
       setSuccess(true);
@@ -510,7 +539,7 @@ const ReceitaFormDialog: React.FC<ReceitaFormDialogProps> = ({
                 />
               </div>
 
-              {!isEditing && (
+              {canManageDeducoes && (
                 <div className="md:col-span-2 rounded-lg border border-border bg-muted/20 p-4 space-y-4">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
@@ -759,6 +788,7 @@ const Receitas: React.FC = () => {
             open={formOpen}
             onClose={handleCloseForm}
             receita={editingReceita}
+            receitas={hook.allData}
             opcoesContas={hook.opcoesContas}
             opcoesUnidades={hook.opcoesUnidades}
             opcoesSetores={hook.opcoesSetores}

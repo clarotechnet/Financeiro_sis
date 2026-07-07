@@ -17,6 +17,22 @@ const EMPTY_FILTERS: ReceitaFilters = {
   contaAnalitica: [],
 };
 
+const buildDeducaoRows = (
+  receitaPayload: Omit<ReceitaFormPayload, 'deducoes'>,
+  deducoes: ReceitaFormPayload['deducoes'],
+  receitaPaiId: string,
+  userId: string
+) => (deducoes || [])
+  .filter(deducao => deducao.plano_conta_id && Number(deducao.valor) > 0)
+  .map(deducao => ({
+    ...receitaPayload,
+    plano_conta_id: deducao.plano_conta_id,
+    valor: deducao.valor,
+    descricao: deducao.descricao || `Dedução vinculada a ${receitaPayload.cliente}`,
+    receita_pai_id: receitaPaiId,
+    created_by: userId,
+  }));
+
 export function useReceitas() {
   const { user } = useAuth();
   const [data, setData] = useState<Receita[]>([]);
@@ -166,21 +182,12 @@ export function useReceitas() {
 
     if (insertError) throw insertError;
 
-    const deducoesValidas = deducoes.filter(deducao =>
-      deducao.plano_conta_id && Number(deducao.valor) > 0
-    );
+    const deducoesValidas = buildDeducaoRows(receitaPayload, deducoes, receitaCriada?.id || '', user.id);
 
     if (deducoesValidas.length > 0 && receitaCriada?.id) {
       const { error: deducoesError } = await externalSupabase
         .from('receitas')
-        .insert(deducoesValidas.map(deducao => ({
-          ...receitaPayload,
-          plano_conta_id: deducao.plano_conta_id,
-          valor: deducao.valor,
-          descricao: deducao.descricao || `Dedução vinculada a ${receitaPayload.cliente}`,
-          receita_pai_id: receitaCriada.id,
-          created_by: user.id,
-        })));
+        .insert(deducoesValidas);
 
       if (deducoesError) {
         await externalSupabase.from('receitas').delete().eq('id', receitaCriada.id);
@@ -194,7 +201,7 @@ export function useReceitas() {
   const updateReceita = useCallback(async (id: string, payload: ReceitaFormPayload) => {
     if (!user?.id) throw new Error('Usuário não autenticado.');
 
-    const { deducoes: _deducoes, ...receitaPayload } = payload;
+    const { deducoes = [], ...receitaPayload } = payload;
 
     const { error: updateError } = await externalSupabase
       .from('receitas')
@@ -202,6 +209,24 @@ export function useReceitas() {
       .eq('id', id);
 
     if (updateError) throw updateError;
+
+    const { error: deleteDeducoesError } = await externalSupabase
+      .from('receitas')
+      .delete()
+      .eq('receita_pai_id', id);
+
+    if (deleteDeducoesError) throw deleteDeducoesError;
+
+    const deducoesValidas = buildDeducaoRows(receitaPayload, deducoes, id, user.id);
+
+    if (deducoesValidas.length > 0) {
+      const { error: insertDeducoesError } = await externalSupabase
+        .from('receitas')
+        .insert(deducoesValidas);
+
+      if (insertDeducoesError) throw insertDeducoesError;
+    }
+
     await fetchData();
   }, [fetchData, user?.id]);
 
