@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { LancamentoPix, OpcaoSelect } from '@/types/comissionamento';
-import { ChevronLeft, ChevronRight, Pencil, FileText } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Pencil, FileText, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -205,6 +205,7 @@ export const ComissionamentoTable: React.FC<Props> = ({ data, onUpdate, onDelete
   const [sortAsc, setSortAsc] = useState(false);
   const [editRecord, setEditRecord] = useState<LancamentoPix | null>(null);
   const [exportingPdf, setExportingPdf] = useState(false);
+  const [previewingPdf, setPreviewingPdf] = useState(false);
   const [exportingFilteredPdf, setExportingFilteredPdf] = useState(false);
   const [columnDialogOpen, setColumnDialogOpen] = useState(false);
   const [selectedPdfColumns, setSelectedPdfColumns] = useState<PdfColumnKey[]>(DEFAULT_PDF_COLUMNS);
@@ -263,7 +264,7 @@ export const ComissionamentoTable: React.FC<Props> = ({ data, onUpdate, onDelete
       const generatedAt = new Date().toLocaleString('pt-BR');
       const logoDataUrl = await loadLogoDataUrl();
       const selectedColumns = PDF_COLUMNS.filter(column => selectedPdfColumns.includes(column.key));
-      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
       const tableStartY = addTotalToPdfTop(doc, totalValor);
       const columnStyles = selectedColumns.reduce<Record<number, any>>((styles, column, index) => {
         if (column.key === 'valor') styles[index] = { halign: 'right', cellWidth: 22 };
@@ -307,7 +308,7 @@ export const ComissionamentoTable: React.FC<Props> = ({ data, onUpdate, onDelete
     try {
       const generatedAt = new Date().toLocaleString('pt-BR');
       const logoDataUrl = await loadLogoDataUrl();
-      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
       const tableStartY = addTotalToPdfTop(doc, totalValor);
 
       autoTable(doc, {
@@ -359,6 +360,80 @@ export const ComissionamentoTable: React.FC<Props> = ({ data, onUpdate, onDelete
     }
   };
 
+  const previewPDF = async () => {
+    if (previewingPdf) return;
+
+    const previewWindow = window.open('', '_blank');
+    if (previewWindow) {
+      previewWindow.document.write('<p style="font-family: sans-serif">Gerando PDF...</p>');
+    }
+
+    setPreviewingPdf(true);
+    try {
+      const generatedAt = new Date().toLocaleString('pt-BR');
+      const logoDataUrl = await loadLogoDataUrl();
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const tableStartY = addTotalToPdfTop(doc, totalValor);
+
+      autoTable(doc, {
+        startY: tableStartY,
+        head: [['Data', 'Cidade/Unidade', 'Favorecido', 'Conta Analitica', 'Centro de Custo', 'Observacao', 'Banco', 'Status', 'Valor']],
+        body: sorted.map(r => [
+          formatDate(r.data_lancamento),
+          r.unidade || '-',
+          r.favorecido || '-',
+          r.conta_analitica || '-',
+          r.centro_de_custo || '-',
+          r.descricao || '-',
+          r.banco || '-',
+          r.status_pag || '-',
+          fmtBRL(r.valor),
+        ]),
+        margin: { top: PDF_HEADER_BOTTOM, right: PDF_MARGIN, bottom: 14, left: PDF_MARGIN },
+        styles: {
+          fontSize: 5.8,
+          cellPadding: 1.2,
+          overflow: 'linebreak',
+          valign: 'top',
+          lineColor: [235, 235, 235],
+          lineWidth: 0.1,
+        },
+        headStyles: { fillColor: [31, 58, 95], textColor: 255 },
+        alternateRowStyles: { fillColor: [247, 247, 247] },
+        columnStyles: {
+          0: { cellWidth: 15 },
+          1: { cellWidth: 18 },
+          2: { cellWidth: 28 },
+          3: { cellWidth: 30 },
+          4: { cellWidth: 22 },
+          5: { cellWidth: 31 },
+          6: { cellWidth: 16 },
+          7: { cellWidth: 12 },
+          8: { cellWidth: 18, halign: 'right' },
+        },
+        didDrawPage: () => {
+          addPdfHeader(doc, logoDataUrl, generatedAt, sorted.length);
+        },
+      });
+
+      const pdfBlob = doc.output('blob');
+      const pdfUrl = URL.createObjectURL(pdfBlob);
+
+      if (previewWindow) {
+        previewWindow.location.href = pdfUrl;
+      } else {
+        window.open(pdfUrl, '_blank');
+      }
+
+      window.setTimeout(() => URL.revokeObjectURL(pdfUrl), 60_000);
+    } catch (error) {
+      previewWindow?.close();
+      throw error;
+    } finally {
+      setPreviewingPdf(false);
+    }
+  };
+
   return (
     <>
       <div className="flex flex-col items-end gap-2 mb-4">
@@ -366,6 +441,10 @@ export const ComissionamentoTable: React.FC<Props> = ({ data, onUpdate, onDelete
           <Button variant="outline" size="sm" onClick={() => setColumnDialogOpen(true)}>
             <FileText className="w-4 h-4 mr-2" />
             Exportar por Filtro
+          </Button>
+          <Button variant="outline" size="sm" onClick={previewPDF} disabled={previewingPdf}>
+            <Eye className="w-4 h-4 mr-2" />
+            {previewingPdf ? 'Gerando PDF...' : 'Visualizar PDF'}
           </Button>
           <Button variant="outline" size="sm" onClick={exportPDF} disabled={exportingPdf}>
             <FileText className="w-4 h-4 mr-2" />
