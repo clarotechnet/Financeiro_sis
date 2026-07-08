@@ -10,7 +10,7 @@ import { chartTooltipContentStyle, chartTooltipCursor, chartTooltipItemStyle, ch
 interface Props {
   chartData: TechnicianChartData[];   // por unidade
   ranking: RankingData[];             // por favorecido (mantido na assinatura)
-  frentesData?: FrenteKPIData[];      // por categoria
+  frentesData?: FrenteKPIData[];      // por conta analitica
 }
 
 const fmtBRL = (v: number) =>
@@ -38,23 +38,23 @@ export const ComissionamentoCharts: React.FC<Props> = ({ chartData, frentesData 
     valor: d.valor || 0,
   }));
 
-  // Categorias - Despesa por categoria com ticket médio
-  const categoriaData = useMemo(() => {
+  // Contas analiticas - despesa por conta com ticket medio
+  const contaData = useMemo(() => {
     return frentesData
       .slice(0, 10)
       .map(f => ({
-        categoria: f.frente,
+        conta: f.frente,
         valor: f.totalValor || 0,
         qtd: f.qtdConsultivo,
         ticketMedio: f.qtdConsultivo > 0 ? (f.totalValor || 0) / f.qtdConsultivo : 0,
       }));
   }, [frentesData]);
 
-  const totalCategorias = categoriaData.reduce((s, c) => s + c.valor, 0);
-  const pieData = categoriaData.map(c => ({
-    name: c.categoria,
+  const totalContas = contaData.reduce((s, c) => s + c.valor, 0);
+  const pieData = contaData.map(c => ({
+    name: c.conta,
     value: c.valor,
-    pct: totalCategorias > 0 ? (c.valor / totalCategorias) * 100 : 0,
+    pct: totalContas > 0 ? (c.valor / totalContas) * 100 : 0,
   }));
 
   return (
@@ -99,11 +99,11 @@ export const ComissionamentoCharts: React.FC<Props> = ({ chartData, frentesData 
           <p className="text-muted-foreground text-center py-8">Nenhum dado para exibir</p>
         )}
       </div>
-      {/* Composição de Despesas por Categoria (Pie) */}
+      {/* Composição de Despesas por Conta Analítica (Pie) */}
       <div className="card">
         <h4 className="mb-6 flex items-center gap-2 text-lg font-bold">
           <PieIcon className="w-5 h-5 text-accent" />
-          Composição de Despesas por Categoria
+          Composição de Despesas por Conta Analítica
         </h4>
         {pieData.length > 0 ? (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
@@ -131,7 +131,7 @@ export const ComissionamentoCharts: React.FC<Props> = ({ chartData, frentesData 
                     itemStyle={chartTooltipItemStyle}
                     labelStyle={chartTooltipLabelStyle}
                     formatter={(value: number, _name: string, item: any) => [fmtBRL(value), item.payload.name]}
-                    labelFormatter={() => 'Categoria'}
+                    labelFormatter={() => 'Conta Analítica'}
                   />
                 </PieChart>
               </ResponsiveContainer>
@@ -156,18 +156,18 @@ export const ComissionamentoCharts: React.FC<Props> = ({ chartData, frentesData 
         )}
       </div>
 
-      {/* Despesa x Ticket Médio por Categoria */}
+      {/* Despesa x Ticket Médio por Conta Analítica */}
       <div className="card">
         <h4 className="mb-6 flex items-center gap-2 text-lg font-bold">
           <TrendingUp className="w-5 h-5 text-accent" />
-          Despesa Total x Ticket Médio por Categoria
+          Despesa Total x Ticket Médio por Conta Analítica
         </h4>
-        {categoriaData.length > 0 ? (
+        {contaData.length > 0 ? (
           <div style={{ height: 420 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={categoriaData} margin={{ top: 20, right: 30, left: 20, bottom: 45 }}>
+              <ComposedChart data={contaData} margin={{ top: 20, right: 30, left: 20, bottom: 45 }}>
                 <XAxis
-                  dataKey="categoria"
+                  dataKey="conta"
                   tick={{ fill: 'hsl(19, 16%, 70%)', fontSize: 11 }}
                   interval={0}
                   angle={-35}

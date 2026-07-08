@@ -47,7 +47,7 @@ export interface ComissionamentoFilters {
   dataFim: string;
   status: string[];   // não usado mais (mantido por compat)
   nome: string[];     // favorecido
-  frente: string[];   // categoria
+  frente: string[];   // conta analitica no Dashboard
   contrato: string[]; // centro_de_custo
   dataExecInicio: string;
   dataExecFim: string;
@@ -80,7 +80,7 @@ export interface RankingData {
 }
 
 export interface FrenteKPIData {
-  frente: string;              // favorecido
+  frente: string;              // conta analitica
   qtdConsultivo: number;       // qtd lançamentos
   totalGeral: number;          // qtd lançamentos (mesmo)
   pctConfirmada: number;       // % do total geral em valor

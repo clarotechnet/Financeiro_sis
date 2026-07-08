@@ -8,6 +8,7 @@ export interface NotificationItem {
   description: string;
   count: number;
   href: string;
+  since?: string;
 }
 
 const getErrorMessage = (error: unknown, fallback: string) =>
@@ -81,7 +82,8 @@ export function useNotifications() {
           title: 'Solicitação de pagamento',
           description: `${paymentCount} novo(s) lançamento(s) desde a última visualização.`,
           count: paymentCount,
-          href: '/comissionamento?tab=kpis',
+          href: `/comissionamento?tab=table&notificacaoDesde=${encodeURIComponent(since)}`,
+          since,
         });
       }
 
@@ -142,6 +144,7 @@ export function useNotifications() {
 
       if (updateError) throw updateError;
 
+      setItems([]);
       await refreshProfile();
       window.dispatchEvent(new Event('technet:notifications-refresh'));
     } finally {

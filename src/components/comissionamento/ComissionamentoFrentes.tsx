@@ -18,14 +18,14 @@ export const ComissionamentoFrentes: React.FC<Props> = ({ frentesData, selectedF
     : frentesData;
 
   const chartData = displayData.slice(0, 15).map(f => ({
-    categoria: f.frente,
-    valor: f.totalValor || 0,
-    qtd: f.qtdConsultivo,
-  }));
+      conta: f.frente,
+      valor: f.totalValor || 0,
+      qtd: f.qtdConsultivo,
+    }));
 
   return (
     <div className="space-y-8">
-      {/* Cards por Favorecido */}
+      {/* Cards por Conta Analítica */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {displayData.map(f => (
           <div key={f.frente} className="card space-y-3">
@@ -69,7 +69,7 @@ export const ComissionamentoFrentes: React.FC<Props> = ({ frentesData, selectedF
                       <span className="truncate" title={f.unidade}>{f.unidade}</span>
                     </div>
                   )}
-                  {f.contasAnaliticas && f.contasAnaliticas.length > 0 && (
+                  {f.contasAnaliticas && f.contasAnaliticas.length > 0 && !f.contasAnaliticas.includes(f.frente) && (
                     <div
                       className="text-xs text-muted-foreground truncate"
                       title={f.contasAnaliticas.join(', ')}
@@ -86,23 +86,23 @@ export const ComissionamentoFrentes: React.FC<Props> = ({ frentesData, selectedF
         ))}
         {displayData.length === 0 && (
           <p className="text-muted-foreground col-span-full text-center py-6">
-            Nenhuma categoria encontrada.
+            Nenhuma conta analítica encontrada.
           </p>
         )}
       </div>
 
-      {/* Bar Chart - Top 15 favorecidos por valor */}
+      {/* Bar Chart - Top 15 contas analíticas por valor */}
       {chartData.length > 1 && (
         <div className="card">
           <h4 className="mb-6 flex items-center gap-2 text-lg font-bold">
             <Banknote className="w-5 h-5 text-accent" />
-            Top {chartData.length} Categorias — Total Pago
+            Top {chartData.length} Contas Analíticas — Total Pago
           </h4>
           <div style={{ height: 380 }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
                 <XAxis
-                  dataKey="categoria"
+                  dataKey="conta"
                   tick={{ fill: 'hsl(223 16% 70%)', fontSize: 10 }}
                   angle={-25}
                   textAnchor="end"

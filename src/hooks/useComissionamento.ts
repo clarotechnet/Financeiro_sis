@@ -93,6 +93,12 @@ const matchesUnidadeFilter = (row: LancamentoPix, selected: string) => {
     || Boolean(unidadeSemPrefixo && selectedSemPrefixo && unidadeSemPrefixo === selectedSemPrefixo);
 };
 
+const stripContaAnaliticaCodigo = (value: string | null | undefined) =>
+  (value || '').replace(/^\d{2}-\d{2}-\d{3}\s*-\s*/, '').trim();
+
+const getDashboardContaLabel = (row: LancamentoPix) =>
+  stripContaAnaliticaCodigo(row.conta_analitica) || 'Sem Conta Analítica';
+
 export function useComissionamento() {
   const [data, setData] = useState<LancamentoPix[]>([]);
   const [opcoes, setOpcoes] = useState<OpcoesData>(EMPTY_OPCOES);
@@ -246,7 +252,7 @@ export function useComissionamento() {
       );
     }
     if (filters.frente.length > 0) {
-      result = result.filter(r => filters.frente.includes(r.categoria || ''));
+      result = result.filter(r => filters.frente.includes(getDashboardContaLabel(r)));
     }
     if (filters.contrato.length > 0) {
       result = result.filter(r =>
@@ -278,7 +284,7 @@ export function useComissionamento() {
     [data]
   );
   const uniqueFrente = useMemo(
-    () => [...new Set(data.map(r => r.categoria).filter(Boolean))].sort() as string[],
+    () => [...new Set(data.map(getDashboardContaLabel).filter(Boolean))].sort() as string[],
     [data]
   );
 
@@ -327,22 +333,23 @@ export function useComissionamento() {
       .sort((a, b) => b.totalValor - a.totalValor);
   }, [filteredData]);
 
-  // "Frentes" agora = consolidado por favorecido
+  // Dashboard agora acompanha a DRE: agrupamento por Conta Analítica.
   const frentesData = useMemo<FrenteKPIData[]>(() => {
     const totalGeralValor = filteredData.reduce((s, r) => s + (r.valor || 0), 0);
     const map = new Map<string, { qtd: number; valor: number; unidade: string; contasAnaliticas: Set<string>; favorecidos: Set<string> }>();
     filteredData.forEach(r => {
-      const k = r.categoria || 'Sem Categoria';
+      const k = getDashboardContaLabel(r);
       if (!map.has(k)) map.set(k, { qtd: 0, valor: 0, unidade: r.unidade || '', contasAnaliticas: new Set(), favorecidos: new Set() });
       const it = map.get(k)!;
       it.qtd += 1;
       it.valor += r.valor || 0;
       if (r.favorecido) it.favorecidos.add(r.favorecido);
-      if (r.conta_analitica) it.contasAnaliticas.add(r.conta_analitica);
+      const contaLabel = stripContaAnaliticaCodigo(r.conta_analitica);
+      if (contaLabel) it.contasAnaliticas.add(contaLabel);
     });
     return Array.from(map.entries())
-      .map(([categoria, g]) => ({
-        frente: categoria,
+      .map(([contaAnalitica, g]) => ({
+        frente: contaAnalitica,
         qtdConsultivo: g.qtd,
         totalGeral: g.qtd,
         pctConfirmada: totalGeralValor > 0 ? (g.valor / totalGeralValor) * 100 : 0,

@@ -22,7 +22,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { useNotifications } from '@/hooks/useNotifications';
+import { useNotifications, type NotificationItem } from '@/hooks/useNotifications';
 import { getProfileRoleLabel } from '@/lib/profileRoles';
 
 const Perfil: React.FC = () => {
@@ -85,6 +85,20 @@ const Perfil: React.FC = () => {
             nextParams.set('tab', value);
         }
         setSearchParams(nextParams, { replace: true });
+    };
+
+    const handleOpenNotification = async (item: NotificationItem) => {
+        try {
+            await markAsSeen();
+        } catch (error) {
+            toast({
+                title: 'Erro ao atualizar notificações',
+                description: getErrorMessage(error, 'Não foi possível marcar as notificações como vistas.'),
+                variant: 'destructive',
+            });
+        } finally {
+            navigate(item.href);
+        }
     };
 
     const getAvatarExtension = (file: File) => {
@@ -478,10 +492,11 @@ const Perfil: React.FC = () => {
                                                     type="button"
                                                     variant="outline"
                                                     size="sm"
-                                                    onClick={() => navigate(item.href)}
+                                                    onClick={() => handleOpenNotification(item)}
+                                                    disabled={isMarkingSeen}
                                                     className="shrink-0"
                                                 >
-                                                    <ExternalLink className="w-4 h-4" />
+                                                    {isMarkingSeen ? <Loader2 className="w-4 h-4 animate-spin" /> : <ExternalLink className="w-4 h-4" />}
                                                     Abrir
                                                 </Button>
                                             </div>
