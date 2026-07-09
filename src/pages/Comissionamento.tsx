@@ -243,6 +243,7 @@ const Comissionamento: React.FC = () => {
               <ComissionamentoFrentes
                 frentesData={hook.frentesData}
                 selectedFrente={hook.filters.frente[0] || ''}
+                lancamentos={hook.data}
               />
             )}
             {activeTab === 'table' && (

@@ -1,21 +1,52 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, LabelList } from 'recharts';
-import { Tags, Building2, Banknote, Users } from 'lucide-react';
-import { FrenteKPIData } from '@/types/comissionamento';
+import { Tags, Building2, Banknote, Users, ListChecks } from 'lucide-react';
+import { FrenteKPIData, LancamentoPix } from '@/types/comissionamento';
 import { chartTooltipContentStyle, chartTooltipCursor, chartTooltipItemStyle, chartTooltipLabelStyle } from '@/lib/chartTooltip';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 interface Props {
   frentesData: FrenteKPIData[];
   selectedFrente: string;
+  lancamentos?: LancamentoPix[];
 }
 
 const fmtBRL = (v: number) =>
   `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-export const ComissionamentoFrentes: React.FC<Props> = ({ frentesData, selectedFrente }) => {
+const fmtDate = (value: string | null | undefined) => {
+  if (!value) return '-';
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : value;
+};
+
+const stripContaCodigo = (value: string | null | undefined) =>
+  (value || '').replace(/^\d{2}-\d{2}-\d{3}\s*-\s*/, '').trim();
+
+const getContaLabel = (row: LancamentoPix) =>
+  stripContaCodigo(row.conta_analitica) || 'Sem Conta Analítica';
+
+export const ComissionamentoFrentes: React.FC<Props> = ({ frentesData, selectedFrente, lancamentos = [] }) => {
+  const [selectedCard, setSelectedCard] = useState<FrenteKPIData | null>(null);
   const displayData = selectedFrente
     ? frentesData.filter(f => f.frente === selectedFrente)
     : frentesData;
+
+  const selectedLancamentos = useMemo(() => {
+    if (!selectedCard) return [];
+    return lancamentos
+      .filter(row => getContaLabel(row) === selectedCard.frente)
+      .sort((a, b) => {
+        const dateCompare = (b.data_lancamento || '').localeCompare(a.data_lancamento || '');
+        if (dateCompare !== 0) return dateCompare;
+        const createdCompare = (a.created_at || '').localeCompare(b.created_at || '');
+        if (createdCompare !== 0) return createdCompare;
+        return (a.id || '').localeCompare(b.id || '');
+      });
+  }, [lancamentos, selectedCard]);
+
+  const selectedTotal = selectedLancamentos.reduce((sum, row) => sum + (row.valor || 0), 0);
+  const selectedFavorecidos = new Set(selectedLancamentos.map(row => row.favorecido).filter(Boolean)).size;
 
   const chartData = displayData.slice(0, 15).map(f => ({
       conta: f.frente,
@@ -28,7 +59,12 @@ export const ComissionamentoFrentes: React.FC<Props> = ({ frentesData, selectedF
       {/* Cards por Conta Analítica */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {displayData.map(f => (
-          <div key={f.frente} className="card space-y-3">
+          <button
+            key={f.frente}
+            type="button"
+            className="card w-full space-y-3 text-left transition-transform hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-primary/60"
+            onClick={() => setSelectedCard(f)}
+          >
             <h4 className="text-sm font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
               <Tags className="w-4 h-4 text-accent" />
               <span className="truncate" title={f.frente}>{f.frente}</span>
@@ -82,7 +118,7 @@ export const ComissionamentoFrentes: React.FC<Props> = ({ frentesData, selectedF
                 </div>
               )}
             </div>
-          </div>
+          </button>
         ))}
         {displayData.length === 0 && (
           <p className="text-muted-foreground col-span-full text-center py-6">
@@ -137,6 +173,81 @@ export const ComissionamentoFrentes: React.FC<Props> = ({ frentesData, selectedF
           </div>
         </div>
       )}
+
+      <Dialog open={!!selectedCard} onOpenChange={(open) => { if (!open) setSelectedCard(null); }}>
+        <DialogContent className="max-w-6xl max-h-[88vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ListChecks className="h-5 w-5 text-primary" />
+              {selectedCard?.frente || 'Detalhes da conta'}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="rounded-lg border border-border bg-card px-4 py-3">
+              <div className="text-xs font-semibold uppercase text-muted-foreground">Total pago</div>
+              <div className="mt-1 text-2xl font-black text-primary">{fmtBRL(selectedTotal)}</div>
+            </div>
+            <div className="rounded-lg border border-border bg-card px-4 py-3">
+              <div className="text-xs font-semibold uppercase text-muted-foreground">Lançamentos</div>
+              <div className="mt-1 text-2xl font-black text-foreground">{selectedLancamentos.length}</div>
+            </div>
+            <div className="rounded-lg border border-border bg-card px-4 py-3">
+              <div className="text-xs font-semibold uppercase text-muted-foreground">Favorecidos</div>
+              <div className="mt-1 text-2xl font-black text-foreground">{selectedFavorecidos}</div>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-border overflow-hidden">
+            <div className="max-h-[55vh] overflow-auto">
+              <table className="w-full min-w-[980px] text-xs">
+                <thead className="sticky top-0 z-10 bg-muted">
+                  <tr className="text-left text-muted-foreground">
+                    <th className="px-3 py-3 font-semibold">Data</th>
+                    <th className="px-3 py-3 font-semibold">Unidade</th>
+                    <th className="px-3 py-3 font-semibold">Favorecido</th>
+                    <th className="px-3 py-3 font-semibold">Centro de Custo</th>
+                    <th className="px-3 py-3 font-semibold">Banco</th>
+                    <th className="px-3 py-3 font-semibold">Status</th>
+                    <th className="px-3 py-3 font-semibold">Observação</th>
+                    <th className="px-3 py-3 text-right font-semibold">Valor</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedLancamentos.map(row => (
+                    <tr key={row.id} className="border-t border-border align-top">
+                      <td className="px-3 py-3 whitespace-nowrap font-medium">{fmtDate(row.data_lancamento)}</td>
+                      <td className="px-3 py-3">{row.unidade || '-'}</td>
+                      <td className="px-3 py-3 font-semibold text-foreground">{row.favorecido || '-'}</td>
+                      <td className="px-3 py-3">{row.centro_de_custo || '-'}</td>
+                      <td className="px-3 py-3">{row.banco || '-'}</td>
+                      <td className="px-3 py-3">
+                        {row.status_pag ? (
+                          <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${(row.status_pag || '').toUpperCase() === 'PAGO'
+                            ? 'bg-green-500/15 text-green-600 dark:text-green-400'
+                            : 'bg-yellow-500/15 text-yellow-600 dark:text-yellow-400'
+                          }`}>
+                            {row.status_pag}
+                          </span>
+                        ) : '-'}
+                      </td>
+                      <td className="px-3 py-3 max-w-[240px] break-words">{row.descricao || '-'}</td>
+                      <td className="px-3 py-3 text-right font-bold whitespace-nowrap">{fmtBRL(row.valor || 0)}</td>
+                    </tr>
+                  ))}
+                  {selectedLancamentos.length === 0 && (
+                    <tr>
+                      <td className="px-3 py-8 text-center text-muted-foreground" colSpan={8}>
+                        Nenhum lançamento encontrado para esta conta nos filtros atuais.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
