@@ -365,29 +365,31 @@ export function useComissionamento() {
   }, [filteredData]);
 
   const submitManualEntry = useCallback(async (formData: Record<string, any>) => {
-    const record = {
+    const rateios = Array.isArray(formData.rateios) ? formData.rateios : [];
+    const buildRecord = (rateio?: Record<string, any>) => ({
       data_lancamento: formData.data_lancamento,
       nome: formData.nome,
       chave_pix: formData.chave_pix || null,
       favorecido: formData.favorecido,
       descricao: formData.descricao || null,
-      plano_conta_id: formData.plano_conta_id,
-      valor: formData.valor,
+      plano_conta_id: rateio?.plano_conta_id || formData.plano_conta_id,
+      valor: rateio?.valor ?? formData.valor,
       cnpj_id: formData.cnpj_id || null,
       unidade_id: null,
-      unidade_codigo: formData.unidade_id,
+      unidade_codigo: rateio?.unidade_id || formData.unidade_id,
       centro_de_custo_id: null,
-      setor_codigo: formData.centro_de_custo_id,
+      setor_codigo: rateio?.centro_de_custo_id || formData.centro_de_custo_id,
       categoria_id: null,
       secao_custeio_id: formData.secao_custeio_id || null,
       centro_custeio_id: formData.centro_custeio_id || null,
       banco_codigo: formData.banco_codigo || null,
       banco: formData.banco || null,
       status_pag: formData.status_pag || 'A PAGAR',
-    };
+    });
+    const records = rateios.length > 0 ? rateios.map(buildRecord) : [buildRecord()];
     const { error: insertError } = await externalSupabase
       .from('lancamentos_pix')
-      .insert([record]);
+      .insert(records);
     if (insertError) throw insertError;
     await fetchData();
   }, [fetchData]);

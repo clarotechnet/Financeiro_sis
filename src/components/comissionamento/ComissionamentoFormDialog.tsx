@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { CheckCircle, Loader2, Search } from 'lucide-react';
+import { CheckCircle, Loader2, Plus, Search, Trash2 } from 'lucide-react';
 import { LancamentoPix, OpcaoSelect } from '@/types/comissionamento';
 import { useAuth } from '@/contexts/useAuth';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
@@ -70,6 +70,12 @@ interface Props {
     banco_codigo: string | null;
     banco: string | null;
     status_pag: string;
+    rateios?: {
+      unidade_id: string;
+      centro_de_custo_id: string;
+      plano_conta_id: string;
+      valor: number;
+    }[];
   }) => Promise<void>;
   opcoes: OpcoesData;
   existingRecords?: LancamentoPix[];
@@ -93,12 +99,18 @@ const emptyForm = {
 };
 
 const requiredFields = [
-  'data_lancamento', 'nome', 'favorecido', 'valor',
-  'unidade_id', 'centro_de_custo_id', 'plano_conta_id'
+  'data_lancamento', 'nome', 'favorecido', 'valor'
 ];
 
 const DRAFT_KEY = 'technet-pix-form-draft';
 type FormState = typeof emptyForm;
+type RateioState = {
+  id: string;
+  unidade_id: string;
+  centro_de_custo_id: string;
+  plano_conta_id: string;
+  valor: string;
+};
 
 type ActiveSuggest = 'favorecido' | 'chave_pix' | 'cpf_cadastro' | 'fornecedor_cadastro' | null;
 
@@ -139,6 +151,24 @@ const fmtCurrencyDisplay = (digits: string): string => {
 // Extrai apenas os dígitos de um valor já formatado
 const extractDigits = (raw: string): string => raw.replace(/\D/g, '');
 
+const centsFromDigits = (raw: string): number => {
+  const digits = extractDigits(raw);
+  return digits ? parseInt(digits, 10) : 0;
+};
+
+const fmtCentsBRL = (cents: number): string =>
+  `R$ ${(cents / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+const createRateio = (base?: Partial<RateioState>): RateioState => ({
+  id: typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random()}`,
+  unidade_id: base?.unidade_id || '',
+  centro_de_custo_id: base?.centro_de_custo_id || '',
+  plano_conta_id: base?.plano_conta_id || '',
+  valor: base?.valor || '',
+});
+
 export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSubmit, opcoes, existingRecords = [] }) => {
   const { profile } = useAuth();
   const userName = profile?.display_name || '';
@@ -174,6 +204,8 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
   const [fornecedorQuery, setFornecedorQuery] = useState('');
   const [fornecedores, setFornecedores] = useState<FornecedorResumo[]>([]);
   const [fornecedorSearchError, setFornecedorSearchError] = useState('');
+  const [usarRateio, setUsarRateio] = useState(false);
+  const [rateios, setRateios] = useState<RateioState[]>([]);
 
   useEffect(() => {
     if (!open) return;
@@ -348,10 +380,53 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
     setValorDisplay(fmtCurrencyDisplay(digits));
   };
 
-  const isValid = requiredFields.every(f => form[f as keyof FormState]?.toString().trim());
+  const handleToggleRateio = (checked: boolean) => {
+    setUsarRateio(checked);
+    setError('');
+    if (checked && rateios.length === 0) {
+      setRateios([
+        createRateio({
+          unidade_id: form.unidade_id,
+          centro_de_custo_id: form.centro_de_custo_id,
+          plano_conta_id: form.plano_conta_id,
+          valor: form.valor,
+        }),
+      ]);
+    }
+  };
+
+  const updateRateio = (id: string, field: keyof Omit<RateioState, 'id'>, value: string) => {
+    setRateios(current => current.map(rateio => (
+      rateio.id === id ? { ...rateio, [field]: value } : rateio
+    )));
+  };
+
+  const addRateio = () => setRateios(current => [...current, createRateio()]);
+
+  const removeRateio = (id: string) => {
+    setRateios(current => current.length > 1 ? current.filter(rateio => rateio.id !== id) : current);
+  };
+
+  const valorTotalCents = centsFromDigits(form.valor);
+  const somaRateioCents = rateios.reduce((total, rateio) => total + centsFromDigits(rateio.valor), 0);
+  const diferencaRateioCents = valorTotalCents - somaRateioCents;
+  const rateiosValidos = rateios.length > 0 && rateios.every(rateio =>
+    rateio.unidade_id
+    && rateio.centro_de_custo_id
+    && rateio.plano_conta_id
+    && centsFromDigits(rateio.valor) > 0
+  );
+  const camposPrincipaisValidos = requiredFields.every(f => form[f as keyof FormState]?.toString().trim());
+  const classificacaoPrincipalValida = Boolean(form.unidade_id && form.centro_de_custo_id && form.plano_conta_id);
+  const rateioBalanceado = !usarRateio || (valorTotalCents > 0 && rateiosValidos && diferencaRateioCents === 0);
+  const isValid = camposPrincipaisValidos && (usarRateio ? rateioBalanceado : classificacaoPrincipalValida);
 
   const handleSubmit = async () => {
     if (!isValid) { setError('Preencha todos os campos obrigatórios.'); return; }
+    if (usarRateio && diferencaRateioCents !== 0) {
+      setError('Verifique os rateios: a soma precisa ser igual ao valor geral do boleto.');
+      return;
+    }
     setSubmitting(true);
     setError('');
     try {
@@ -373,6 +448,14 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
         banco_codigo: bancoSelecionado?.id || null,
         banco: bancoSelecionado?.nome || null,
         status_pag: form.status_pag || 'A PAGAR',
+        rateios: usarRateio
+          ? rateios.map(rateio => ({
+            unidade_id: rateio.unidade_id,
+            centro_de_custo_id: rateio.centro_de_custo_id,
+            plano_conta_id: rateio.plano_conta_id,
+            valor: centsFromDigits(rateio.valor) / 100,
+          }))
+          : undefined,
       };
       await onSubmit(payload);
       window.localStorage.removeItem(DRAFT_KEY);
@@ -381,6 +464,8 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
         setSuccess(false);
         setForm({ ...emptyForm, nome: userName });
         setValorDisplay('');
+        setUsarRateio(false);
+        setRateios([]);
         onClose();
       }, 1300);
     } catch (err: unknown) {
@@ -397,6 +482,8 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
     setFornecedorQuery('');
     setFornecedores([]);
     setFornecedorSearchError('');
+    setUsarRateio(false);
+    setRateios([]);
     setActiveSuggest(null);
     setValorDisplay('');
     setError('');
@@ -437,7 +524,7 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Novo Lançamento</DialogTitle>
         </DialogHeader>
@@ -552,18 +639,21 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
                 value={form.unidade_id}
                 onChange={value => set('unidade_id', value)}
                 options={opcoes.unidade}
+                required={!usarRateio}
               />
               <SearchableSelect
                 label="Centro de Custo"
                 value={form.centro_de_custo_id}
                 onChange={value => set('centro_de_custo_id', value)}
                 options={opcoes.centro_de_custo}
+                required={!usarRateio}
               />
               <SearchableSelect
                 label="Conta Analítica"
                 value={form.plano_conta_id}
                 onChange={value => set('plano_conta_id', value)}
                 options={opcoes.plano_contas}
+                required={!usarRateio}
               />
 
               <SearchableSelect
@@ -580,6 +670,107 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
                 onChange={value => set('status_pag', value)}
                 options={STATUS_OPTIONS}
               />
+
+              <div className="space-y-4 md:col-span-2 rounded-xl border border-border bg-muted/20 p-4">
+                <label className="flex items-start gap-3 text-sm font-semibold text-foreground">
+                  <input
+                    type="checkbox"
+                    className="mt-1 h-4 w-4 accent-primary"
+                    checked={usarRateio}
+                    onChange={event => handleToggleRateio(event.target.checked)}
+                  />
+                  <span>
+                    Múltiplos Rateios
+                    <span className="block text-xs font-normal text-muted-foreground">
+                      Ao ativar, Unidade, Centro de Custo, Conta Analítica e Valor serão definidos nas linhas abaixo.
+                    </span>
+                  </span>
+                </label>
+
+                {usarRateio && (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                      <div className="rounded-lg border border-border bg-card px-3 py-2">
+                        <div className="text-xs font-semibold uppercase text-muted-foreground">Valor geral</div>
+                        <div className="text-lg font-black text-foreground">{fmtCentsBRL(valorTotalCents)}</div>
+                      </div>
+                      <div className="rounded-lg border border-border bg-card px-3 py-2">
+                        <div className="text-xs font-semibold uppercase text-muted-foreground">Soma do rateio</div>
+                        <div className="text-lg font-black text-foreground">{fmtCentsBRL(somaRateioCents)}</div>
+                      </div>
+                      <div className={`rounded-lg border px-3 py-2 ${diferencaRateioCents === 0 ? 'border-green-500/40 bg-green-500/10' : 'border-destructive/40 bg-destructive/10'}`}>
+                        <div className="text-xs font-semibold uppercase text-muted-foreground">Diferença</div>
+                        <div className={diferencaRateioCents === 0 ? 'text-lg font-black text-green-500' : 'text-lg font-black text-destructive'}>
+                          {fmtCentsBRL(diferencaRateioCents)}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      {rateios.map((rateio, index) => (
+                        <div
+                          key={rateio.id}
+                          className="grid grid-cols-1 gap-3 rounded-lg border border-border bg-card p-3 md:grid-cols-2 xl:grid-cols-[minmax(140px,0.9fr)_minmax(210px,1.25fr)_minmax(210px,1.2fr)_minmax(130px,0.75fr)_40px]"
+                        >
+                          <SearchableSelect
+                            label={`Unidade ${index + 1}`}
+                            value={rateio.unidade_id}
+                            onChange={value => updateRateio(rateio.id, 'unidade_id', value)}
+                            options={opcoes.unidade}
+                          />
+                          <SearchableSelect
+                            label="Centro de Custo"
+                            value={rateio.centro_de_custo_id}
+                            onChange={value => updateRateio(rateio.id, 'centro_de_custo_id', value)}
+                            options={opcoes.centro_de_custo}
+                          />
+                          <SearchableSelect
+                            label="Conta Analítica"
+                            value={rateio.plano_conta_id}
+                            onChange={value => updateRateio(rateio.id, 'plano_conta_id', value)}
+                            options={opcoes.plano_contas}
+                          />
+                          <div className="space-y-1">
+                            <Label className="text-sm font-medium">Valor *</Label>
+                            <Input
+                              className="min-w-0"
+                              placeholder="R$ 0,00"
+                              inputMode="decimal"
+                              value={fmtCurrencyDisplay(rateio.valor)}
+                              onChange={event => updateRateio(rateio.id, 'valor', extractDigits(event.target.value))}
+                            />
+                          </div>
+                          <div className="flex items-end justify-end md:col-span-2 xl:col-span-1 xl:justify-center">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-10 w-10 shrink-0 p-0 text-destructive hover:text-destructive"
+                              onClick={() => removeRateio(rateio.id)}
+                              disabled={rateios.length <= 1}
+                              title="Remover rateio"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <Button type="button" variant="outline" size="sm" onClick={addRateio}>
+                        <Plus className="mr-2 h-4 w-4" />
+                        Adicionar rateio
+                      </Button>
+                      {diferencaRateioCents !== 0 && (
+                        <p className="text-sm font-medium text-destructive">
+                          Verifique os rateios: a diferença precisa ficar em R$ 0,00 para salvar.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
 
               <div className="space-y-1 md:col-span-2">
                 <Label className="text-sm text-muted-foreground">Observação</Label>
