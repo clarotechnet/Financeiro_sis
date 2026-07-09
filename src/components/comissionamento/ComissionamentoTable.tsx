@@ -206,6 +206,44 @@ const compareRateioItemOrder = (a: LancamentoPix, b: LancamentoPix) => {
   return compareLaunchOrder(a, b);
 };
 
+const buildRateioGroupedRows = (rows: LancamentoPix[]): LancamentoPix[] => {
+  const byLote = new Map<string, LancamentoPix[]>();
+  rows.forEach(row => {
+    if (!row.rateio_lote_id) return;
+    const items = byLote.get(row.rateio_lote_id) || [];
+    items.push(row);
+    byLote.set(row.rateio_lote_id, items);
+  });
+
+  const usedLotes = new Set<string>();
+  const groupedRows: LancamentoPix[] = [];
+
+  rows.forEach(row => {
+    const loteId = row.rateio_lote_id;
+    if (!loteId) {
+      groupedRows.push(row);
+      return;
+    }
+
+    if (usedLotes.has(loteId)) return;
+    usedLotes.add(loteId);
+
+    const items = [...(byLote.get(loteId) || [row])].sort(compareRateioItemOrder);
+    const first = items[0] || row;
+    const total = items.reduce((sum, item) => sum + (item.valor || 0), 0);
+
+    groupedRows.push({
+      ...first,
+      unidade: `${items.length} rateio(s)`,
+      centro_de_custo: 'Rateio geral',
+      conta_analitica: 'Múltiplos Rateios',
+      valor: total,
+    });
+  });
+
+  return groupedRows;
+};
+
 type RateioTableRow =
   | { kind: 'normal'; key: string; record: LancamentoPix }
   | { kind: 'rateio-summary'; key: string; loteId: string; record: LancamentoPix; items: LancamentoPix[]; total: number }
@@ -221,6 +259,7 @@ export const ComissionamentoTable: React.FC<Props> = ({ data, onUpdate, onDelete
   const [exportingFilteredPdf, setExportingFilteredPdf] = useState(false);
   const [columnDialogOpen, setColumnDialogOpen] = useState(false);
   const [selectedPdfColumns, setSelectedPdfColumns] = useState<PdfColumnKey[]>(DEFAULT_PDF_COLUMNS);
+  const [groupRateiosInFilteredPdf, setGroupRateiosInFilteredPdf] = useState(false);
   const [expandedRateioLotes, setExpandedRateioLotes] = useState<Set<string>>(() => new Set());
   const wrappedCellClass = 'whitespace-normal break-words leading-snug';
 
@@ -341,8 +380,10 @@ export const ComissionamentoTable: React.FC<Props> = ({ data, onUpdate, onDelete
       const generatedAt = new Date().toLocaleString('pt-BR');
       const logoDataUrl = await loadLogoDataUrl();
       const selectedColumns = PDF_COLUMNS.filter(column => selectedPdfColumns.includes(column.key));
+      const pdfRows = groupRateiosInFilteredPdf ? buildRateioGroupedRows(sorted) : sorted;
+      const pdfTotalValor = pdfRows.reduce((sum, row) => sum + (row.valor || 0), 0);
       const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-      const tableStartY = addTotalToPdfTop(doc, totalValor);
+      const tableStartY = addTotalToPdfTop(doc, pdfTotalValor);
       const columnStyles = selectedColumns.reduce<Record<number, any>>((styles, column, index) => {
         if (column.key === 'valor') styles[index] = { halign: 'right', cellWidth: 22 };
         if (column.key === 'data_lancamento') styles[index] = { ...(styles[index] || {}), cellWidth: 17 };
@@ -353,7 +394,7 @@ export const ComissionamentoTable: React.FC<Props> = ({ data, onUpdate, onDelete
       autoTable(doc, {
         startY: tableStartY,
         head: [selectedColumns.map(column => column.label)],
-        body: sorted.map(row => selectedColumns.map(column => column.getValue(row))),
+        body: pdfRows.map(row => selectedColumns.map(column => column.getValue(row))),
         margin: { top: PDF_HEADER_BOTTOM, right: PDF_MARGIN, bottom: 14, left: PDF_MARGIN },
         styles: {
           fontSize: selectedColumns.length > 7 ? 6.1 : 7,
@@ -367,7 +408,7 @@ export const ComissionamentoTable: React.FC<Props> = ({ data, onUpdate, onDelete
         alternateRowStyles: { fillColor: [247, 247, 247] },
         columnStyles,
         didDrawPage: () => {
-          addPdfHeader(doc, logoDataUrl, generatedAt, sorted.length);
+          addPdfHeader(doc, logoDataUrl, generatedAt, pdfRows.length);
         },
       });
 
@@ -718,6 +759,19 @@ export const ComissionamentoTable: React.FC<Props> = ({ data, onUpdate, onDelete
               </label>
             ))}
           </div>
+
+          <label className="flex items-start gap-3 rounded-lg border border-primary/30 bg-primary/5 px-3 py-3 text-sm">
+            <Checkbox
+              checked={groupRateiosInFilteredPdf}
+              onCheckedChange={checked => setGroupRateiosInFilteredPdf(checked === true)}
+            />
+            <span>
+              <span className="block font-semibold text-foreground">Gerar PDF com rateio geral</span>
+              <span className="mt-1 block text-xs text-muted-foreground">
+                Quando marcado, cada Múltiplos Rateios aparece como uma única linha com o valor total do boleto.
+              </span>
+            </span>
+          </label>
 
 
           <div className="rounded-lg bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
