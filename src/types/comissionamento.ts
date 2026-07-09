@@ -28,6 +28,8 @@ export interface LancamentoPix {
   banco: string | null;
   forma_pagamento: string | null;
   status_pag: string | null;
+  rateio_lote_id?: string | null;
+  rateio_item_ordem?: number | null;
   created_at?: string;
   updated_at?: string;
 }

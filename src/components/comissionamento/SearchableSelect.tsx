@@ -10,6 +10,7 @@ interface SearchableSelectProps {
   onChange: (value: string) => void;
   options: OpcaoSelect[];
   required?: boolean;
+  disabled?: boolean;
 }
 
 export const SearchableSelect: React.FC<SearchableSelectProps> = ({
@@ -18,6 +19,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
   onChange,
   options,
   required = true,
+  disabled = false,
 }) => {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -45,8 +47,11 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
       <Label className="text-sm font-medium">{label} {required && '*'}</Label>
       <button
         type="button"
-        className={`w-full bg-card border rounded-lg px-3 py-2 text-left text-sm text-foreground flex items-center justify-between gap-2 ${open ? 'border-primary' : 'border-border'}`}
-        onClick={() => setOpen(prev => !prev)}
+        disabled={disabled}
+        className={`w-full bg-card border rounded-lg px-3 py-2 text-left text-sm text-foreground flex items-center justify-between gap-2 disabled:cursor-not-allowed disabled:opacity-60 ${open ? 'border-primary' : 'border-border'}`}
+        onClick={() => {
+          if (!disabled) setOpen(prev => !prev);
+        }}
       >
         <span className={selectedOption ? 'truncate' : 'text-muted-foreground truncate'}>
           {selectedOption?.nome || 'Selecione...'}

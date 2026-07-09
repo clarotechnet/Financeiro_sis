@@ -99,6 +99,16 @@ const stripContaAnaliticaCodigo = (value: string | null | undefined) =>
 const getDashboardContaLabel = (row: LancamentoPix) =>
   stripContaAnaliticaCodigo(row.conta_analitica) || 'Sem Conta Analítica';
 
+const createClientUuid = () => (
+  typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, char => {
+      const value = Math.floor(Math.random() * 16);
+      const next = char === 'x' ? value : (value & 0x3) | 0x8;
+      return next.toString(16);
+    })
+);
+
 export function useComissionamento() {
   const [data, setData] = useState<LancamentoPix[]>([]);
   const [opcoes, setOpcoes] = useState<OpcoesData>(EMPTY_OPCOES);
@@ -366,7 +376,8 @@ export function useComissionamento() {
 
   const submitManualEntry = useCallback(async (formData: Record<string, any>) => {
     const rateios = Array.isArray(formData.rateios) ? formData.rateios : [];
-    const buildRecord = (rateio?: Record<string, any>) => ({
+    const rateioLoteId = rateios.length > 0 ? createClientUuid() : null;
+    const buildRecord = (rateio?: Record<string, any>, index?: number) => ({
       data_lancamento: formData.data_lancamento,
       nome: formData.nome,
       chave_pix: formData.chave_pix || null,
@@ -385,8 +396,12 @@ export function useComissionamento() {
       banco_codigo: formData.banco_codigo || null,
       banco: formData.banco || null,
       status_pag: formData.status_pag || 'A PAGAR',
+      rateio_lote_id: rateioLoteId,
+      rateio_item_ordem: rateioLoteId ? (index ?? 0) + 1 : null,
     });
-    const records = rateios.length > 0 ? rateios.map(buildRecord) : [buildRecord()];
+    const records = rateios.length > 0
+      ? rateios.map((rateio, index) => buildRecord(rateio, index))
+      : [buildRecord()];
     const { error: insertError } = await externalSupabase
       .from('lancamentos_pix')
       .insert(records);

@@ -383,15 +383,31 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
   const handleToggleRateio = (checked: boolean) => {
     setUsarRateio(checked);
     setError('');
-    if (checked && rateios.length === 0) {
+    if (checked) {
+      const firstRateio = createRateio({
+        unidade_id: form.unidade_id,
+        centro_de_custo_id: form.centro_de_custo_id,
+        plano_conta_id: form.plano_conta_id,
+        valor: form.valor,
+      });
+
       setRateios([
-        createRateio({
-          unidade_id: form.unidade_id,
-          centro_de_custo_id: form.centro_de_custo_id,
-          plano_conta_id: form.plano_conta_id,
-          valor: form.valor,
-        }),
+        firstRateio,
+        ...rateios.filter(rateio =>
+          rateio.unidade_id
+          || rateio.centro_de_custo_id
+          || rateio.plano_conta_id
+          || rateio.valor
+        ),
       ]);
+      setForm(prev => ({
+        ...prev,
+        unidade_id: '',
+        centro_de_custo_id: '',
+        plano_conta_id: '',
+      }));
+    } else {
+      setRateios([]);
     }
   };
 
@@ -640,6 +656,7 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
                 onChange={value => set('unidade_id', value)}
                 options={opcoes.unidade}
                 required={!usarRateio}
+                disabled={usarRateio}
               />
               <SearchableSelect
                 label="Centro de Custo"
@@ -647,6 +664,7 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
                 onChange={value => set('centro_de_custo_id', value)}
                 options={opcoes.centro_de_custo}
                 required={!usarRateio}
+                disabled={usarRateio}
               />
               <SearchableSelect
                 label="Conta Analítica"
@@ -654,6 +672,7 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
                 onChange={value => set('plano_conta_id', value)}
                 options={opcoes.plano_contas}
                 required={!usarRateio}
+                disabled={usarRateio}
               />
 
               <SearchableSelect

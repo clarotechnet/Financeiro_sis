@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { LancamentoPix, OpcaoSelect } from '@/types/comissionamento';
-import { ChevronLeft, ChevronRight, Pencil, FileText, Eye } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, Pencil, FileText, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -199,6 +199,18 @@ const compareSortValues = (a: LancamentoPix, b: LancamentoPix, field: keyof Lanc
   return compareLaunchOrder(a, b);
 };
 
+const compareRateioItemOrder = (a: LancamentoPix, b: LancamentoPix) => {
+  const orderA = a.rateio_item_ordem ?? Number.MAX_SAFE_INTEGER;
+  const orderB = b.rateio_item_ordem ?? Number.MAX_SAFE_INTEGER;
+  if (orderA !== orderB) return orderA - orderB;
+  return compareLaunchOrder(a, b);
+};
+
+type RateioTableRow =
+  | { kind: 'normal'; key: string; record: LancamentoPix }
+  | { kind: 'rateio-summary'; key: string; loteId: string; record: LancamentoPix; items: LancamentoPix[]; total: number }
+  | { kind: 'rateio-item'; key: string; record: LancamentoPix; index: number };
+
 export const ComissionamentoTable: React.FC<Props> = ({ data, onUpdate, onDelete, opcoes, canManage = true }) => {
   const [page, setPage] = useState(0);
   const [sortField, setSortField] = useState<keyof LancamentoPix>('data_lancamento');
@@ -209,6 +221,7 @@ export const ComissionamentoTable: React.FC<Props> = ({ data, onUpdate, onDelete
   const [exportingFilteredPdf, setExportingFilteredPdf] = useState(false);
   const [columnDialogOpen, setColumnDialogOpen] = useState(false);
   const [selectedPdfColumns, setSelectedPdfColumns] = useState<PdfColumnKey[]>(DEFAULT_PDF_COLUMNS);
+  const [expandedRateioLotes, setExpandedRateioLotes] = useState<Set<string>>(() => new Set());
   const wrappedCellClass = 'whitespace-normal break-words leading-snug';
 
   const sorted = useMemo(() => {
@@ -217,12 +230,67 @@ export const ComissionamentoTable: React.FC<Props> = ({ data, onUpdate, onDelete
     return arr;
   }, [data, sortField, sortAsc]);
 
-  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
-  const pageData = sorted.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  const tableRows = useMemo<RateioTableRow[]>(() => {
+    const byLote = new Map<string, LancamentoPix[]>();
+    sorted.forEach(row => {
+      if (!row.rateio_lote_id) return;
+      const items = byLote.get(row.rateio_lote_id) || [];
+      items.push(row);
+      byLote.set(row.rateio_lote_id, items);
+    });
+
+    const usedLotes = new Set<string>();
+    const rows: RateioTableRow[] = [];
+
+    sorted.forEach((row, index) => {
+      const loteId = row.rateio_lote_id;
+      if (!loteId) {
+        rows.push({ kind: 'normal', key: row.id || `normal-${index}`, record: row });
+        return;
+      }
+
+      if (usedLotes.has(loteId)) return;
+      usedLotes.add(loteId);
+
+      const items = [...(byLote.get(loteId) || [row])].sort(compareRateioItemOrder);
+      rows.push({
+        kind: 'rateio-summary',
+        key: `rateio-summary-${loteId}`,
+        loteId,
+        record: items[0] || row,
+        items,
+        total: items.reduce((sum, item) => sum + (item.valor || 0), 0),
+      });
+
+      if (expandedRateioLotes.has(loteId)) {
+        items.forEach((item, itemIndex) => {
+          rows.push({
+            kind: 'rateio-item',
+            key: item.id || `rateio-item-${loteId}-${itemIndex}`,
+            record: item,
+            index: itemIndex,
+          });
+        });
+      }
+    });
+
+    return rows;
+  }, [sorted, expandedRateioLotes]);
+
+  const totalPages = Math.max(1, Math.ceil(tableRows.length / PAGE_SIZE));
+  const pageData = tableRows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
   useEffect(() => {
     setPage(currentPage => Math.min(currentPage, totalPages - 1));
   }, [totalPages]);
+
+  useEffect(() => {
+    const validLotes = new Set(data.map(row => row.rateio_lote_id).filter(Boolean) as string[]);
+    setExpandedRateioLotes(current => {
+      const next = new Set([...current].filter(loteId => validLotes.has(loteId)));
+      return next.size === current.size ? current : next;
+    });
+  }, [data]);
 
   const handleSort = (field: keyof LancamentoPix) => {
     if (sortField === field) setSortAsc(!sortAsc);
@@ -230,6 +298,15 @@ export const ComissionamentoTable: React.FC<Props> = ({ data, onUpdate, onDelete
       setSortField(field);
       setSortAsc(true);
     }
+  };
+
+  const toggleRateioLote = (loteId: string) => {
+    setExpandedRateioLotes(current => {
+      const next = new Set(current);
+      if (next.has(loteId)) next.delete(loteId);
+      else next.add(loteId);
+      return next;
+    });
   };
 
   const columns: { key: keyof LancamentoPix | 'actions'; label: string }[] = [
@@ -491,40 +568,94 @@ export const ComissionamentoTable: React.FC<Props> = ({ data, onUpdate, onDelete
               </tr>
             </thead>
             <tbody>
-              {pageData.map((row, i) => (
-                <tr key={row.id || i}>
-                  {canManage && (
+              {pageData.map((tableRow, i) => {
+                const row = tableRow.record;
+
+                if (tableRow.kind === 'rateio-summary') {
+                  const expanded = expandedRateioLotes.has(tableRow.loteId);
+                  const unidadeLabel = `${tableRow.items.length} rateio(s)`;
+
+                  return (
+                    <tr
+                      key={tableRow.key}
+                      className="cursor-pointer border-y border-primary/20 bg-primary/5 hover:bg-primary/10"
+                      onClick={() => toggleRateioLote(tableRow.loteId)}
+                      title={expanded ? 'Recolher rateios' : 'Ver rateios deste lançamento'}
+                    >
+                      {canManage && (
+                        <td>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0"
+                            onClick={event => {
+                              event.stopPropagation();
+                              toggleRateioLote(tableRow.loteId);
+                            }}
+                            title={expanded ? 'Recolher rateios' : 'Ver rateios'}
+                          >
+                            <ChevronDown className={`w-3 h-3 text-primary transition-transform ${expanded ? '' : '-rotate-90'}`} />
+                          </Button>
+                        </td>
+                      )}
+                      <td className="whitespace-nowrap font-semibold">{formatDate(row.data_lancamento)}</td>
+                      <td className={wrappedCellClass}>{unidadeLabel}</td>
+                      <td className={`font-semibold ${wrappedCellClass}`}>{row.favorecido || '-'}</td>
+                      <td className="text-xs text-muted-foreground truncate" title={row.chave_pix || ''}>{row.chave_pix || '-'}</td>
+                      <td className="font-semibold text-primary">Múltiplos Rateios</td>
+                      <td className={wrappedCellClass}>Clique para ver detalhes</td>
+                      <td className={wrappedCellClass}>{row.descricao || '-'}</td>
+                      <td className={wrappedCellClass}>{row.banco || '-'}</td>
+                      <td>
+                        {row.status_pag ? (
+                          <span className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${(row.status_pag || '').toUpperCase() === 'PAGO'
+                            ? 'bg-green-500/15 text-green-600 dark:text-green-400'
+                            : 'bg-yellow-500/15 text-yellow-600 dark:text-yellow-400'
+                            }`}>{row.status_pag}</span>
+                        ) : '-'}
+                      </td>
+                      <td className="font-black whitespace-nowrap text-right">{fmtBRL(tableRow.total)}</td>
+                    </tr>
+                  );
+                }
+
+                const isRateioItem = tableRow.kind === 'rateio-item';
+
+                return (
+                  <tr key={tableRow.key} className={isRateioItem ? 'bg-muted/20' : undefined}>
+                    {canManage && (
+                      <td>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 w-6 p-0"
+                          onClick={() => setEditRecord(row)}
+                          title="Editar"
+                        >
+                          <Pencil className="w-3 h-3 text-muted-foreground hover:text-primary" />
+                        </Button>
+                      </td>
+                    )}
+                    <td className="whitespace-nowrap">{formatDate(row.data_lancamento)}</td>
+                    <td className={wrappedCellClass}>{isRateioItem ? `Item ${tableRow.index + 1}: ${row.unidade || '-'}` : row.unidade || '-'}</td>
+                    <td className={`font-medium ${wrappedCellClass}`}>{row.favorecido || '-'}</td>
+                    <td className="text-xs text-muted-foreground truncate" title={row.chave_pix || ''}>{row.chave_pix || '-'}</td>
+                    <td className={wrappedCellClass}>{row.conta_analitica || '-'}</td>
+                    <td className={wrappedCellClass}>{row.centro_de_custo || '-'}</td>
+                    <td className={wrappedCellClass}>{row.descricao || '-'}</td>
+                    <td className={wrappedCellClass}>{row.banco || '-'}</td>
                     <td>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 w-6 p-0"
-                        onClick={() => setEditRecord(row)}
-                        title="Editar"
-                      >
-                        <Pencil className="w-3 h-3 text-muted-foreground hover:text-primary" />
-                      </Button>
+                      {row.status_pag ? (
+                        <span className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${(row.status_pag || '').toUpperCase() === 'PAGO'
+                          ? 'bg-green-500/15 text-green-600 dark:text-green-400'
+                          : 'bg-yellow-500/15 text-yellow-600 dark:text-yellow-400'
+                          }`}>{row.status_pag}</span>
+                      ) : '-'}
                     </td>
-                  )}
-                  <td className="whitespace-nowrap">{formatDate(row.data_lancamento)}</td>
-                  <td className={wrappedCellClass}>{row.unidade || '-'}</td>
-                  <td className={`font-medium ${wrappedCellClass}`}>{row.favorecido || '-'}</td>
-                  <td className="text-xs text-muted-foreground truncate" title={row.chave_pix || ''}>{row.chave_pix || '-'}</td>
-                  <td className={wrappedCellClass}>{row.conta_analitica || '-'}</td>
-                  <td className={wrappedCellClass}>{row.centro_de_custo || '-'}</td>
-                  <td className={wrappedCellClass}>{row.descricao || '-'}</td>
-                  <td className={wrappedCellClass}>{row.banco || '-'}</td>
-                  <td>
-                    {row.status_pag ? (
-                      <span className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${(row.status_pag || '').toUpperCase() === 'PAGO'
-                        ? 'bg-green-500/15 text-green-600 dark:text-green-400'
-                        : 'bg-yellow-500/15 text-yellow-600 dark:text-yellow-400'
-                        }`}>{row.status_pag}</span>
-                    ) : '-'}
-                  </td>
-                  <td className="font-semibold whitespace-nowrap text-right">{fmtBRL(row.valor)}</td>
-                </tr>
-              ))}
+                    <td className="font-semibold whitespace-nowrap text-right">{fmtBRL(row.valor)}</td>
+                  </tr>
+                );
+              })}
               {pageData.length === 0 && (
                 <tr>
                   <td colSpan={columns.length} className="text-center py-6 text-muted-foreground">
