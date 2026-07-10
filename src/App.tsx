@@ -14,6 +14,7 @@ import AppLayout from "@/components/layout/AppLayout";
 import NotFound from "./pages/NotFound";
 import Perfil from "./pages/Perfil";
 import FolhaPagamento from "./pages/FolhaPagamento";
+import Beneficios from "./pages/Beneficios";
 import ResetPassword from "./pages/ResetPassword";
 import DREConsolidado from "./pages/DREConsolidado";
 import { ROLE_ADMIN, ROLE_FINANCE_ASSISTANT, ROLE_RH } from "@/lib/profileRoles";
@@ -52,6 +53,14 @@ const App = () => (
                 <Route path="/receitas" element={<Receitas />} />
                 <Route path="/comissionamento" element={<Comissionamento />} />
                 <Route path="/perfil" element={<Perfil />} />
+                <Route
+                  path="/beneficios"
+                  element={
+                    <ProtectedRoute allowedRoles={[ROLE_ADMIN, ROLE_RH, ROLE_FINANCE_ASSISTANT]}>
+                      <Beneficios />
+                    </ProtectedRoute>
+                  }
+                />
                 <Route
                   path="/folha-pagamento"
                   element={

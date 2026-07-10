@@ -1,7 +1,7 @@
 import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
-    DollarSign, Wallet, BarChart3, PieChart, Layers, Table as TableIcon, Coins, ChevronDown, Settings, FileBarChart, TrendingUp,
+    DollarSign, Wallet, BarChart3, PieChart, Layers, Table as TableIcon, Coins, ChevronDown, Settings, FileBarChart, TrendingUp, Gift, Fuel, PackagePlus,
 } from 'lucide-react';
 import {
     Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
@@ -26,6 +26,12 @@ const FOLHA_TABS: SubItem[] = [
     { id: 'frentes', label: 'Frentes', icon: Layers },
     { id: 'table', label: 'Dados Detalhados', icon: TableIcon },
 ];
+
+const BENEFICIOS_TABS: SubItem[] = [
+    { id: 'combustivel', label: 'Combustível', icon: Fuel },
+    { id: 'agregamento', label: 'Agregamento', icon: PackagePlus },
+];
+
 
 export const AppSidebar: React.FC = () => {
     const { pathname, search } = useLocation();
@@ -152,6 +158,7 @@ export const AppSidebar: React.FC = () => {
                                 </SidebarMenuButton>
                             </SidebarMenuItem>
                             {renderModule('/comissionamento', 'Relatórios', FileBarChart, RELATORIOS_TABS)}
+                            {canViewFinancialReports && renderModule('/beneficios', 'Benefícios', Gift, BENEFICIOS_TABS)}
                             {canViewFinancialReports && renderModule('/folha-pagamento', 'Folha de Pagamento', Wallet, FOLHA_TABS)}
                             {canViewFinancialReports && (
                                 <SidebarMenuItem>
