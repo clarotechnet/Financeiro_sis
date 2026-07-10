@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import * as XLSX from 'xlsx';
-import { ChevronLeft, ChevronRight, Download, FileBarChart, FileSpreadsheet, Printer, RefreshCw } from 'lucide-react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { ChevronLeft, ChevronRight, Download, FileBarChart, FileSpreadsheet, FileText, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { LoadingSpinner } from '@/components/comissionamento/LoadingSpinner';
@@ -57,7 +59,27 @@ interface PlanoContaOpcao {
   e_analitica: boolean;
 }
 
+interface DreContaDetalhe {
+  conta_codigo: string;
+  conta_descricao: string;
+  total: number;
+}
+
+type DreDisplayRowKind = 'linha' | 'detalhe' | 'resultado_financeiro_zero';
+
+interface DreDisplayRow {
+  key: string;
+  kind: DreDisplayRowKind;
+  codigo?: string;
+  descricao: string;
+  total: number;
+  nivel: number;
+  tipo?: DreLinhaTipo;
+}
+
 const PAGE_SIZE = 50;
+const PDF_MARGIN = 12;
+const PDF_HEADER_BOTTOM = 30;
 
 const fmtBRL = (value: number) =>
   (value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -106,6 +128,64 @@ const computeDreTotals = (rows: DreLinha[]): DreLinha[] => {
     ...row,
     total: totals.get(row.codigo) || 0,
   }));
+};
+
+const hasValue = (value: number) => Math.abs(value) >= 0.005;
+
+const loadLogoDataUrl = async () => {
+  try {
+    const response = await fetch(`${import.meta.env.BASE_URL}LogoNovo.png`);
+    if (!response.ok) return null;
+    const blob = await response.blob();
+
+    return await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+};
+
+const addDrePdfHeader = (
+  doc: jsPDF,
+  logoDataUrl: string | null,
+  generatedAt: string,
+  rowCount: number,
+) => {
+  const pageWidth = doc.internal.pageSize.getWidth();
+
+  if (logoDataUrl) {
+    doc.addImage(logoDataUrl, 'PNG', PDF_MARGIN, 6, 16, 16);
+  }
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(16);
+  doc.setTextColor(220, 53, 69);
+  doc.text('TechNET', PDF_MARGIN + 20, 13);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(90);
+  doc.text('Financeiro', PDF_MARGIN + 20, 18);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.setTextColor(20);
+  doc.text('DRE - DEMONSTRATIVO DO RESULTADO', pageWidth / 2, 13, { align: 'center' });
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(90);
+  doc.text(`Gerado em: ${generatedAt}`, pageWidth - PDF_MARGIN, 12, { align: 'right' });
+  doc.text(`${rowCount} linha(s)`, pageWidth - PDF_MARGIN, 17, { align: 'right' });
+
+  doc.setDrawColor(220, 53, 69);
+  doc.setLineWidth(0.3);
+  doc.line(PDF_MARGIN, 25, pageWidth - PDF_MARGIN, 25);
+  doc.setTextColor(0);
 };
 
 const fetchMovimentosDre = async (
@@ -161,6 +241,7 @@ const DREConsolidado: React.FC = () => {
   const [subgrupoCodigo, setSubgrupoCodigo] = useState('');
   const [contaCodigo, setContaCodigo] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
   const [generatedAt, setGeneratedAt] = useState<Date | null>(null);
@@ -292,6 +373,99 @@ const DREConsolidado: React.FC = () => {
     [linhasCalculadas],
   );
 
+  const detalhesPorLinha = useMemo(() => {
+    const grouped = new Map<string, Map<string, DreContaDetalhe>>();
+
+    movimentos.forEach(movimento => {
+      if (!movimento.dre_linha_id || !movimento.conta_codigo) return;
+
+      const lineMap = grouped.get(movimento.dre_linha_id) || new Map<string, DreContaDetalhe>();
+      const current = lineMap.get(movimento.conta_codigo) || {
+        conta_codigo: movimento.conta_codigo,
+        conta_descricao: movimento.conta_descricao || movimento.conta_codigo,
+        total: 0,
+      };
+
+      current.total += Number(movimento.valor) || 0;
+      lineMap.set(movimento.conta_codigo, current);
+      grouped.set(movimento.dre_linha_id, lineMap);
+    });
+
+    const result = new Map<string, DreContaDetalhe[]>();
+    grouped.forEach((lineMap, dreLinhaId) => {
+      result.set(
+        dreLinhaId,
+        Array.from(lineMap.values())
+          .filter(item => hasValue(item.total))
+          .sort((a, b) => a.conta_codigo.localeCompare(b.conta_codigo, 'pt-BR', { numeric: true })),
+      );
+    });
+
+    return result;
+  }, [movimentos]);
+
+  const shouldShowResultadoFinanceiro = useMemo(
+    () => hasValue((totalByCodigo.get('04.01') || 0) + (totalByCodigo.get('04.02') || 0)),
+    [totalByCodigo],
+  );
+
+  const linhasDreExibidas = useMemo(
+    () => linhasCalculadas.filter(row => {
+      if (['04', '04.01', '04.02'].includes(row.codigo)) {
+        return shouldShowResultadoFinanceiro;
+      }
+
+      if (row.tipo === 'contas') {
+        const detalhes = detalhesPorLinha.get(row.dre_linha_id) || [];
+        return detalhes.length > 0 || hasValue(Number(row.total) || 0);
+      }
+
+      return true;
+    }),
+    [detalhesPorLinha, linhasCalculadas, shouldShowResultadoFinanceiro],
+  );
+
+  const dreDisplayRows = useMemo(() => {
+    const rows: DreDisplayRow[] = [];
+
+    linhasDreExibidas.forEach(row => {
+      if (row.codigo === '04.99' && !shouldShowResultadoFinanceiro) {
+        rows.push({
+          key: 'resultado-financeiro-zero',
+          kind: 'resultado_financeiro_zero',
+          descricao: 'Resultado Financeiro',
+          total: 0,
+          nivel: 1,
+          tipo: 'subtotal',
+        });
+      }
+
+      rows.push({
+        key: row.dre_linha_id,
+        kind: 'linha',
+        codigo: row.codigo,
+        descricao: `${row.tipo === 'subtotal' || row.tipo === 'resultado' ? '= ' : ''}${dreDescricaoLabel(row)}`,
+        total: Number(row.total) || 0,
+        nivel: row.nivel,
+        tipo: row.tipo,
+      });
+
+      if (row.tipo === 'contas') {
+        (detalhesPorLinha.get(row.dre_linha_id) || []).forEach(item => {
+          rows.push({
+            key: `${row.dre_linha_id}-${item.conta_codigo}`,
+            kind: 'detalhe',
+            descricao: item.conta_descricao,
+            total: item.total,
+            nivel: row.nivel + 1,
+          });
+        });
+      }
+    });
+
+    return rows;
+  }, [detalhesPorLinha, linhasDreExibidas, shouldShowResultadoFinanceiro]);
+
   const movimentosPendentes = useMemo(
     () => movimentos.filter(row => !row.dre_linha_id),
     [movimentos],
@@ -344,19 +518,134 @@ const DREConsolidado: React.FC = () => {
     setContaCodigo('');
   };
 
-  const handlePrint = () => window.print();
+  const handleExportPdf = async () => {
+    if (exportingPdf || dreDisplayRows.length === 0) {
+      if (dreDisplayRows.length === 0) alert('Sem dados para exportar.');
+      return;
+    }
+
+    setExportingPdf(true);
+    try {
+      const generatedAtLabel = new Date().toLocaleString('pt-BR');
+      const logoDataUrl = await loadLogoDataUrl();
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const pageWidth = doc.internal.pageSize.getWidth();
+
+      const addReportIntro = () => {
+        let y = PDF_HEADER_BOTTOM;
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10);
+        doc.setTextColor(20);
+        doc.text('Resumo dos filtros', PDF_MARGIN, y);
+
+        y += 5;
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.setTextColor(90);
+
+        const filters = [
+          `Periodo: ${periodoLabel}`,
+          `Unidade: ${unidadeLabel}`,
+          `Setor: ${setorLabel}`,
+          `Conta Geral: ${contaGeralLabel}`,
+          `Subgrupo: ${subgrupoLabel}`,
+          `Conta Analitica: ${contaAnaliticaLabel}`,
+        ];
+
+        filters.forEach(filter => {
+          doc.text(filter, PDF_MARGIN, y, { maxWidth: pageWidth - PDF_MARGIN * 2 });
+          y += 4;
+        });
+
+        return y + 3;
+      };
+
+      addDrePdfHeader(doc, logoDataUrl, generatedAtLabel, dreDisplayRows.length);
+      const tableStartY = addReportIntro();
+
+      autoTable(doc, {
+        startY: tableStartY,
+        head: [['Descricao', 'Valor']],
+        body: dreDisplayRows.map(row => [
+          row.descricao,
+          row.kind === 'linha' && row.tipo === 'grupo' ? '' : fmtBRLDre(row.total),
+        ]),
+        margin: { top: PDF_HEADER_BOTTOM, right: PDF_MARGIN, bottom: 14, left: PDF_MARGIN },
+        styles: {
+          fontSize: 8,
+          cellPadding: 1.6,
+          overflow: 'linebreak',
+          valign: 'middle',
+          lineColor: [226, 232, 240],
+          lineWidth: 0.1,
+        },
+        headStyles: { fillColor: [31, 58, 95], textColor: 255 },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+        columnStyles: {
+          0: { cellWidth: pageWidth - PDF_MARGIN * 2 - 42 },
+          1: { cellWidth: 42, halign: 'right' },
+        },
+        didParseCell: data => {
+          if (data.section !== 'body') return;
+
+          const row = dreDisplayRows[data.row.index];
+          const isGrupo = row.kind === 'linha' && row.tipo === 'grupo';
+          const isDetail = row.kind === 'detalhe';
+          const isResult = row.kind === 'resultado_financeiro_zero' || row.tipo === 'subtotal' || row.tipo === 'resultado';
+
+          if (isGrupo) {
+            data.cell.styles.fontStyle = 'bold';
+            data.cell.styles.fillColor = [241, 245, 249];
+            data.cell.styles.textColor = [15, 23, 42];
+          }
+
+          if (isDetail) {
+            data.cell.styles.fontSize = 7;
+            data.cell.styles.textColor = [71, 85, 105];
+          }
+
+          if (isResult) {
+            data.cell.styles.fontStyle = 'bold';
+            data.cell.styles.fillColor = [245, 245, 245];
+          }
+
+          if (data.column.index === 0) {
+            (data.cell.styles as any).cellPadding = {
+              top: 1.6,
+              right: 1.6,
+              bottom: 1.6,
+              left: 2 + Math.max(row.nivel - 1, 0) * 6 + (isDetail ? 4 : 0),
+            };
+          }
+
+          if (data.column.index === 1 && row.total < 0) {
+            data.cell.styles.textColor = [220, 38, 38];
+            data.cell.styles.fontStyle = 'bold';
+          }
+        },
+        didDrawPage: () => {
+          addDrePdfHeader(doc, logoDataUrl, generatedAtLabel, dreDisplayRows.length);
+        },
+      });
+
+      doc.save(`dre-consolidado-${new Date().toISOString().slice(0, 10)}.pdf`);
+    } finally {
+      setExportingPdf(false);
+    }
+  };
 
   const handleExportExcel = () => {
-    if (linhasCalculadas.length === 0) {
+    if (dreDisplayRows.length === 0) {
       alert('Sem dados para exportar.');
       return;
     }
 
-    const dreRows = linhasCalculadas.map(row => ({
+    const dreRows = dreDisplayRows.map(row => ({
       Código: row.codigo,
       Descrição: row.descricao,
-      Tipo: row.tipo,
-      Total: Number(row.total) || 0,
+      Tipo: row.kind === 'detalhe' ? 'conta_analitica' : row.tipo || row.kind,
+      Total: row.kind === 'linha' && row.tipo === 'grupo' ? null : Number(row.total) || 0,
     }));
 
     const detalheRows = movimentos.map(row => ({
@@ -389,12 +678,6 @@ const DREConsolidado: React.FC = () => {
     XLSX.utils.book_append_sheet(wb, wsDetalhe, 'Movimentos');
 
     XLSX.writeFile(wb, `DRE_${new Date().toISOString().slice(0, 10)}.xlsx`);
-  };
-
-  const renderValor = (row: DreLinha) => {
-    if (row.tipo === 'grupo') return '';
-    const total = Number(row.total) || 0;
-    return fmtBRLDre(total);
   };
 
   return (
@@ -471,8 +754,14 @@ const DREConsolidado: React.FC = () => {
               <Button variant="outline" size="sm" onClick={handleExportExcel} className="gap-1">
                 <Download className="w-4 h-4" /> Exportar Excel
               </Button>
-              <Button variant="outline" size="sm" onClick={handlePrint} className="gap-1">
-                <Printer className="w-4 h-4" /> Imprimir / Salvar PDF
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExportPdf}
+                disabled={exportingPdf || dreDisplayRows.length === 0}
+                className="gap-1"
+              >
+                <FileText className="w-4 h-4" /> {exportingPdf ? 'Gerando PDF...' : 'Exportar PDF'}
               </Button>
               <Button size="sm" onClick={fetchDre} className="gap-1">
                 <FileSpreadsheet className="w-4 h-4" /> Gerar DRE
@@ -627,31 +916,36 @@ const DREConsolidado: React.FC = () => {
                   </tr>
                 </thead>
                   <tbody>
-                    {linhasCalculadas.map(row => {
+                    {dreDisplayRows.map(row => {
                       const total = Number(row.total) || 0;
-                      const isGrupo = row.tipo === 'grupo';
-                      const isTotal = row.tipo === 'subtotal' || row.tipo === 'resultado';
+                      const isGrupo = row.kind === 'linha' && row.tipo === 'grupo';
+                      const isDetail = row.kind === 'detalhe';
+                      const isTotal = row.kind === 'resultado_financeiro_zero' || row.tipo === 'subtotal' || row.tipo === 'resultado';
 
                       return (
                         <tr
-                          key={row.dre_linha_id}
+                          key={row.key}
                           className={[
                             'border-b border-border/40',
                             isGrupo ? 'bg-muted/35 uppercase font-extrabold text-foreground' : '',
+                            isDetail ? 'text-xs text-muted-foreground' : '',
                             isTotal ? 'font-extrabold bg-primary/5' : '',
                             row.tipo === 'resultado' ? 'text-primary border-t-2 border-primary/50' : '',
                           ].join(' ')}
                         >
-                          <td className="py-2 px-2" style={{ paddingLeft: `${Math.max(row.nivel - 1, 0) * 24 + 8}px` }}>
-                            {isTotal ? '= ' : ''}{dreDescricaoLabel(row)}
+                          <td
+                            className={isDetail ? 'py-1.5 px-2' : 'py-2 px-2'}
+                            style={{ paddingLeft: `${Math.max(row.nivel - 1, 0) * 24 + (isDetail ? 24 : 8)}px` }}
+                          >
+                            <span className={isDetail ? 'text-foreground/90' : ''}>{row.descricao}</span>
                           </td>
-                          <td className={`py-2 px-2 text-right font-semibold ${total < 0 ? 'text-red-400' : 'text-foreground'}`}>
-                            {renderValor(row)}
+                          <td className={`${isDetail ? 'py-1.5' : 'py-2'} px-2 text-right font-semibold ${total < 0 ? 'text-red-400' : 'text-foreground'}`}>
+                            {isGrupo ? '' : fmtBRLDre(total)}
                           </td>
                         </tr>
                       );
                     })}
-                    {linhasCalculadas.length === 0 && (
+                    {dreDisplayRows.length === 0 && (
                       <tr>
                         <td colSpan={2} className="py-6 text-center text-muted-foreground">
                           Nenhuma linha de DRE encontrada. Rode a migration da estrutura da DRE.
