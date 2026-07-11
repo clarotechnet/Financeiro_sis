@@ -8,6 +8,7 @@ export interface BeneficioRegistro {
   id: string;
   data_beneficio: string;
   cpf: string;
+  placa: string | null;
   nome: string;
   unidade_codigo: string | null;
   unidade_nome: string | null;
@@ -26,6 +27,7 @@ export interface BeneficioRegistro {
 
 export interface BeneficioImportRow {
   cpf: string;
+  placa?: string | null;
   valor: number;
 }
 

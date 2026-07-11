@@ -61,6 +61,7 @@ create table if not exists public.beneficios_combustivel (
   id uuid primary key default gen_random_uuid(),
   data_beneficio date not null,
   cpf text not null,
+  placa text null,
   nome text not null,
   unidade_codigo text null references public.unidades(codigo) on update cascade on delete restrict,
   setor_codigo text null references public.setor(codigo) on update cascade on delete restrict,
@@ -99,6 +100,8 @@ comment on table public.beneficios_agregamento is
   'Beneficios de agregamento importados por CPF para composicao da DRE.';
 comment on column public.beneficios_combustivel.plano_conta_id is
   'Conta analitica escolhida na importacao. Esta conta define a linha da DRE.';
+comment on column public.beneficios_combustivel.placa is
+  'Placa informada no arquivo de combustivel.';
 comment on column public.beneficios_agregamento.plano_conta_id is
   'Conta analitica escolhida na importacao. Esta conta define a linha da DRE.';
 
@@ -243,7 +246,8 @@ select
   pc.caminho_descricao,
   pc.conta_codigo || ' - ' || pc.conta_descricao as conta_analitica,
   pc.grupo_codigo || ' - ' || pc.grupo_descricao as grupo_conta,
-  pc.subgrupo_codigo || ' - ' || pc.subgrupo_descricao as subgrupo_conta
+  pc.subgrupo_codigo || ' - ' || pc.subgrupo_descricao as subgrupo_conta,
+  b.placa
 from public.beneficios_combustivel b
 left join public.unidades u
   on u.codigo = b.unidade_codigo
@@ -284,7 +288,8 @@ select
   pc.caminho_descricao,
   pc.conta_codigo || ' - ' || pc.conta_descricao as conta_analitica,
   pc.grupo_codigo || ' - ' || pc.grupo_descricao as grupo_conta,
-  pc.subgrupo_codigo || ' - ' || pc.subgrupo_descricao as subgrupo_conta
+  pc.subgrupo_codigo || ' - ' || pc.subgrupo_descricao as subgrupo_conta,
+  null::text as placa
 from public.beneficios_agregamento b
 left join public.unidades u
   on u.codigo = b.unidade_codigo

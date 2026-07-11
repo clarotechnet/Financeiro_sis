@@ -53,6 +53,9 @@ const normalizeCpf = (value: string) => {
   return digits.length < 11 ? digits.padStart(11, '0') : digits;
 };
 
+const normalizePlaca = (value: string | null | undefined) =>
+  String(value || '').trim().replace(/\s+/g, ' ').toUpperCase();
+
 const chunkArray = <T,>(items: T[], size: number) => {
   const chunks: T[][] = [];
   for (let i = 0; i < items.length; i += size) chunks.push(items.slice(i, i + size));
@@ -182,12 +185,13 @@ export function useBeneficios(tipo: BeneficioTipo) {
       const q = filters.busca.trim().toLowerCase();
       rows = rows.filter(row =>
         row.nome.toLowerCase().includes(q) ||
-        row.cpf.includes(q.replace(/\D/g, ''))
+        row.cpf.includes(q.replace(/\D/g, '')) ||
+        (tipo === 'combustivel' && row.placa?.toLowerCase().includes(q))
       );
     }
 
     return rows;
-  }, [data, filters]);
+  }, [data, filters, tipo]);
 
   const kpis = useMemo(() => ({
     totalRegistros: filteredData.length,
@@ -205,10 +209,11 @@ export function useBeneficios(tipo: BeneficioTipo) {
       const normalizedRows = payload.rows
         .map(row => ({
           cpf: normalizeCpf(row.cpf),
+          placa: normalizePlaca(row.placa),
           valor: Number(row.valor) || 0,
         }))
         .filter(row => {
-          if (!row.cpf || row.valor <= 0) {
+          if (!row.cpf || row.valor <= 0 || (tipo === 'combustivel' && !row.placa)) {
             skipped++;
             return false;
           }
@@ -253,7 +258,7 @@ export function useBeneficios(tipo: BeneficioTipo) {
           return [];
         }
 
-        return [{
+        const baseRow = {
           data_beneficio: payload.data_beneficio,
           cpf: registro.cpf,
           nome: registro.nome,
@@ -262,7 +267,13 @@ export function useBeneficios(tipo: BeneficioTipo) {
           plano_conta_id: payload.plano_conta_id,
           valor: row.valor,
           arquivo_nome: payload.arquivo_nome || null,
-        }];
+        };
+
+        return [
+          tipo === 'combustivel'
+            ? { ...baseRow, placa: row.placa }
+            : baseRow,
+        ];
       });
 
       const table = TABLE_BY_TIPO[tipo];

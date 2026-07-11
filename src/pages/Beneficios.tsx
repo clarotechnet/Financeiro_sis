@@ -65,7 +65,7 @@ const parseNum = (value: any): number => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
-const parseBenefitRows = async (file: File): Promise<BeneficioImportRow[]> => {
+const parseBenefitRows = async (file: File, tipo: BeneficioTipo): Promise<BeneficioImportRow[]> => {
   const buffer = await file.arrayBuffer();
   const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -74,11 +74,13 @@ const parseBenefitRows = async (file: File): Promise<BeneficioImportRow[]> => {
   return raw.flatMap(row => {
     const entries = Object.entries(row);
     let cpfValue: any = null;
+    let placaValue: any = null;
     let valorValue: any = null;
 
     for (const [key, value] of entries) {
       const normalizedKey = normKey(key);
       if (cpfValue == null && normalizedKey.includes('CPF')) cpfValue = value;
+      if (tipo === 'combustivel' && placaValue == null && normalizedKey.includes('PLACA')) placaValue = value;
       if (
         valorValue == null &&
         (
@@ -93,13 +95,15 @@ const parseBenefitRows = async (file: File): Promise<BeneficioImportRow[]> => {
     }
 
     if (cpfValue == null) cpfValue = entries[0]?.[1] ?? null;
-    if (valorValue == null) valorValue = entries[1]?.[1] ?? null;
+    if (tipo === 'combustivel' && placaValue == null) placaValue = entries[1]?.[1] ?? null;
+    if (valorValue == null) valorValue = entries[tipo === 'combustivel' ? 2 : 1]?.[1] ?? null;
 
     const cpf = normalizeCpf(cpfValue);
+    const placa = String(placaValue ?? '').trim().replace(/\s+/g, ' ').toUpperCase();
     const valor = parseNum(valorValue);
-    if (!cpf && valor <= 0) return [];
+    if (!cpf && !placa && valor <= 0) return [];
 
-    return [{ cpf, valor }];
+    return tipo === 'combustivel' ? [{ cpf, placa, valor }] : [{ cpf, valor }];
   });
 };
 
@@ -228,14 +232,20 @@ const ImportDialog: React.FC<ImportDialogProps> = ({ open, tipo, contas, importi
       return;
     }
     if (!file) {
-      setError('Selecione um arquivo Excel com CPF e Valor.');
+      setError(tipo === 'combustivel'
+        ? 'Selecione um arquivo Excel com CPF, Placa e Valor.'
+        : 'Selecione um arquivo Excel com CPF e Valor.'
+      );
       return;
     }
 
     try {
-      const rows = await parseBenefitRows(file);
+      const rows = await parseBenefitRows(file, tipo);
       if (rows.length === 0) {
-        setError('Nenhuma linha com CPF e Valor foi encontrada.');
+        setError(tipo === 'combustivel'
+          ? 'Nenhuma linha com CPF, Placa e Valor foi encontrada.'
+          : 'Nenhuma linha com CPF e Valor foi encontrada.'
+        );
         return;
       }
 
@@ -283,9 +293,15 @@ const ImportDialog: React.FC<ImportDialogProps> = ({ open, tipo, contas, importi
               accept=".xlsx,.xls"
               onChange={event => setFile(event.target.files?.[0] || null)}
             />
+            {tipo === 'combustivel' ? (
+              <p className="text-xs text-muted-foreground">
+                Use uma planilha com as colunas CPF, Placa e Valor. A conta analitica escolhida acima sera aplicada em todas as linhas importadas.
+              </p>
+            ) : (
             <p className="text-xs text-muted-foreground">
               Use uma planilha com as colunas CPF e Valor. A conta analítica escolhida acima será aplicada em todas as linhas importadas.
             </p>
+            )}
           </div>
         </div>
 
@@ -427,7 +443,7 @@ const Beneficios: React.FC = () => {
             <div className="space-y-1">
               <Label className="form-label">Buscar</Label>
               <Input
-                placeholder="Nome ou CPF"
+                placeholder={tipo === 'combustivel' ? 'Nome, CPF ou placa' : 'Nome ou CPF'}
                 value={filters.busca}
                 onChange={event => setFilters({ busca: event.target.value })}
               />
@@ -487,6 +503,9 @@ const Beneficios: React.FC = () => {
                     <th className="text-left py-3 px-3 font-semibold">Unidade</th>
                     <th className="text-left py-3 px-3 font-semibold">Nome</th>
                     <th className="text-left py-3 px-3 font-semibold">CPF</th>
+                    {tipo === 'combustivel' && (
+                      <th className="text-left py-3 px-3 font-semibold">Placa</th>
+                    )}
                     <th className="text-left py-3 px-3 font-semibold">Centro de Custo</th>
                     <th className="text-left py-3 px-3 font-semibold">Conta Analítica</th>
                     <th className="text-right py-3 px-3 font-semibold">Valor</th>
@@ -500,6 +519,9 @@ const Beneficios: React.FC = () => {
                       <td className="py-3 px-3">{row.unidade_nome || '-'}</td>
                       <td className="py-3 px-3 font-semibold">{row.nome}</td>
                       <td className="py-3 px-3">{row.cpf}</td>
+                      {tipo === 'combustivel' && (
+                        <td className="py-3 px-3 font-semibold">{row.placa || '-'}</td>
+                      )}
                       <td className="py-3 px-3">{row.setor_nome || '-'}</td>
                       <td className="py-3 px-3">{row.conta_analitica || '-'}</td>
                       <td className="py-3 px-3 text-right font-bold text-primary">{fmtBRL(row.valor)}</td>
