@@ -50,6 +50,7 @@ import {
   Search,
   Shield,
   Upload,
+  ListTree,
 } from 'lucide-react';
 
 interface PendingUser {
@@ -98,7 +99,22 @@ interface SubgrupoOpcao {
   natureza: string | null;
 }
 
+interface PlanoContaRow {
+  id: string;
+  codigo: string;
+  descricao: string;
+  natureza: string | null;
+  nivel: number;
+  e_analitica: boolean;
+  parent_id: string | null;
+  ativo: boolean;
+  ordem: number | null;
+  created_at: string;
+  updated_at: string | null;
+}
+
 type ExcelRow = Record<string, unknown>;
+type PlanoContasQuickFilter = 'todos' | 'grupo' | 'subgrupo' | 'analitica' | 'inativa';
 
 const REGISTROS_TEMPLATE_HEADERS = ['nome', 'cpf', 'setor_codigo', 'unidade_codigo', 'subgrupo_codigo'];
 const REGISTROS_PAGE_SIZE = 50;
@@ -126,12 +142,16 @@ export default function Admin() {
   const [opcoesUnidades, setOpcoesUnidades] = useState<UnidadeOpcao[]>([]);
   const [opcoesSetores, setOpcoesSetores] = useState<SetorOpcao[]>([]);
   const [opcoesSubgrupos, setOpcoesSubgrupos] = useState<SubgrupoOpcao[]>([]);
+  const [planoContas, setPlanoContas] = useState<PlanoContaRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingRegistros, setIsLoadingRegistros] = useState(true);
+  const [isLoadingPlanoContas, setIsLoadingPlanoContas] = useState(true);
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [savingRegistroId, setSavingRegistroId] = useState<string | null>(null);
   const [isImportingRegistros, setIsImportingRegistros] = useState(false);
   const [registroSearch, setRegistroSearch] = useState('');
+  const [planoContasSearch, setPlanoContasSearch] = useState('');
+  const [planoContasQuickFilter, setPlanoContasQuickFilter] = useState<PlanoContasQuickFilter>('todos');
   const [registroPage, setRegistroPage] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isRh = profile?.role === ROLE_RH;
@@ -221,6 +241,34 @@ export default function Admin() {
     setOpcoesSubgrupos((data || []) as SubgrupoOpcao[]);
   }, [canAccessDepartment]);
 
+  const fetchPlanoContas = useCallback(async () => {
+    if (!canAccessSettingsPage) {
+      setPlanoContas([]);
+      setIsLoadingPlanoContas(false);
+      return;
+    }
+
+    setIsLoadingPlanoContas(true);
+    try {
+      const { data, error } = await externalSupabase
+        .from('plano_contas')
+        .select('id,codigo,descricao,natureza,nivel,e_analitica,parent_id,ativo,ordem,created_at,updated_at')
+        .order('codigo', { ascending: true });
+
+      if (error) throw error;
+      setPlanoContas((data || []) as PlanoContaRow[]);
+    } catch (error) {
+      console.error('Erro ao buscar plano de contas:', error);
+      toast({
+        title: 'Erro',
+        description: 'Nao foi possivel carregar o plano de contas.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoadingPlanoContas(false);
+    }
+  }, [canAccessSettingsPage]);
+
   const fetchUsers = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -305,7 +353,8 @@ export default function Admin() {
     fetchUnidades();
     fetchSetores();
     fetchSubgruposPlanoContas();
-  }, [authLoading, canAccessDepartment, canAccessSettingsPage, canViewUsers, navigate, fetchUsers, fetchRegistrosDados, fetchUnidades, fetchSetores, fetchSubgruposPlanoContas]);
+    fetchPlanoContas();
+  }, [authLoading, canAccessDepartment, canAccessSettingsPage, canViewUsers, navigate, fetchUsers, fetchRegistrosDados, fetchUnidades, fetchSetores, fetchSubgruposPlanoContas, fetchPlanoContas]);
 
   useEffect(() => {
     if (opcoesSetores.length === 0) return;
@@ -647,6 +696,52 @@ export default function Admin() {
     );
   }, [registrosDados, registroSearch, setorNomeByCodigo, subgrupoById, unidadeNomeByCodigo]);
 
+  const planoContaById = useMemo(() => {
+    return new Map(planoContas.map(conta => [conta.id, conta]));
+  }, [planoContas]);
+
+  const getPlanoContaTipo = (conta: PlanoContaRow) => {
+    if (conta.e_analitica) return 'Analitica';
+    if (conta.nivel === 1) return 'Grupo';
+    if (conta.nivel === 2) return 'Subgrupo';
+    return `Nivel ${conta.nivel}`;
+  };
+
+  const filteredPlanoContas = useMemo(() => {
+    const searchTerm = planoContasSearch.trim().toLowerCase();
+    const byQuickFilter = planoContas.filter(conta => {
+      if (planoContasQuickFilter === 'todos') return true;
+      if (planoContasQuickFilter === 'grupo') return conta.nivel === 1;
+      if (planoContasQuickFilter === 'subgrupo') return conta.nivel === 2;
+      if (planoContasQuickFilter === 'analitica') return conta.e_analitica;
+      if (planoContasQuickFilter === 'inativa') return !conta.ativo;
+      return true;
+    });
+
+    if (!searchTerm) return byQuickFilter;
+
+    return byQuickFilter.filter(conta => {
+      const parent = conta.parent_id ? planoContaById.get(conta.parent_id) : null;
+      return [
+        conta.codigo,
+        conta.descricao,
+        conta.natureza,
+        getPlanoContaTipo(conta),
+        parent?.codigo,
+        parent?.descricao,
+        conta.ativo ? 'ativo' : 'inativo',
+      ].some(value => (value || '').toLowerCase().includes(searchTerm));
+    });
+  }, [planoContaById, planoContas, planoContasQuickFilter, planoContasSearch]);
+
+  const planoContasStats = useMemo(() => ({
+    total: planoContas.length,
+    grupos: planoContas.filter(conta => conta.nivel === 1).length,
+    subgrupos: planoContas.filter(conta => conta.nivel === 2).length,
+    analiticas: planoContas.filter(conta => conta.e_analitica).length,
+    inativas: planoContas.filter(conta => !conta.ativo).length,
+  }), [planoContas]);
+
   const totalRegistroPages = Math.max(1, Math.ceil(filteredRegistrosDados.length / REGISTROS_PAGE_SIZE));
   const paginatedRegistrosDados = useMemo(() => {
     const start = registroPage * REGISTROS_PAGE_SIZE;
@@ -681,7 +776,7 @@ export default function Admin() {
     );
   }
 
-  if (!canAccessDepartment) {
+  if (!canAccessSettingsPage) {
     return null;
   }
 
@@ -708,6 +803,7 @@ export default function Admin() {
                   fetchUnidades();
                   fetchSubgruposPlanoContas();
                 }
+                fetchPlanoContas();
               }}
               variant="outline"
               className="gap-2"
@@ -730,6 +826,9 @@ export default function Admin() {
                 Departamento Pessoal
               </TabsTrigger>
             )}
+            <TabsTrigger value="plano-contas">
+              Plano de Contas
+            </TabsTrigger>
           </TabsList>
 
           {canViewUsers && (
@@ -1204,6 +1303,155 @@ export default function Admin() {
                     </Button>
                   </div>
                 )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="plano-contas">
+            <Card className="overflow-hidden">
+              <CardHeader className="px-4 pt-4 pb-3">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <ListTree className="h-5 w-5" />
+                      Plano de Contas
+                    </CardTitle>
+                    <CardDescription>
+                      Visualizacao dos grupos, subgrupos e contas analiticas cadastradas.
+                    </CardDescription>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-5">
+                    {([
+                      { key: 'todos', label: `${planoContasStats.total} total` },
+                      { key: 'grupo', label: `${planoContasStats.grupos} grupo(s)` },
+                      { key: 'subgrupo', label: `${planoContasStats.subgrupos} subgrupo(s)` },
+                      { key: 'analitica', label: `${planoContasStats.analiticas} analitica(s)` },
+                    ] as { key: PlanoContasQuickFilter; label: string }[]).map(item => (
+                      <button
+                        key={item.key}
+                        type="button"
+                        onClick={() => setPlanoContasQuickFilter(item.key)}
+                        className={`rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
+                          planoContasQuickFilter === item.key
+                            ? 'border-primary bg-primary text-primary-foreground'
+                            : 'border-border bg-secondary text-secondary-foreground hover:bg-muted'
+                        }`}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                    {planoContasStats.inativas > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setPlanoContasQuickFilter('inativa')}
+                        className={`rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
+                          planoContasQuickFilter === 'inativa'
+                            ? 'border-destructive bg-destructive text-destructive-foreground'
+                            : 'border-destructive/40 bg-destructive/10 text-destructive hover:bg-destructive/20'
+                        }`}
+                      >
+                        {planoContasStats.inativas} inativa(s)
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-3 px-4 pb-4">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div className="relative w-full md:max-w-md">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      value={planoContasSearch}
+                      onChange={(event) => setPlanoContasSearch(event.target.value)}
+                      placeholder="Buscar por codigo, descricao, natureza, tipo ou pai"
+                      className="h-9 pl-9 text-sm"
+                    />
+                  </div>
+                  <Badge variant="secondary">
+                    {filteredPlanoContas.length} conta(s) encontrada(s)
+                  </Badge>
+                  {planoContasQuickFilter !== 'todos' && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPlanoContasQuickFilter('todos')}
+                      className="h-8"
+                    >
+                      Limpar filtro rapido
+                    </Button>
+                  )}
+                </div>
+
+                <div className="w-full overflow-auto rounded-md border border-border max-h-[calc(100vh-330px)]">
+                  <Table className="min-w-[1180px] text-xs">
+                    <TableHeader className="sticky top-0 z-10 bg-card">
+                      <TableRow>
+                        <TableHead className="h-8 px-2 text-xs">Codigo</TableHead>
+                        <TableHead className="h-8 px-2 text-xs">Descricao</TableHead>
+                        <TableHead className="h-8 px-2 text-xs">Tipo</TableHead>
+                        <TableHead className="h-8 px-2 text-xs">Natureza</TableHead>
+                        <TableHead className="h-8 px-2 text-xs">Conta Pai</TableHead>
+                        <TableHead className="h-8 px-2 text-xs">Status</TableHead>
+                        <TableHead className="h-8 px-2 text-xs">Atualizado em</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {isLoadingPlanoContas ? (
+                        <TableRow>
+                          <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                            <Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin" />
+                            Carregando plano de contas...
+                          </TableCell>
+                        </TableRow>
+                      ) : filteredPlanoContas.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                            Nenhuma conta encontrada.
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        filteredPlanoContas.map(conta => {
+                          const parent = conta.parent_id ? planoContaById.get(conta.parent_id) : null;
+                          const tipo = getPlanoContaTipo(conta);
+                          const indent = Math.max(conta.nivel - 1, 0) * 18;
+
+                          return (
+                            <TableRow key={conta.id} className={!conta.ativo ? 'opacity-60' : ''}>
+                              <TableCell className="whitespace-nowrap px-2 py-1.5 font-mono font-semibold">
+                                {conta.codigo}
+                              </TableCell>
+                              <TableCell className="min-w-[360px] px-2 py-1.5">
+                                <div style={{ paddingLeft: `${indent}px` }} className="font-semibold">
+                                  {conta.descricao}
+                                </div>
+                              </TableCell>
+                              <TableCell className="px-2 py-1.5">
+                                <Badge variant={conta.e_analitica ? 'default' : 'secondary'}>
+                                  {tipo}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="px-2 py-1.5">
+                                {conta.natureza || '-'}
+                              </TableCell>
+                              <TableCell className="min-w-[260px] px-2 py-1.5">
+                                {parent ? `${parent.codigo} - ${parent.descricao}` : '-'}
+                              </TableCell>
+                              <TableCell className="px-2 py-1.5">
+                                <Badge variant={conta.ativo ? 'outline' : 'destructive'}>
+                                  {conta.ativo ? 'Ativo' : 'Inativo'}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="whitespace-nowrap px-2 py-1.5">
+                                {conta.updated_at ? formatDate(conta.updated_at) : formatDate(conta.created_at)}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>

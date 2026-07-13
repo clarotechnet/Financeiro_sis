@@ -123,11 +123,11 @@ const Comissionamento: React.FC = () => {
     }
 
     setIsLoadingNotificationRecords(true);
-    externalSupabase
+    Promise.resolve(externalSupabase
       .from('vw_lancamentos_pix_com_conta_analitica')
       .select('*')
       .eq('id', notificacaoLancamentoId)
-      .maybeSingle()
+      .maybeSingle())
       .then(({ data, error }) => {
         if (!active) return;
         if (error) {
@@ -156,12 +156,12 @@ const Comissionamento: React.FC = () => {
     }
 
     setIsLoadingNotificationRecords(true);
-    externalSupabase
+    Promise.resolve(externalSupabase
       .from('vw_lancamentos_pix_com_conta_analitica')
       .select('*')
       .gt('created_at', notificacaoDesde)
       .order('created_at', { ascending: false })
-      .order('id', { ascending: false })
+      .order('id', { ascending: false }))
       .then(({ data, error }) => {
         if (!active) return;
         if (error) {
@@ -235,7 +235,7 @@ const Comissionamento: React.FC = () => {
 
         {hasData && (
           <div className="tab-content relative z-0">
-            {activeTab === 'kpis' && <ComissionamentoKPIs kpis={hook.kpis} />}
+            {activeTab === 'kpis' && <ComissionamentoKPIs kpis={hook.kpis} lancamentos={hook.data} />}
             {activeTab === 'charts' && (
               <ComissionamentoCharts chartData={hook.chartData} ranking={hook.ranking} frentesData={hook.frentesData} />
             )}
