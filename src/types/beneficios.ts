@@ -1,6 +1,6 @@
 import { OpcaoSelect } from '@/types/comissionamento';
 
-export type BeneficioTipo = 'combustivel' | 'agregamento';
+export type BeneficioTipo = 'combustivel' | 'agregamento' | 'flash';
 
 export interface BeneficioRegistro {
   tipo: BeneficioTipo;

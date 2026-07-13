@@ -99,6 +99,62 @@ const stripContaAnaliticaCodigo = (value: string | null | undefined) =>
 const getDashboardContaLabel = (row: LancamentoPix) =>
   stripContaAnaliticaCodigo(row.conta_analitica) || 'Sem Conta Analítica';
 
+const formatDateBR = (value: string | null | undefined) => {
+  if (!value) return '';
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : value;
+};
+
+const formatCurrencyBR = (value: number | null | undefined) =>
+  value == null
+    ? ''
+    : value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+const onlyDigits = (value: unknown) => String(value ?? '').replace(/\D/g, '');
+
+const matchesGeneralSearch = (row: LancamentoPix, query: string) => {
+  const normalizedQuery = normalizeFilterValue(query);
+  const queryDigits = onlyDigits(query);
+
+  if (!normalizedQuery && !queryDigits) return true;
+
+  const searchableValues = [
+    row.data_lancamento,
+    formatDateBR(row.data_lancamento),
+    row.nome,
+    row.favorecido,
+    row.chave_pix,
+    row.cnpj,
+    row.unidade,
+    row.unidade_cadastro,
+    row.unidade_codigo,
+    row.centro_de_custo,
+    row.setor_nome,
+    row.setor_codigo,
+    row.conta_analitica,
+    row.conta_analitica_codigo,
+    row.conta_analitica_descricao,
+    row.descricao,
+    row.banco,
+    row.banco_cadastro,
+    row.banco_codigo,
+    row.status_pag,
+    row.categoria,
+    row.secao_custeio,
+    row.centro_custeio,
+    row.valor,
+    formatCurrencyBR(row.valor),
+  ];
+
+  const textHaystack = searchableValues
+    .map(value => normalizeFilterValue(String(value ?? '')))
+    .join(' ');
+  const digitHaystack = searchableValues.map(onlyDigits).join(' ');
+
+  return textHaystack.includes(normalizedQuery)
+    || Boolean(queryDigits && digitHaystack.includes(queryDigits));
+};
+
 const createClientUuid = () => (
   typeof crypto !== 'undefined' && 'randomUUID' in crypto
     ? crypto.randomUUID()
@@ -270,8 +326,8 @@ export function useComissionamento() {
       );
     }
     if (filters.descricao && filters.descricao.trim()) {
-      const q = filters.descricao.trim().toLowerCase();
-      result = result.filter(r => (r.descricao || '').toLowerCase().includes(q));
+      const q = filters.descricao.trim();
+      result = result.filter(r => matchesGeneralSearch(r, q));
     }
     if (filters.contaAnalitica.length > 0) {
       result = result.filter(r => filters.contaAnalitica.includes(r.conta_analitica || ''));

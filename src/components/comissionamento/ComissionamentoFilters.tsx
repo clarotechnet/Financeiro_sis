@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Label } from '@/components/ui/label';
 import { ComissionamentoFilters as FiltersType, LancamentoPix, OpcaoSelect } from '@/types/comissionamento';
-import { X, FileEdit, Download, FileText, UserPlus } from 'lucide-react';
+import { X, FileEdit, Download, FileText, UserPlus, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ComissionamentoFormDialog } from './ComissionamentoFormDialog';
 import { ComissionamentoImportExcel } from './ComissionamentoImportExcel';
@@ -101,11 +101,13 @@ interface Props {
   opcoes: OpcoesData;
   onImportExcel?: (rows: Record<string, any>[]) => Promise<{ inserted: number; skipped: number; errors: string[] }>;
   showActions?: boolean;
+  showGeneralSearch?: boolean;
 }
 
 export const ComissionamentoFilters: React.FC<Props> = ({
   filters, setFilters, clearFilters, uniqueCidades, uniqueNomes, totalFiltered,
-  onManualSubmit, filteredData, opcoes, onImportExcel, showActions = true
+  onManualSubmit, filteredData, opcoes, onImportExcel, showActions = true,
+  showGeneralSearch = false
 }) => {
   const { isAdmin } = useAuth();
   const hasFilters = filters.cidade.length > 0 || filters.dataInicio || filters.dataFim
@@ -318,6 +320,22 @@ export const ComissionamentoFilters: React.FC<Props> = ({
         </>
       )}
       <div className="filter-section">
+          {showGeneralSearch && (
+            <div className="form-group md:col-span-2">
+              <Label className="form-label">Buscar Geral</Label>
+              <div className="relative">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  type="text"
+                  className="form-control pl-9 w-full"
+                  placeholder="Pesquisar unidade, favorecido, chave PIX, centro de custo, observação, banco ou valor"
+                  value={filters.descricao}
+                  onChange={e => setFilters({ descricao: e.target.value })}
+                />
+              </div>
+            </div>
+          )}
+
           <MultiSelect
             label="Unidade"
             options={uniqueUnidades}

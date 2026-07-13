@@ -12,6 +12,7 @@ import {
 const TABLE_BY_TIPO: Record<BeneficioTipo, string> = {
   combustivel: 'beneficios_combustivel',
   agregamento: 'beneficios_agregamento',
+  flash: 'beneficios_flash',
 };
 
 const EMPTY_OPCOES: BeneficioOpcoes = {

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { AlertCircle, CheckCircle, ChevronDown, ChevronLeft, ChevronRight, Fuel, Gift, Loader2, PackagePlus, RefreshCw, Upload, X } from 'lucide-react';
+import { AlertCircle, CheckCircle, ChevronDown, ChevronLeft, ChevronRight, Fuel, Gift, Loader2, PackagePlus, RefreshCw, Upload, X, Zap } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -18,6 +18,7 @@ const PAGE_SIZE = 50;
 const TABS: { id: BeneficioTipo; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: 'combustivel', label: 'Combustível', icon: Fuel },
   { id: 'agregamento', label: 'Agregamento', icon: PackagePlus },
+  { id: 'flash', label: 'Flash', icon: Zap },
 ];
 
 const fmtBRL = (value: number | null | undefined) =>
@@ -87,7 +88,8 @@ const parseBenefitRows = async (file: File, tipo: BeneficioTipo): Promise<Benefi
           normalizedKey === 'VALOR' ||
           normalizedKey.includes('VALOR') ||
           normalizedKey.includes('COMBUSTIVEL') ||
-          normalizedKey.includes('AGREGAMENTO')
+          normalizedKey.includes('AGREGAMENTO') ||
+          normalizedKey.includes('FLASH')
         )
       ) {
         valorValue = value;
@@ -267,7 +269,7 @@ const ImportDialog: React.FC<ImportDialogProps> = ({ open, tipo, contas, importi
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Upload className="w-5 h-5 text-primary" />
-            Importar {tipo === 'combustivel' ? 'Combustível' : 'Agregamento'}
+            Importar {tipo === 'combustivel' ? 'Combustível' : tipo === 'flash' ? 'Flash' : 'Agregamento'}
           </DialogTitle>
         </DialogHeader>
 
@@ -327,7 +329,7 @@ const ImportDialog: React.FC<ImportDialogProps> = ({ open, tipo, contas, importi
 const Beneficios: React.FC = () => {
   const [params, setParams] = useSearchParams();
   const rawTab = params.get('tab');
-  const tipo: BeneficioTipo = rawTab === 'agregamento' ? 'agregamento' : 'combustivel';
+  const tipo: BeneficioTipo = rawTab === 'agregamento' || rawTab === 'flash' ? rawTab : 'combustivel';
   const {
     data,
     isLoading,

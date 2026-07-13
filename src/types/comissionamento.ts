@@ -53,7 +53,7 @@ export interface ComissionamentoFilters {
   contrato: string[]; // centro_de_custo
   dataExecInicio: string;
   dataExecFim: string;
-  descricao: string;        // busca texto
+  descricao: string;        // busca geral
   cnpj: string[];           // multi-select
   contaAnalitica: string[]; // multi-select
   banco: string[];          // multi-select

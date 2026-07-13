@@ -227,6 +227,7 @@ const Comissionamento: React.FC = () => {
           opcoes={hook.opcoes}
           onImportExcel={hook.importExcel}
           showActions={!isDashboard}
+          showGeneralSearch={activeTab === 'table'}
         />
 
         {hook.isLoading && !hasData && (

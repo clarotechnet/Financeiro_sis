@@ -1,7 +1,7 @@
 import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
-    DollarSign, Wallet, BarChart3, PieChart, Layers, Table as TableIcon, Coins, ChevronDown, Settings, FileBarChart, TrendingUp, Gift, Fuel, PackagePlus,
+    DollarSign, Wallet, BarChart3, PieChart, Layers, Table as TableIcon, Coins, ChevronDown, Settings, FileBarChart, TrendingUp, Gift, Fuel, PackagePlus, Zap,
 } from 'lucide-react';
 import {
     Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
@@ -30,6 +30,7 @@ const FOLHA_TABS: SubItem[] = [
 const BENEFICIOS_TABS: SubItem[] = [
     { id: 'combustivel', label: 'Combustível', icon: Fuel },
     { id: 'agregamento', label: 'Agregamento', icon: PackagePlus },
+    { id: 'flash', label: 'Flash', icon: Zap },
 ];
 
 

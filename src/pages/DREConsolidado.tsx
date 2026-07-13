@@ -112,6 +112,10 @@ const dreDescricaoLabel = (row: DreLinha) => {
   if (row.codigo === '02') return '(-) CUSTOS';
   if (row.codigo === '03') return '(-) DESPESAS OPERACIONAIS';
   if (row.codigo === '04.02') return '(-) Despesas Financeiras';
+  if (row.codigo === '04.97') return 'Lucro Antes do IRPJ e CSLL';
+  if (row.codigo === '04.98') return '(-) IRPJ - Corrente e Diferido';
+  if (row.codigo === '04.99') return '(-) CSLL - Corrente e Diferido';
+  if (row.codigo === '04.100') return 'Lucro Líquido';
   return row.descricao;
 };
 
@@ -122,7 +126,8 @@ const computeDreTotals = (rows: DreLinha[]): DreLinha[] => {
   totals.set('01.99', value('01.01') + value('01.02'));
   totals.set('02.99', value('01.99') + value('02.01'));
   totals.set('03.99', value('02.99') + value('03.01') + value('03.02'));
-  totals.set('04.99', value('03.99') + value('04.01') + value('04.02'));
+  totals.set('04.97', value('03.99') + value('04.01') + value('04.02'));
+  totals.set('04.100', value('04.97') + value('04.98') + value('04.99'));
 
   return rows.map(row => ({
     ...row,
@@ -429,17 +434,6 @@ const DREConsolidado: React.FC = () => {
     const rows: DreDisplayRow[] = [];
 
     linhasDreExibidas.forEach(row => {
-      if (row.codigo === '04.99' && !shouldShowResultadoFinanceiro) {
-        rows.push({
-          key: 'resultado-financeiro-zero',
-          kind: 'resultado_financeiro_zero',
-          descricao: 'Resultado Financeiro',
-          total: 0,
-          nivel: 1,
-          tipo: 'subtotal',
-        });
-      }
-
       rows.push({
         key: row.dre_linha_id,
         kind: 'linha',
@@ -877,8 +871,8 @@ const DREConsolidado: React.FC = () => {
                 <div className="text-xl font-extrabold text-primary mt-1">{fmtBRLDre(totalByCodigo.get('03.99') || 0)}</div>
               </div>
               <div className="card">
-                <div className="text-xs text-muted-foreground">Resultado Líquido</div>
-                <div className="text-xl font-extrabold text-primary mt-1">{fmtBRLDre(totalByCodigo.get('04.99') || 0)}</div>
+                <div className="text-xs text-muted-foreground">Lucro Líquido</div>
+                <div className="text-xl font-extrabold text-primary mt-1">{fmtBRLDre(totalByCodigo.get('04.100') || 0)}</div>
               </div>
             </div>
 
@@ -893,28 +887,28 @@ const DREConsolidado: React.FC = () => {
                   <p className="text-sm text-muted-foreground">Subgrupo: {subgrupoLabel}</p>
                   <p className="text-sm text-muted-foreground">Conta Analítica: {contaAnaliticaLabel}</p>
                 </div>
-              <div className="text-xs text-muted-foreground md:text-right">
-                <div>{movimentos.length} movimento(s) analisado(s)</div>
-                <div>{movimentosPendentes.length} sem linha DRE</div>
-                {generatedAt && <div>Gerado em {generatedAt.toLocaleString('pt-BR')}</div>}
+                <div className="text-xs text-muted-foreground md:text-right">
+                  <div>{movimentos.length} movimento(s) analisado(s)</div>
+                  <div>{movimentosPendentes.length} sem linha DRE</div>
+                  {generatedAt && <div>Gerado em {generatedAt.toLocaleString('pt-BR')}</div>}
+                </div>
               </div>
-            </div>
 
-            {movimentosPendentes.length > 0 && (
-              <div className="dre-no-print mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
-                DRE parcial: {movimentosPendentes.length} movimento(s) ainda estao sem linha DRE e nao entram nos totais.
-                Revise a tabela de movimentos abaixo para mapear essas contas.
-              </div>
-            )}
+              {movimentosPendentes.length > 0 && (
+                <div className="dre-no-print mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
+                  DRE parcial: {movimentosPendentes.length} movimento(s) ainda estao sem linha DRE e nao entram nos totais.
+                  Revise a tabela de movimentos abaixo para mapear essas contas.
+                </div>
+              )}
 
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[640px] text-sm dre-print-table">
-                <thead>
-                  <tr className="border-b border-border text-left text-muted-foreground">
-                    <th className="py-2 px-2">Descrição</th>
-                    <th className="py-2 px-2 text-right w-48">Valor</th>
-                  </tr>
-                </thead>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[640px] text-sm dre-print-table">
+                  <thead>
+                    <tr className="border-b border-border text-left text-muted-foreground">
+                      <th className="py-2 px-2">Descrição</th>
+                      <th className="py-2 px-2 text-right w-48">Valor</th>
+                    </tr>
+                  </thead>
                   <tbody>
                     {dreDisplayRows.map(row => {
                       const total = Number(row.total) || 0;
