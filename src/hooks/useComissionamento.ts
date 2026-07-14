@@ -474,6 +474,17 @@ export function useComissionamento() {
     await fetchData();
   }, [fetchData]);
 
+  const updateRecordsStatus = useCallback(async (ids: string[], status: string) => {
+    if (ids.length === 0) return;
+
+    const { error: updateError } = await externalSupabase
+      .from('lancamentos_pix')
+      .update({ status_pag: status })
+      .in('id', ids);
+    if (updateError) throw updateError;
+    await fetchData();
+  }, [fetchData]);
+
   const deleteRecord = useCallback(async (id: string) => {
     const { error: deleteError } = await externalSupabase
       .from('lancamentos_pix')
@@ -676,6 +687,7 @@ export function useComissionamento() {
     fetchData,
     submitManualEntry,
     updateRecord,
+    updateRecordsStatus,
     deleteRecord,
     importExcel,
     uniqueCidades,

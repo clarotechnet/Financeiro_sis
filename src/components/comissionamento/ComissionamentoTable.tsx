@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { LancamentoPix, OpcaoSelect } from '@/types/comissionamento';
-import { ChevronDown, ChevronLeft, ChevronRight, Pencil, FileText, Eye } from 'lucide-react';
+import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Eye, FileText, ListChecks, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -28,6 +28,7 @@ interface OpcoesData {
 interface Props {
   data: LancamentoPix[];
   onUpdate: (id: string, updates: Record<string, any>) => Promise<void>;
+  onBulkUpdateStatus?: (ids: string[], status: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   opcoes: OpcoesData;
   canManage?: boolean;
@@ -249,7 +250,10 @@ type RateioTableRow =
   | { kind: 'rateio-summary'; key: string; loteId: string; record: LancamentoPix; items: LancamentoPix[]; total: number }
   | { kind: 'rateio-item'; key: string; record: LancamentoPix; index: number };
 
-export const ComissionamentoTable: React.FC<Props> = ({ data, onUpdate, onDelete, opcoes, canManage = true }) => {
+const isPaidStatus = (status: string | null | undefined) =>
+  (status || '').toUpperCase() === 'PAGO';
+
+export const ComissionamentoTable: React.FC<Props> = ({ data, onUpdate, onBulkUpdateStatus, onDelete, opcoes, canManage = true }) => {
   const [page, setPage] = useState(0);
   const [sortField, setSortField] = useState<keyof LancamentoPix>('data_lancamento');
   const [sortAsc, setSortAsc] = useState(false);
@@ -261,6 +265,9 @@ export const ComissionamentoTable: React.FC<Props> = ({ data, onUpdate, onDelete
   const [selectedPdfColumns, setSelectedPdfColumns] = useState<PdfColumnKey[]>(DEFAULT_PDF_COLUMNS);
   const [groupRateiosInFilteredPdf, setGroupRateiosInFilteredPdf] = useState(false);
   const [expandedRateioLotes, setExpandedRateioLotes] = useState<Set<string>>(() => new Set());
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [bulkUpdating, setBulkUpdating] = useState(false);
   const wrappedCellClass = 'whitespace-normal break-words leading-snug';
 
   const sorted = useMemo(() => {
@@ -319,6 +326,25 @@ export const ComissionamentoTable: React.FC<Props> = ({ data, onUpdate, onDelete
   const totalPages = Math.max(1, Math.ceil(tableRows.length / PAGE_SIZE));
   const pageData = tableRows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
+  const getSelectableIds = (tableRow: RateioTableRow) => {
+    if (tableRow.kind === 'rateio-summary') {
+      return tableRow.items
+        .filter(item => item.id && !isPaidStatus(item.status_pag))
+        .map(item => item.id as string);
+    }
+
+    const id = tableRow.record.id;
+    return id && !isPaidStatus(tableRow.record.status_pag) ? [id] : [];
+  };
+
+  const pageSelectableIds = useMemo(
+    () => pageData.flatMap(getSelectableIds),
+    [pageData]
+  );
+  const allPageSelected = pageSelectableIds.length > 0
+    && pageSelectableIds.every(id => selectedIds.has(id));
+  const somePageSelected = pageSelectableIds.some(id => selectedIds.has(id));
+
   useEffect(() => {
     setPage(currentPage => Math.min(currentPage, totalPages - 1));
   }, [totalPages]);
@@ -327,6 +353,19 @@ export const ComissionamentoTable: React.FC<Props> = ({ data, onUpdate, onDelete
     const validLotes = new Set(data.map(row => row.rateio_lote_id).filter(Boolean) as string[]);
     setExpandedRateioLotes(current => {
       const next = new Set([...current].filter(loteId => validLotes.has(loteId)));
+      return next.size === current.size ? current : next;
+    });
+  }, [data]);
+
+  useEffect(() => {
+    const validIds = new Set(
+      data
+        .filter(row => row.id && !isPaidStatus(row.status_pag))
+        .map(row => row.id as string)
+    );
+
+    setSelectedIds(current => {
+      const next = new Set([...current].filter(id => validIds.has(id)));
       return next.size === current.size ? current : next;
     });
   }, [data]);
@@ -348,7 +387,42 @@ export const ComissionamentoTable: React.FC<Props> = ({ data, onUpdate, onDelete
     });
   };
 
-  const columns: { key: keyof LancamentoPix | 'actions'; label: string }[] = [
+  const toggleSelectionMode = () => {
+    if (selectionMode) setSelectedIds(new Set());
+    setSelectionMode(current => !current);
+  };
+
+  const toggleSelectedIds = (ids: string[], checked: boolean) => {
+    setSelectedIds(current => {
+      const next = new Set(current);
+      ids.forEach(id => {
+        if (checked) next.add(id);
+        else next.delete(id);
+      });
+      return next;
+    });
+  };
+
+  const markSelectedAsPaid = async () => {
+    const ids = [...selectedIds];
+    if (ids.length === 0 || bulkUpdating) return;
+
+    setBulkUpdating(true);
+    try {
+      if (onBulkUpdateStatus) {
+        await onBulkUpdateStatus(ids, 'PAGO');
+      } else {
+        await Promise.all(ids.map(id => onUpdate(id, { status_pag: 'PAGO' })));
+      }
+      setSelectedIds(new Set());
+      setSelectionMode(false);
+    } finally {
+      setBulkUpdating(false);
+    }
+  };
+
+  const columns: { key: keyof LancamentoPix | 'actions' | 'selection'; label: string }[] = [
+    ...(canManage && selectionMode ? [{ key: 'selection' as const, label: '' }] : []),
     ...(canManage ? [{ key: 'actions' as const, label: '' }] : []),
     { key: 'data_lancamento', label: 'Data' },
     { key: 'unidade', label: 'Cidade/Unidade' },
@@ -556,6 +630,28 @@ export const ComissionamentoTable: React.FC<Props> = ({ data, onUpdate, onDelete
     <>
       <div className="flex flex-col items-end gap-2 mb-4">
         <div className="flex flex-wrap justify-end gap-2">
+          {canManage && (
+            <Button
+              variant={selectionMode ? 'default' : 'outline'}
+              size="sm"
+              onClick={toggleSelectionMode}
+              disabled={bulkUpdating}
+            >
+              <ListChecks className="w-4 h-4 mr-2" />
+              {selectionMode ? 'Cancelar seleção' : 'Selecionar lançamentos'}
+            </Button>
+          )}
+          {canManage && selectionMode && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={markSelectedAsPaid}
+              disabled={selectedIds.size === 0 || bulkUpdating}
+            >
+              <CheckCircle2 className="w-4 h-4 mr-2" />
+              {bulkUpdating ? 'Atualizando...' : `Marcar como PAGO (${selectedIds.size})`}
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={() => setColumnDialogOpen(true)}>
             <FileText className="w-4 h-4 mr-2" />
             Exportar por Filtro
@@ -578,6 +674,7 @@ export const ComissionamentoTable: React.FC<Props> = ({ data, onUpdate, onDelete
         <div className="max-h-[600px] w-full overflow-auto [scrollbar-gutter:stable]">
           <table className="data-table min-w-[1160px] w-full table-fixed text-[11px] [&_th]:px-2.5 [&_th]:py-3 [&_td]:px-2.5 [&_td]:py-3 [&_td]:align-top">
             <colgroup>
+              {canManage && selectionMode && <col style={{ width: '38px' }} />}
               {canManage && <col style={{ width: '30px' }} />}
               <col style={{ width: '88px' }} />
               <col style={{ width: '92px' }} />
@@ -593,6 +690,19 @@ export const ComissionamentoTable: React.FC<Props> = ({ data, onUpdate, onDelete
             <thead>
               <tr>
                 {columns.map(col => {
+                  if (col.key === 'selection') {
+                    return (
+                      <th key="selection" className="text-left">
+                        <Checkbox
+                          checked={allPageSelected ? true : somePageSelected ? 'indeterminate' : false}
+                          disabled={pageSelectableIds.length === 0 || bulkUpdating}
+                          onCheckedChange={checked => toggleSelectedIds(pageSelectableIds, checked === true)}
+                          aria-label="Selecionar lançamentos desta página"
+                        />
+                      </th>
+                    );
+                  }
+
                   const isSortable = col.key !== 'actions';
                   const sortIndicator = sortField === col.key ? (sortAsc ? '▲' : '▼') : '';
 
@@ -615,6 +725,9 @@ export const ComissionamentoTable: React.FC<Props> = ({ data, onUpdate, onDelete
                 if (tableRow.kind === 'rateio-summary') {
                   const expanded = expandedRateioLotes.has(tableRow.loteId);
                   const unidadeLabel = `${tableRow.items.length} rateio(s)`;
+                  const selectableIds = getSelectableIds(tableRow);
+                  const allSelected = selectableIds.length > 0 && selectableIds.every(id => selectedIds.has(id));
+                  const someSelected = selectableIds.some(id => selectedIds.has(id));
 
                   return (
                     <tr
@@ -623,6 +736,16 @@ export const ComissionamentoTable: React.FC<Props> = ({ data, onUpdate, onDelete
                       onClick={() => toggleRateioLote(tableRow.loteId)}
                       title={expanded ? 'Recolher rateios' : 'Ver rateios deste lançamento'}
                     >
+                      {canManage && selectionMode && (
+                        <td onClick={event => event.stopPropagation()}>
+                          <Checkbox
+                            checked={allSelected ? true : someSelected ? 'indeterminate' : false}
+                            disabled={selectableIds.length === 0 || bulkUpdating}
+                            onCheckedChange={checked => toggleSelectedIds(selectableIds, checked === true)}
+                            aria-label="Selecionar rateios pendentes"
+                          />
+                        </td>
+                      )}
                       {canManage && (
                         <td>
                           <Button
@@ -661,9 +784,21 @@ export const ComissionamentoTable: React.FC<Props> = ({ data, onUpdate, onDelete
                 }
 
                 const isRateioItem = tableRow.kind === 'rateio-item';
+                const selectableIds = getSelectableIds(tableRow);
+                const isSelected = selectableIds.length > 0 && selectableIds.every(id => selectedIds.has(id));
 
                 return (
                   <tr key={tableRow.key} className={isRateioItem ? 'bg-muted/20' : undefined}>
+                    {canManage && selectionMode && (
+                      <td>
+                        <Checkbox
+                          checked={isSelected}
+                          disabled={selectableIds.length === 0 || bulkUpdating}
+                          onCheckedChange={checked => toggleSelectedIds(selectableIds, checked === true)}
+                          aria-label="Selecionar lançamento pendente"
+                        />
+                      </td>
+                    )}
                     {canManage && (
                       <td>
                         <Button
