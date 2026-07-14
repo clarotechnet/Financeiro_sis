@@ -7,6 +7,7 @@ import { ComissionamentoFormDialog } from './ComissionamentoFormDialog';
 import { ComissionamentoImportExcel } from './ComissionamentoImportExcel';
 import { FornecedorDialog } from './FornecedorDialog';
 import { useAuth } from '@/contexts/useAuth';
+import { ROLE_RH } from '@/lib/profileRoles';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -102,14 +103,17 @@ interface Props {
   onImportExcel?: (rows: Record<string, any>[]) => Promise<{ inserted: number; skipped: number; errors: string[] }>;
   showActions?: boolean;
   showGeneralSearch?: boolean;
+  canExportExcel?: boolean;
+  actionsOnly?: boolean;
 }
 
 export const ComissionamentoFilters: React.FC<Props> = ({
   filters, setFilters, clearFilters, uniqueCidades, uniqueNomes, totalFiltered,
   onManualSubmit, filteredData, opcoes, onImportExcel, showActions = true,
-  showGeneralSearch = false
+  showGeneralSearch = false, canExportExcel = true, actionsOnly = false
 }) => {
-  const { isAdmin } = useAuth();
+  const { isAdmin, profile } = useAuth();
+  const canRegisterFornecedor = isAdmin || profile?.role === ROLE_RH;
   const hasFilters = filters.cidade.length > 0 || filters.dataInicio || filters.dataFim
     || filters.nome.length > 0 || filters.contrato.length > 0
     || (filters.descricao && filters.descricao.trim().length > 0)
@@ -268,7 +272,7 @@ export const ComissionamentoFilters: React.FC<Props> = ({
   };
   return (
     <div className="card relative z-20">
-      <div className="flex flex-wrap justify-between items-center mb-4 gap-3">
+      <div className={`flex flex-wrap justify-between items-center gap-3 ${actionsOnly ? 'mb-0' : 'mb-4'}`}>
         <h3 className="text-lg font-bold text-foreground">Filtros</h3>
         <div className="flex items-center gap-3 flex-wrap">
           {showActions && (
@@ -276,23 +280,25 @@ export const ComissionamentoFilters: React.FC<Props> = ({
               <FileEdit className="w-4 h-4" /> Novo Lançamento
             </Button>
           )}
-          {showActions && isAdmin && (
+          {showActions && canRegisterFornecedor && (
             <>
               <Button variant="outline" size="sm" onClick={() => setFornecedorOpen(true)} className="gap-1">
                 <UserPlus className="w-4 h-4" /> Cadastrar Fornecedor
               </Button>
-              {onImportExcel && <ComissionamentoImportExcel onImport={onImportExcel} />}
+              {isAdmin && onImportExcel && <ComissionamentoImportExcel onImport={onImportExcel} />}
             </>
           )}
-          {showActions && (
+          {showActions && canExportExcel && (
             <Button variant="outline" size="sm" onClick={handleExportExcel} disabled={filteredData.length === 0} className="gap-1">
               <Download className="w-4 h-4" /> Exportar Excel
             </Button>
           )}
-          <span className="text-sm text-muted-foreground">
-            Total: <strong className="text-foreground">{totalFiltered}</strong> registros
-          </span>
-          {hasFilters && (
+          {!actionsOnly && (
+            <span className="text-sm text-muted-foreground">
+              Total: <strong className="text-foreground">{totalFiltered}</strong> registros
+            </span>
+          )}
+          {!actionsOnly && hasFilters && (
             <Button variant="outline" size="sm" onClick={clearFilters} className="gap-1">
               <X className="w-3 h-3" /> Limpar
             </Button>
@@ -319,6 +325,7 @@ export const ComissionamentoFilters: React.FC<Props> = ({
           />
         </>
       )}
+      {!actionsOnly && (
       <div className="filter-section">
           {showGeneralSearch && (
             <div className="form-group md:col-span-2">
@@ -398,6 +405,7 @@ export const ComissionamentoFilters: React.FC<Props> = ({
             onChange={(val) => setFilters({ status: val })}
           />
       </div>
+      )}
     </div>
   );
 };

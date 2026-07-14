@@ -18,8 +18,18 @@ import Beneficios from "./pages/Beneficios";
 import ResetPassword from "./pages/ResetPassword";
 import DREConsolidado from "./pages/DREConsolidado";
 import { ROLE_ADMIN, ROLE_FINANCE_ASSISTANT, ROLE_RH } from "@/lib/profileRoles";
+import { useAuth } from "@/contexts/useAuth";
 
 const queryClient = new QueryClient();
+
+const HomeRedirect = () => {
+  const { profile } = useAuth();
+  const target = profile?.role === ROLE_RH
+    ? "/comissionamento?tab=kpis"
+    : "/comissionamento?tab=frentes";
+
+  return <Navigate to={target} replace />;
+};
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -49,8 +59,15 @@ const App = () => (
                   </ProtectedRoute>
                 }
               >
-                <Route path="/" element={<Navigate to="/comissionamento?tab=frentes" replace />} />
-                <Route path="/receitas" element={<Receitas />} />
+                <Route path="/" element={<HomeRedirect />} />
+                <Route
+                  path="/receitas"
+                  element={
+                    <ProtectedRoute allowedRoles={[ROLE_ADMIN, ROLE_FINANCE_ASSISTANT]}>
+                      <Receitas />
+                    </ProtectedRoute>
+                  }
+                />
                 <Route path="/comissionamento" element={<Comissionamento />} />
                 <Route path="/perfil" element={<Perfil />} />
                 <Route
@@ -72,7 +89,7 @@ const App = () => (
                 <Route
                   path="/dre-consolidado"
                   element={
-                    <ProtectedRoute allowedRoles={[ROLE_ADMIN, ROLE_RH, ROLE_FINANCE_ASSISTANT]}>
+                    <ProtectedRoute allowedRoles={[ROLE_ADMIN, ROLE_FINANCE_ASSISTANT]}>
                       <DREConsolidado />
                     </ProtectedRoute>
                   }

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Navigate, useSearchParams } from 'react-router-dom';
 import { useComissionamento } from '@/hooks/useComissionamento';
 import { ComissionamentoFilters } from '@/components/comissionamento/ComissionamentoFilters';
 import { ComissionamentoKPIs } from '@/components/comissionamento/ComissionamentoKPIs';
@@ -10,7 +10,7 @@ import { ComissionamentoValores } from '@/components/comissionamento/Comissionam
 import { LoadingSpinner } from '@/components/comissionamento/LoadingSpinner';
 import { useAuth } from '@/contexts/useAuth';
 import { BarChart3, DollarSign, FileText, Layers, Loader2 } from 'lucide-react';
-import { canManageExistingFinancialData } from '@/lib/profileRoles';
+import { canManageExistingFinancialData, ROLE_RH } from '@/lib/profileRoles';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -50,8 +50,10 @@ const Comissionamento: React.FC = () => {
   const [notificationRecords, setNotificationRecords] = useState<LancamentoPix[]>([]);
   const [isLoadingNotificationRecords, setIsLoadingNotificationRecords] = useState(false);
   const { profile } = useAuth();
+  const isRh = profile?.role === ROLE_RH;
   const canManageRecords = canManageExistingFinancialData(profile?.role);
   const isDashboard = activeTab === 'frentes';
+  const isRhPaymentInclusion = isRh && activeTab === 'kpis';
   const pageMeta = {
     frentes: {
       title: 'Dashboard',
@@ -193,6 +195,10 @@ const Comissionamento: React.FC = () => {
   const notificationTotal = notificationRecords.reduce((total, record) => total + (record.valor || 0), 0);
   const notificationRecord = notificationRecords[0] || null;
 
+  if (isRh && activeTab !== 'kpis') {
+    return <Navigate to="/comissionamento?tab=kpis" replace />;
+  }
+
   return (
     <div className="min-h-full">
       <div className="max-w-[1400px] mx-auto p-6 md:p-8 space-y-6">
@@ -228,13 +234,15 @@ const Comissionamento: React.FC = () => {
           onImportExcel={hook.importExcel}
           showActions={!isDashboard}
           showGeneralSearch={activeTab === 'table'}
+          canExportExcel={!isRh}
+          actionsOnly={isRhPaymentInclusion}
         />
 
-        {hook.isLoading && !hasData && (
+        {!isRhPaymentInclusion && hook.isLoading && !hasData && (
           <LoadingSpinner message="Carregando lançamentos..." />
         )}
 
-        {hasData && (
+        {!isRhPaymentInclusion && hasData && (
           <div className="tab-content relative z-0">
             {activeTab === 'kpis' && <ComissionamentoKPIs kpis={hook.kpis} lancamentos={hook.data} />}
             {activeTab === 'charts' && (
@@ -260,7 +268,7 @@ const Comissionamento: React.FC = () => {
           </div>
         )}
 
-        {!hook.isLoading && !hasData && !hook.error && (
+        {!isRhPaymentInclusion && !hook.isLoading && !hasData && !hook.error && (
           <div className="text-center py-12">
             <p className="text-muted-foreground text-lg">
               Clique em "Novo Lançamento" para começar.

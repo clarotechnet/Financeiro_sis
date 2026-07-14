@@ -41,6 +41,7 @@ export const AppSidebar: React.FC = () => {
     const collapsed = state === 'collapsed';
 
     const currentTab = new URLSearchParams(search).get('tab') || 'frentes';
+    const isRh = profile?.role === ROLE_RH;
     const canAccessSettings = isAdmin || profile?.role === ROLE_RH || profile?.role === ROLE_FINANCE_ASSISTANT;
     const canViewFinancialReports = canAccessFinancialReports(profile?.role);
 
@@ -122,30 +123,34 @@ export const AppSidebar: React.FC = () => {
                     {!collapsed && <SidebarGroupLabel>Módulos</SidebarGroupLabel>}
                     <SidebarGroupContent>
                         <SidebarMenu>
-                            <SidebarMenuItem>
-                                <SidebarMenuButton
-                                    asChild
-                                    isActive={pathname === '/comissionamento' && currentTab === 'frentes'}
-                                    className="data-[active=true]:bg-primary data-[active=true]:text-primary-foreground"
-                                >
-                                    <NavLink to="/comissionamento?tab=frentes">
-                                        <Layers className="h-4 w-4 flex-shrink-0" />
-                                        {!collapsed && <span className="text-[13px]">Dashboard</span>}
-                                    </NavLink>
-                                </SidebarMenuButton>
-                            </SidebarMenuItem>
-                            <SidebarMenuItem>
-                                <SidebarMenuButton
-                                    asChild
-                                    isActive={pathname === '/receitas'}
-                                    className="data-[active=true]:bg-primary data-[active=true]:text-primary-foreground"
-                                >
-                                    <NavLink to="/receitas">
-                                        <TrendingUp className="h-4 w-4 flex-shrink-0" />
-                                        {!collapsed && <span className="text-[13px]">Receitas</span>}
-                                    </NavLink>
-                                </SidebarMenuButton>
-                            </SidebarMenuItem>
+                            {!isRh && (
+                                <>
+                                    <SidebarMenuItem>
+                                        <SidebarMenuButton
+                                            asChild
+                                            isActive={pathname === '/comissionamento' && currentTab === 'frentes'}
+                                            className="data-[active=true]:bg-primary data-[active=true]:text-primary-foreground"
+                                        >
+                                            <NavLink to="/comissionamento?tab=frentes">
+                                                <Layers className="h-4 w-4 flex-shrink-0" />
+                                                {!collapsed && <span className="text-[13px]">Dashboard</span>}
+                                            </NavLink>
+                                        </SidebarMenuButton>
+                                    </SidebarMenuItem>
+                                    <SidebarMenuItem>
+                                        <SidebarMenuButton
+                                            asChild
+                                            isActive={pathname === '/receitas'}
+                                            className="data-[active=true]:bg-primary data-[active=true]:text-primary-foreground"
+                                        >
+                                            <NavLink to="/receitas">
+                                                <TrendingUp className="h-4 w-4 flex-shrink-0" />
+                                                {!collapsed && <span className="text-[13px]">Receitas</span>}
+                                            </NavLink>
+                                        </SidebarMenuButton>
+                                    </SidebarMenuItem>
+                                </>
+                            )}
                             <SidebarMenuItem>
                                 <SidebarMenuButton
                                     asChild
@@ -158,10 +163,10 @@ export const AppSidebar: React.FC = () => {
                                     </NavLink>
                                 </SidebarMenuButton>
                             </SidebarMenuItem>
-                            {renderModule('/comissionamento', 'Relatórios', FileBarChart, RELATORIOS_TABS)}
+                            {!isRh && renderModule('/comissionamento', 'Relatórios', FileBarChart, RELATORIOS_TABS)}
                             {canViewFinancialReports && renderModule('/beneficios', 'Benefícios', Gift, BENEFICIOS_TABS)}
                             {canViewFinancialReports && renderModule('/folha-pagamento', 'Folha de Pagamento', Wallet, FOLHA_TABS)}
-                            {canViewFinancialReports && (
+                            {canViewFinancialReports && !isRh && (
                                 <SidebarMenuItem>
                                     <SidebarMenuButton
                                         asChild
