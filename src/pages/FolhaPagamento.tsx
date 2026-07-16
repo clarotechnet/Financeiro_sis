@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Wallet, Download, RefreshCw } from 'lucide-react';
+import { Wallet, Download, FileSpreadsheet, RefreshCw } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 import { LoadingSpinner } from '@/components/comissionamento/LoadingSpinner';
@@ -13,6 +13,9 @@ import { FolhaCharts } from '@/components/folha/FolhaCharts';
 import { FolhaFrentes } from '@/components/folha/FolhaFrentes';
 import { FolhaTable } from '@/components/folha/FolhaTable';
 import { useAuth } from '@/contexts/useAuth';
+import { useToast } from '@/hooks/use-toast';
+import { downloadOperationalReport } from '@/lib/operationalReports';
+import { ROLE_RH } from '@/lib/profileRoles';
 
 interface MultiSelectProps {
   label: string;
@@ -81,7 +84,9 @@ const TABS = [
 const FolhaPagamento: React.FC = () => {
   const [params] = useSearchParams();
   const activeTab = params.get('tab') || 'kpis';
-  const { isAdmin } = useAuth();
+  const { isAdmin, profile } = useAuth();
+  const canImport = isAdmin || profile?.role === ROLE_RH;
+  const { toast } = useToast();
   const {
     data, isLoading, error, filters, setFilters, clearFilters,
     fetchData, importExcel, opcoesCategoria, opcoesNomes, kpis
@@ -132,6 +137,30 @@ const FolhaPagamento: React.FC = () => {
     XLSX.writeFile(wb, `folha_pagamento_${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
 
+  const handleGenerateReport = () => {
+    try {
+      const result = downloadOperationalReport('folha_pagamento', data.map(row => ({
+        date: row.data,
+        unitCode: row.unidade_codigo,
+        unitName: row.unidade_nome,
+        costCenterCode: row.setor_codigo,
+        costCenterName: row.setor_nome || row.setor,
+        value: row.salario_liquido,
+      })));
+
+      toast({
+        title: 'Relatorio gerado',
+        description: `${result.rows.length} linha(s) consolidadas por data, unidade e centro de custo.${result.ignored ? ` ${result.ignored} registro(s) sem classificacao foram ignorados.` : ''}`,
+      });
+    } catch (reportError: any) {
+      toast({
+        title: 'Nao foi possivel gerar o relatorio',
+        description: reportError.message || 'Confira os dados filtrados.',
+        variant: 'destructive',
+      });
+    }
+  };
+
   return (
     <div className="min-h-full">
       <div className="max-w-[1400px] mx-auto p-6 md:p-8 space-y-6">
@@ -150,7 +179,10 @@ const FolhaPagamento: React.FC = () => {
           <div className="flex flex-wrap justify-between items-center mb-4 gap-3">
             <h3 className="text-lg font-bold text-foreground">Filtros</h3>
             <div className="flex items-center gap-3 flex-wrap">
-              {isAdmin && <FolhaImportExcel onImport={importExcel} />}
+              {canImport && <FolhaImportExcel onImport={importExcel} />}
+              <Button variant="outline" size="sm" onClick={handleGenerateReport} disabled={data.length === 0} className="gap-1">
+                <FileSpreadsheet className="w-4 h-4" /> Gerar Relatorio
+              </Button>
               <Button variant="outline" size="sm" onClick={handleExport} className="gap-1">
                 <Download className="w-4 h-4" /> Exportar Excel
               </Button>

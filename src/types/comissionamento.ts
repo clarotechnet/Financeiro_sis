@@ -41,6 +41,28 @@ export interface OpcaoSelect {
   id: string;
   nome: string;
   ordem?: number | null;
+  natureza?: string | null;
+}
+
+export interface OperationalReportImportRow {
+  report_id: string;
+  row_number: number;
+  source: string;
+  source_label: string;
+  data_lancamento: string;
+  unidade_codigo: string;
+  unidade_nome: string;
+  setor_codigo: string;
+  setor_nome: string;
+  descricao: string;
+  quantidade: number;
+  valor: number;
+}
+
+export interface OperationalReportImportResult {
+  inserted: number;
+  skipped: number;
+  errors: string[];
 }
 
 export interface ComissionamentoFilters {

@@ -1,10 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Label } from '@/components/ui/label';
-import { ComissionamentoFilters as FiltersType, LancamentoPix, OpcaoSelect } from '@/types/comissionamento';
+import { ComissionamentoFilters as FiltersType, LancamentoPix, OperationalReportImportResult, OperationalReportImportRow, OpcaoSelect } from '@/types/comissionamento';
 import { X, FileEdit, Download, FileText, UserPlus, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ComissionamentoFormDialog } from './ComissionamentoFormDialog';
 import { ComissionamentoImportExcel } from './ComissionamentoImportExcel';
+import { ComissionamentoImportReports } from './ComissionamentoImportReports';
 import { FornecedorDialog } from './FornecedorDialog';
 import { useAuth } from '@/contexts/useAuth';
 import { ROLE_RH } from '@/lib/profileRoles';
@@ -101,7 +102,9 @@ interface Props {
   filteredData: LancamentoPix[];
   opcoes: OpcoesData;
   onImportExcel?: (rows: Record<string, any>[]) => Promise<{ inserted: number; skipped: number; errors: string[] }>;
+  onImportReports?: (rows: OperationalReportImportRow[], planoContaId: string, fileName: string) => Promise<OperationalReportImportResult>;
   showActions?: boolean;
+  showImportReports?: boolean;
   showGeneralSearch?: boolean;
   canExportExcel?: boolean;
   actionsOnly?: boolean;
@@ -109,8 +112,8 @@ interface Props {
 
 export const ComissionamentoFilters: React.FC<Props> = ({
   filters, setFilters, clearFilters, uniqueCidades, uniqueNomes, totalFiltered,
-  onManualSubmit, filteredData, opcoes, onImportExcel, showActions = true,
-  showGeneralSearch = false, canExportExcel = true, actionsOnly = false
+  onManualSubmit, filteredData, opcoes, onImportExcel, onImportReports, showActions = true,
+  showImportReports = false, showGeneralSearch = false, canExportExcel = true, actionsOnly = false
 }) => {
   const { isAdmin, profile } = useAuth();
   const canRegisterFornecedor = isAdmin || profile?.role === ROLE_RH;
@@ -287,6 +290,12 @@ export const ComissionamentoFilters: React.FC<Props> = ({
               </Button>
               {isAdmin && onImportExcel && <ComissionamentoImportExcel onImport={onImportExcel} />}
             </>
+          )}
+          {showActions && showImportReports && onImportReports && (
+            <ComissionamentoImportReports
+              contas={opcoes.plano_contas.filter(conta => conta.natureza === 'Custo' || conta.natureza === 'Despesa')}
+              onImport={onImportReports}
+            />
           )}
           {showActions && canExportExcel && (
             <Button variant="outline" size="sm" onClick={handleExportExcel} disabled={filteredData.length === 0} className="gap-1">

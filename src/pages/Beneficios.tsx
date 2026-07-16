@@ -1,17 +1,17 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { AlertCircle, CheckCircle, ChevronDown, ChevronLeft, ChevronRight, Fuel, Gift, Loader2, PackagePlus, RefreshCw, Upload, X, Zap } from 'lucide-react';
+import { AlertCircle, CheckCircle, ChevronDown, ChevronLeft, ChevronRight, Download, Fuel, Gift, Loader2, PackagePlus, RefreshCw, Upload, X, Zap } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { LoadingSpinner } from '@/components/comissionamento/LoadingSpinner';
-import { SearchableSelect } from '@/components/comissionamento/SearchableSelect';
 import { useBeneficios } from '@/hooks/useBeneficios';
 import { useToast } from '@/hooks/use-toast';
 import { BeneficioImportPayload, BeneficioImportRow, BeneficioTipo } from '@/types/beneficios';
 import { OpcaoSelect } from '@/types/comissionamento';
+import { downloadOperationalReport, OperationalReportSource } from '@/lib/operationalReports';
 
 const PAGE_SIZE = 50;
 
@@ -203,22 +203,19 @@ const MultiSelect: React.FC<MultiSelectProps> = ({ label, options, selected, onC
 interface ImportDialogProps {
   open: boolean;
   tipo: BeneficioTipo;
-  contas: OpcaoSelect[];
   importing: boolean;
   onClose: () => void;
   onImport: (payload: BeneficioImportPayload) => Promise<void>;
 }
 
-const ImportDialog: React.FC<ImportDialogProps> = ({ open, tipo, contas, importing, onClose, onImport }) => {
+const ImportDialog: React.FC<ImportDialogProps> = ({ open, tipo, importing, onClose, onImport }) => {
   const [dataBeneficio, setDataBeneficio] = useState(todayInput());
-  const [planoContaId, setPlanoContaId] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
     if (!open) return;
     setDataBeneficio(todayInput());
-    setPlanoContaId('');
     setFile(null);
     setError('');
   }, [open, tipo]);
@@ -227,10 +224,6 @@ const ImportDialog: React.FC<ImportDialogProps> = ({ open, tipo, contas, importi
     setError('');
     if (!dataBeneficio) {
       setError('Informe a data do benefício.');
-      return;
-    }
-    if (!planoContaId) {
-      setError('Selecione a conta analítica que receberá este arquivo.');
       return;
     }
     if (!file) {
@@ -253,7 +246,6 @@ const ImportDialog: React.FC<ImportDialogProps> = ({ open, tipo, contas, importi
 
       await onImport({
         data_beneficio: dataBeneficio,
-        plano_conta_id: planoContaId,
         arquivo_nome: file.name,
         rows,
       });
@@ -273,7 +265,7 @@ const ImportDialog: React.FC<ImportDialogProps> = ({ open, tipo, contas, importi
           </DialogTitle>
         </DialogHeader>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4">
           <div className="space-y-1">
             <Label>Data do benefício *</Label>
             <Input
@@ -282,13 +274,7 @@ const ImportDialog: React.FC<ImportDialogProps> = ({ open, tipo, contas, importi
               onChange={event => setDataBeneficio(event.target.value)}
             />
           </div>
-          <SearchableSelect
-            label="Conta Analítica"
-            value={planoContaId}
-            onChange={setPlanoContaId}
-            options={contas}
-          />
-          <div className="md:col-span-2 space-y-1">
+          <div className="space-y-1">
             <Label>Arquivo Excel *</Label>
             <Input
               type="file"
@@ -297,11 +283,11 @@ const ImportDialog: React.FC<ImportDialogProps> = ({ open, tipo, contas, importi
             />
             {tipo === 'combustivel' ? (
               <p className="text-xs text-muted-foreground">
-                Use uma planilha com as colunas CPF, Placa e Valor. A conta analitica escolhida acima sera aplicada em todas as linhas importadas.
+                Use uma planilha com as colunas CPF, Placa e Valor. Nome, unidade e centro de custo serao buscados pelo CPF.
               </p>
             ) : (
             <p className="text-xs text-muted-foreground">
-              Use uma planilha com as colunas CPF e Valor. A conta analítica escolhida acima será aplicada em todas as linhas importadas.
+              Use uma planilha com as colunas CPF e Valor. Nome, unidade e centro de custo serao buscados pelo CPF.
             </p>
             )}
           </div>
@@ -364,6 +350,33 @@ const Beneficios: React.FC = () => {
     });
   };
 
+  const handleGenerateReport = () => {
+    try {
+      const result = downloadOperationalReport(
+        `beneficios_${tipo}` as OperationalReportSource,
+        data.map(row => ({
+          date: row.data_beneficio,
+          unitCode: row.unidade_codigo,
+          unitName: row.unidade_nome,
+          costCenterCode: row.setor_codigo,
+          costCenterName: row.setor_nome,
+          value: row.valor,
+        })),
+      );
+
+      toast({
+        title: 'Relatorio gerado',
+        description: `${result.rows.length} linha(s) consolidadas por data, unidade e centro de custo.${result.ignored ? ` ${result.ignored} registro(s) sem classificacao foram ignorados.` : ''}`,
+      });
+    } catch (reportError: any) {
+      toast({
+        title: 'Nao foi possivel gerar o relatorio',
+        description: reportError.message || 'Confira os dados filtrados.',
+        variant: 'destructive',
+      });
+    }
+  };
+
   return (
     <div className="min-h-full">
       <div className="max-w-[1500px] mx-auto p-6 md:p-8 space-y-6">
@@ -377,7 +390,7 @@ const Beneficios: React.FC = () => {
             </div>
             <div>
               <h1 className="text-xl md:text-2xl font-extrabold text-foreground">Benefícios</h1>
-              <p className="text-sm text-muted-foreground">Importação por CPF e classificação para DRE</p>
+              <p className="text-sm text-muted-foreground">Importacao por CPF e relatorio por centro de custo</p>
             </div>
           </div>
 
@@ -404,13 +417,17 @@ const Beneficios: React.FC = () => {
                 {activeTab.label}
               </h3>
               <p className="text-xs text-muted-foreground">
-                O CPF busca nome, unidade e centro de custo em registros_dados. A conta analítica é escolhida na importação.
+                O CPF busca nome, unidade e centro de custo em registros_dados. A conta analitica sera escolhida ao importar o relatorio em Inclusao de Pagamentos.
               </p>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
               <Button onClick={() => setImportOpen(true)} size="sm" className="gap-1">
                 <Upload className="w-4 h-4" />
                 Importar Excel
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleGenerateReport} disabled={data.length === 0} className="gap-1">
+                <Download className="w-4 h-4" />
+                Gerar Relatorio
               </Button>
               <Button variant="outline" size="sm" onClick={() => fetchData()} className="gap-1">
                 <RefreshCw className="w-4 h-4" />
@@ -422,7 +439,7 @@ const Beneficios: React.FC = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-4">
             <div className="space-y-1">
               <Label className="form-label">Data Inicial</Label>
               <Input
@@ -441,7 +458,6 @@ const Beneficios: React.FC = () => {
             </div>
             <MultiSelect label="Unidade" options={opcoes.unidades} selected={filters.unidade} onChange={value => setFilters({ unidade: value })} />
             <MultiSelect label="Centro de Custo" options={opcoes.setores} selected={filters.setor} onChange={value => setFilters({ setor: value })} />
-            <MultiSelect label="Conta Analítica" options={opcoes.contas} selected={filters.contaAnalitica} onChange={value => setFilters({ contaAnalitica: value })} />
             <div className="space-y-1">
               <Label className="form-label">Buscar</Label>
               <Input
@@ -509,7 +525,6 @@ const Beneficios: React.FC = () => {
                       <th className="text-left py-3 px-3 font-semibold">Placa</th>
                     )}
                     <th className="text-left py-3 px-3 font-semibold">Centro de Custo</th>
-                    <th className="text-left py-3 px-3 font-semibold">Conta Analítica</th>
                     <th className="text-right py-3 px-3 font-semibold">Valor</th>
                     <th className="text-left py-3 px-3 font-semibold">Importado em</th>
                   </tr>
@@ -525,7 +540,6 @@ const Beneficios: React.FC = () => {
                         <td className="py-3 px-3 font-semibold">{row.placa || '-'}</td>
                       )}
                       <td className="py-3 px-3">{row.setor_nome || '-'}</td>
-                      <td className="py-3 px-3">{row.conta_analitica || '-'}</td>
                       <td className="py-3 px-3 text-right font-bold text-primary">{fmtBRL(row.valor)}</td>
                       <td className="py-3 px-3 text-muted-foreground">{fmtDateTime(row.created_at)}</td>
                     </tr>
@@ -539,7 +553,6 @@ const Beneficios: React.FC = () => {
         <ImportDialog
           open={importOpen}
           tipo={tipo}
-          contas={opcoes.contas}
           importing={isImporting}
           onClose={() => setImportOpen(false)}
           onImport={handleImport}

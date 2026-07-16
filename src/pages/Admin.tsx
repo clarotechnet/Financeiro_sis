@@ -77,7 +77,6 @@ interface RegistroDados {
   setor: string | null;
   setor_codigo: string | null;
   unidade_codigo: string | null;
-  subgrupo_plano_conta_id: string | null;
   created_at: string;
   updated_at: string | null;
 }
@@ -90,13 +89,6 @@ interface UnidadeOpcao {
 interface SetorOpcao {
   codigo: string;
   setor: string;
-}
-
-interface SubgrupoOpcao {
-  id: string;
-  codigo: string;
-  descricao: string;
-  natureza: string | null;
 }
 
 interface PlanoContaRow {
@@ -116,7 +108,7 @@ interface PlanoContaRow {
 type ExcelRow = Record<string, unknown>;
 type PlanoContasQuickFilter = 'todos' | 'grupo' | 'subgrupo' | 'analitica' | 'inativa';
 
-const REGISTROS_TEMPLATE_HEADERS = ['nome', 'cpf', 'setor_codigo', 'unidade_codigo', 'subgrupo_codigo'];
+const REGISTROS_TEMPLATE_HEADERS = ['nome', 'cpf', 'setor_codigo', 'unidade_codigo'];
 const REGISTROS_PAGE_SIZE = 50;
 
 const normalizeExcelKey = (value: string) =>
@@ -141,7 +133,6 @@ export default function Admin() {
   const [registrosDados, setRegistrosDados] = useState<RegistroDados[]>([]);
   const [opcoesUnidades, setOpcoesUnidades] = useState<UnidadeOpcao[]>([]);
   const [opcoesSetores, setOpcoesSetores] = useState<SetorOpcao[]>([]);
-  const [opcoesSubgrupos, setOpcoesSubgrupos] = useState<SubgrupoOpcao[]>([]);
   const [planoContas, setPlanoContas] = useState<PlanoContaRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingRegistros, setIsLoadingRegistros] = useState(true);
@@ -212,33 +203,6 @@ export default function Admin() {
     setOpcoesSetores(((data || []) as SetorOpcao[]).sort((a, b) =>
       a.codigo.localeCompare(b.codigo, 'pt-BR', { numeric: true })
     ));
-  }, [canAccessDepartment]);
-
-  const fetchSubgruposPlanoContas = useCallback(async () => {
-    if (!canAccessDepartment) {
-      setOpcoesSubgrupos([]);
-      return;
-    }
-
-    const { data, error } = await externalSupabase
-      .from('plano_contas')
-      .select('id, codigo, descricao, natureza')
-      .eq('nivel', 2)
-      .eq('e_analitica', false)
-      .eq('ativo', true)
-      .order('codigo', { ascending: true });
-
-    if (error) {
-      console.error('Erro ao buscar subgrupos do plano de contas:', error);
-      toast({
-        title: 'Erro',
-        description: 'Nao foi possivel carregar os subgrupos do plano de contas.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    setOpcoesSubgrupos((data || []) as SubgrupoOpcao[]);
   }, [canAccessDepartment]);
 
   const fetchPlanoContas = useCallback(async () => {
@@ -316,7 +280,7 @@ export default function Admin() {
     try {
       const { data, error } = await externalSupabase
         .from('registros_dados')
-        .select('id,nome,cpf,setor,setor_codigo,unidade_codigo,subgrupo_plano_conta_id,created_at,updated_at')
+        .select('id,nome,cpf,setor,setor_codigo,unidade_codigo,created_at,updated_at')
         .order('nome', { ascending: true });
 
       if (error) throw error;
@@ -352,9 +316,8 @@ export default function Admin() {
     fetchRegistrosDados();
     fetchUnidades();
     fetchSetores();
-    fetchSubgruposPlanoContas();
     fetchPlanoContas();
-  }, [authLoading, canAccessDepartment, canAccessSettingsPage, canViewUsers, navigate, fetchUsers, fetchRegistrosDados, fetchUnidades, fetchSetores, fetchSubgruposPlanoContas, fetchPlanoContas]);
+  }, [authLoading, canAccessDepartment, canAccessSettingsPage, canViewUsers, navigate, fetchUsers, fetchRegistrosDados, fetchUnidades, fetchSetores, fetchPlanoContas]);
 
   useEffect(() => {
     if (opcoesSetores.length === 0) return;
@@ -483,7 +446,7 @@ export default function Admin() {
 
   const updateRegistroField = (
     id: string,
-    field: 'nome' | 'cpf' | 'setor_codigo' | 'unidade_codigo' | 'subgrupo_plano_conta_id',
+    field: 'nome' | 'cpf' | 'setor_codigo' | 'unidade_codigo',
     value: string,
   ) => {
     setRegistrosDados(prev =>
@@ -501,12 +464,11 @@ export default function Admin() {
     const setor_codigo = (registro.setor_codigo || '').trim();
     const setor = opcoesSetores.find(opcao => opcao.codigo === setor_codigo)?.setor || (registro.setor || '').trim();
     const unidade_codigo = (registro.unidade_codigo || '').trim();
-    const subgrupo_plano_conta_id = (registro.subgrupo_plano_conta_id || '').trim();
 
-    if (!nome || !cpf || !setor_codigo || !unidade_codigo || !subgrupo_plano_conta_id) {
+    if (!nome || !cpf || !setor_codigo || !unidade_codigo) {
       toast({
         title: 'Campos obrigatorios',
-        description: 'Preencha nome, CPF, setor, unidade e subgrupo DRE antes de salvar.',
+        description: 'Preencha nome, CPF, setor e unidade antes de salvar.',
         variant: 'destructive',
       });
       return;
@@ -522,7 +484,6 @@ export default function Admin() {
           setor,
           setor_codigo,
           unidade_codigo,
-          subgrupo_plano_conta_id,
           updated_at: new Date().toISOString(),
         })
         .eq('id', registro.id);
@@ -548,7 +509,7 @@ export default function Admin() {
 
   const downloadRegistrosTemplate = () => {
     const worksheet = XLSX.utils.aoa_to_sheet([REGISTROS_TEMPLATE_HEADERS]);
-    worksheet['!cols'] = [{ wch: 34 }, { wch: 18 }, { wch: 32 }, { wch: 18 }, { wch: 20 }];
+    worksheet['!cols'] = [{ wch: 34 }, { wch: 18 }, { wch: 32 }, { wch: 18 }];
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'registros_dados');
     const setoresWorksheet = XLSX.utils.json_to_sheet(
@@ -567,15 +528,6 @@ export default function Admin() {
     );
     unidadesWorksheet['!cols'] = [{ wch: 18 }, { wch: 36 }];
     XLSX.utils.book_append_sheet(workbook, unidadesWorksheet, 'unidades');
-    const subgruposWorksheet = XLSX.utils.json_to_sheet(
-      opcoesSubgrupos.map(subgrupo => ({
-        subgrupo_codigo: subgrupo.codigo,
-        subgrupo: subgrupo.descricao,
-        natureza: subgrupo.natureza || '',
-      })),
-    );
-    subgruposWorksheet['!cols'] = [{ wch: 20 }, { wch: 46 }, { wch: 16 }];
-    XLSX.utils.book_append_sheet(workbook, subgruposWorksheet, 'subgrupos_dre');
     XLSX.writeFile(workbook, 'modelo_departamento_pessoal.xlsx');
   };
 
@@ -610,30 +562,20 @@ export default function Admin() {
           const unidadePorNome = opcoesUnidades.find(opcao =>
             opcao.unidade.trim().toLowerCase() === unidadeNome.trim().toLowerCase()
           );
-          const subgrupoCodigo = getExcelValue(row, 'subgrupocodigo') || getExcelValue(row, 'codigosubgrupo');
-          const subgrupoDescricao = getExcelValue(row, 'subgrupo');
-          const subgrupoPorCodigo = opcoesSubgrupos.find(opcao =>
-            opcao.codigo.trim().toLowerCase() === subgrupoCodigo.trim().toLowerCase()
-          );
-          const subgrupoPorDescricao = opcoesSubgrupos.find(opcao =>
-            opcao.descricao.trim().toLowerCase() === subgrupoDescricao.trim().toLowerCase()
-          );
-
           return {
             nome: getExcelValue(row, 'nome'),
             cpf: getExcelValue(row, 'cpf').replace(/\D/g, ''),
             setor: setorPorCodigo?.setor || setorPorNome?.setor || setorNome,
             setor_codigo: setorPorCodigo?.codigo || setorPorNome?.codigo || '',
             unidade_codigo: unidadeCodigo || unidadePorNome?.codigo || '',
-            subgrupo_plano_conta_id: subgrupoPorCodigo?.id || subgrupoPorDescricao?.id || '',
           };
         })
-        .filter(row => row.nome && row.cpf && row.setor_codigo && row.unidade_codigo && row.subgrupo_plano_conta_id);
+        .filter(row => row.nome && row.cpf && row.setor_codigo && row.unidade_codigo);
 
       if (registros.length === 0) {
         toast({
           title: 'Planilha sem dados validos',
-          description: 'Use as colunas nome, cpf, setor_codigo, unidade_codigo e subgrupo_codigo no arquivo de importacao.',
+          description: 'Use as colunas nome, cpf, setor_codigo e unidade_codigo no arquivo de importacao.',
           variant: 'destructive',
         });
         return;
@@ -672,10 +614,6 @@ export default function Admin() {
     return new Map(opcoesSetores.map(setor => [setor.codigo, setor.setor]));
   }, [opcoesSetores]);
 
-  const subgrupoById = useMemo(() => {
-    return new Map(opcoesSubgrupos.map(subgrupo => [subgrupo.id, subgrupo]));
-  }, [opcoesSubgrupos]);
-
   const filteredRegistrosDados = useMemo(() => {
     const searchTerm = registroSearch.trim().toLowerCase();
     if (!searchTerm) return registrosDados;
@@ -689,12 +627,10 @@ export default function Admin() {
         registro.setor_codigo ? setorNomeByCodigo.get(registro.setor_codigo) : '',
         registro.unidade_codigo,
         registro.unidade_codigo ? unidadeNomeByCodigo.get(registro.unidade_codigo) : '',
-        registro.subgrupo_plano_conta_id ? subgrupoById.get(registro.subgrupo_plano_conta_id)?.codigo : '',
-        registro.subgrupo_plano_conta_id ? subgrupoById.get(registro.subgrupo_plano_conta_id)?.descricao : '',
       ]
         .some(value => (value || '').toLowerCase().includes(searchTerm)),
     );
-  }, [registrosDados, registroSearch, setorNomeByCodigo, subgrupoById, unidadeNomeByCodigo]);
+  }, [registrosDados, registroSearch, setorNomeByCodigo, unidadeNomeByCodigo]);
 
   const planoContaById = useMemo(() => {
     return new Map(planoContas.map(conta => [conta.id, conta]));
@@ -1115,7 +1051,7 @@ export default function Admin() {
                     <Input
                       value={registroSearch}
                       onChange={(event) => setRegistroSearch(event.target.value)}
-                      placeholder="Buscar por nome, CPF, setor, unidade ou subgrupo"
+                      placeholder="Buscar por nome, CPF, setor ou unidade"
                       className="h-9 pl-9 text-sm"
                     />
                   </div>
@@ -1159,14 +1095,13 @@ export default function Admin() {
                 </div>
 
                 <div className="w-full overflow-auto rounded-md border border-border max-h-[calc(100vh-330px)]">
-                  <Table className="min-w-[1180px] text-xs">
+                  <Table className="min-w-[930px] text-xs">
                     <TableHeader className="sticky top-0 z-10 bg-card">
                       <TableRow>
                         <TableHead className="h-8 px-2 text-xs">Nome</TableHead>
                         <TableHead className="h-8 px-2 text-xs">CPF</TableHead>
                         <TableHead className="h-8 px-2 text-xs">Setor</TableHead>
                         <TableHead className="h-8 px-2 text-xs">Unidade</TableHead>
-                        <TableHead className="h-8 px-2 text-xs">Subgrupo DRE</TableHead>
                         <TableHead className="h-8 px-2 text-xs">Atualizado em</TableHead>
                         {canEditDepartment && <TableHead className="h-8 px-2 text-right text-xs">Acao</TableHead>}
                       </TableRow>
@@ -1174,14 +1109,14 @@ export default function Admin() {
                     <TableBody>
                       {isLoadingRegistros ? (
                         <TableRow>
-                          <TableCell colSpan={canEditDepartment ? 7 : 6} className="py-8 text-center text-muted-foreground">
+                          <TableCell colSpan={canEditDepartment ? 6 : 5} className="py-8 text-center text-muted-foreground">
                             <Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin" />
                             Carregando registros...
                           </TableCell>
                         </TableRow>
                       ) : filteredRegistrosDados.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={canEditDepartment ? 7 : 6} className="py-8 text-center text-muted-foreground">
+                          <TableCell colSpan={canEditDepartment ? 6 : 5} className="py-8 text-center text-muted-foreground">
                             Nenhum registro encontrado.
                           </TableCell>
                         </TableRow>
@@ -1230,21 +1165,6 @@ export default function Admin() {
                                 {opcoesUnidades.map(unidade => (
                                   <option key={unidade.codigo} value={unidade.codigo}>
                                     {unidade.codigo} - {unidade.unidade}
-                                  </option>
-                                ))}
-                              </select>
-                            </TableCell>
-                            <TableCell className="min-w-[250px] px-2 py-1.5">
-                              <select
-                                value={registro.subgrupo_plano_conta_id || ''}
-                                onChange={(event) => updateRegistroField(registro.id, 'subgrupo_plano_conta_id', event.target.value)}
-                                disabled={!canEditDepartment || savingRegistroId === registro.id}
-                                className="h-8 w-full rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                              >
-                                <option value="">Selecione...</option>
-                                {opcoesSubgrupos.map(subgrupo => (
-                                  <option key={subgrupo.id} value={subgrupo.id}>
-                                    {subgrupo.codigo} - {subgrupo.descricao}
                                   </option>
                                 ))}
                               </select>

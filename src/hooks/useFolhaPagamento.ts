@@ -8,6 +8,10 @@ export interface DadoFinanceiro {
     cpf: string;
     registro_id: string | null;
     setor: string | null;
+    setor_codigo?: string | null;
+    setor_nome?: string | null;
+    unidade_codigo?: string | null;
+    unidade_nome?: string | null;
     nome_registro: string | null;
     sal_folha: number;
     sal_familia: number;
@@ -78,6 +82,19 @@ const EMPTY_FILTERS: FolhaFilters = {
     dataInicio: '', dataFim: '', categoria: [], verbas: [], unidade: [], nome: [],
 };
 
+const normalizeCpf = (value: string | null | undefined) => {
+    const digits = String(value || '').replace(/\D/g, '');
+    return digits.length < 11 ? digits.padStart(11, '0') : digits;
+};
+
+const chunkArray = <T,>(items: T[], size: number) => {
+    const chunks: T[][] = [];
+    for (let index = 0; index < items.length; index += size) {
+        chunks.push(items.slice(index, index + size));
+    }
+    return chunks;
+};
+
 export function useFolhaPagamento() {
     const [data, setData] = useState<DadoFinanceiro[]>([]);
     const [isLoading, setIsLoading] = useState(false);
@@ -103,7 +120,52 @@ export function useFolhaPagamento() {
                 if (rows.length < size) break;
                 page++;
             }
-            setData(all);
+            const cpfs = Array.from(new Set(all.map(row => normalizeCpf(row.cpf)).filter(Boolean)));
+            const registrosByCpf = new Map<string, { unidade_codigo: string | null; setor_codigo: string | null }>();
+
+            for (const cpfChunk of chunkArray(cpfs, 500)) {
+                const { data: registros, error: registrosError } = await externalSupabase
+                    .from('registros_dados')
+                    .select('cpf, unidade_codigo, setor_codigo')
+                    .in('cpf', cpfChunk);
+
+                if (registrosError) throw registrosError;
+                (registros || []).forEach((registro: any) => {
+                    registrosByCpf.set(normalizeCpf(registro.cpf), {
+                        unidade_codigo: registro.unidade_codigo || null,
+                        setor_codigo: registro.setor_codigo || null,
+                    });
+                });
+            }
+
+            const [unidadesResult, setoresResult] = await Promise.all([
+                externalSupabase.from('unidades').select('codigo, unidade'),
+                externalSupabase.from('setor').select('codigo, setor'),
+            ]);
+
+            if (unidadesResult.error) throw unidadesResult.error;
+            if (setoresResult.error) throw setoresResult.error;
+
+            const unidadesByCodigo = new Map(
+                (unidadesResult.data || []).map((row: any) => [String(row.codigo), String(row.unidade)]),
+            );
+            const setoresByCodigo = new Map(
+                (setoresResult.data || []).map((row: any) => [String(row.codigo), String(row.setor)]),
+            );
+
+            setData(all.map(row => {
+                const cadastro = registrosByCpf.get(normalizeCpf(row.cpf));
+                const unidadeCodigo = cadastro?.unidade_codigo || row.unidade_codigo || null;
+                const setorCodigo = cadastro?.setor_codigo || row.setor_codigo || null;
+
+                return {
+                    ...row,
+                    unidade_codigo: unidadeCodigo,
+                    unidade_nome: unidadeCodigo ? unidadesByCodigo.get(unidadeCodigo) || unidadeCodigo : null,
+                    setor_codigo: setorCodigo,
+                    setor_nome: setorCodigo ? setoresByCodigo.get(setorCodigo) || row.setor || setorCodigo : row.setor,
+                };
+            }));
         } catch (e: any) {
             console.error('Erro Folha:', e);
             setError(e.message || 'Erro ao carregar');
@@ -118,7 +180,7 @@ export function useFolhaPagamento() {
         let r = [...data];
         if (filters.dataInicio) r = r.filter(x => x.data && x.data >= filters.dataInicio);
         if (filters.dataFim) r = r.filter(x => x.data && x.data <= filters.dataFim);
-        if (filters.categoria.length) r = r.filter(x => filters.categoria.includes(x.setor || ''));
+        if (filters.categoria.length) r = r.filter(x => filters.categoria.includes(x.setor_nome || x.setor || ''));
         if (filters.nome.length) r = r.filter(x => filters.nome.includes(x.nome || ''));
         if (filters.verbas.length) {
             const fields = VERBA_FIELDS.filter(v => filters.verbas.includes(v.label)).map(v => v.field);
@@ -128,7 +190,7 @@ export function useFolhaPagamento() {
     }, [data, filters]);
 
     const opcoesCategoria = useMemo(
-        () => [...new Set(data.map(d => d.setor).filter(Boolean))].sort((a, b) => a!.localeCompare(b!, 'pt-BR')) as string[],
+        () => [...new Set(data.map(d => d.setor_nome || d.setor).filter(Boolean))].sort((a, b) => a!.localeCompare(b!, 'pt-BR')) as string[],
         [data]
     );
 
@@ -144,7 +206,7 @@ export function useFolhaPagamento() {
             acc.proventos += Number(r.total_proventos) || 0;
             acc.descontos += Number(r.total_descontos) || 0;
             acc.liquido += Number(r.salario_liquido) || 0;
-            const k = r.setor || 'Sem Setor';
+            const k = r.setor_nome || r.setor || 'Sem Setor';
             if (!map.has(k)) map.set(k, { qtd: 0, liquido: 0, proventos: 0, descontos: 0 });
             const it = map.get(k)!;
             it.qtd += 1;

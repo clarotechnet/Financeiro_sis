@@ -27,6 +27,7 @@ interface OpcoesData {
 
 interface Props {
   data: LancamentoPix[];
+  allRecords?: LancamentoPix[];
   onUpdate: (id: string, updates: Record<string, any>) => Promise<void>;
   onBulkUpdateStatus?: (ids: string[], status: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
@@ -253,7 +254,7 @@ type RateioTableRow =
 const isPaidStatus = (status: string | null | undefined) =>
   (status || '').toUpperCase() === 'PAGO';
 
-export const ComissionamentoTable: React.FC<Props> = ({ data, onUpdate, onBulkUpdateStatus, onDelete, opcoes, canManage = true }) => {
+export const ComissionamentoTable: React.FC<Props> = ({ data, allRecords = data, onUpdate, onBulkUpdateStatus, onDelete, opcoes, canManage = true }) => {
   const [page, setPage] = useState(0);
   const [sortField, setSortField] = useState<keyof LancamentoPix>('data_lancamento');
   const [sortAsc, setSortAsc] = useState(false);
@@ -269,6 +270,13 @@ export const ComissionamentoTable: React.FC<Props> = ({ data, onUpdate, onBulkUp
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [bulkUpdating, setBulkUpdating] = useState(false);
   const wrappedCellClass = 'whitespace-normal break-words leading-snug';
+
+  const editRateioRecords = useMemo(() => {
+    if (!editRecord?.rateio_lote_id) return [];
+    return allRecords
+      .filter(row => row.rateio_lote_id === editRecord.rateio_lote_id)
+      .sort(compareRateioItemOrder);
+  }, [allRecords, editRecord]);
 
   const sorted = useMemo(() => {
     const arr = [...data];
@@ -748,18 +756,32 @@ export const ComissionamentoTable: React.FC<Props> = ({ data, onUpdate, onBulkUp
                       )}
                       {canManage && (
                         <td>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 w-6 p-0"
-                            onClick={event => {
-                              event.stopPropagation();
-                              toggleRateioLote(tableRow.loteId);
-                            }}
-                            title={expanded ? 'Recolher rateios' : 'Ver rateios'}
-                          >
-                            <ChevronDown className={`w-3 h-3 text-primary transition-transform ${expanded ? '' : '-rotate-90'}`} />
-                          </Button>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 w-6 p-0"
+                              onClick={event => {
+                                event.stopPropagation();
+                                setEditRecord(tableRow.record);
+                              }}
+                              title="Editar rateios"
+                            >
+                              <Pencil className="w-3 h-3 text-muted-foreground hover:text-primary" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 w-6 p-0"
+                              onClick={event => {
+                                event.stopPropagation();
+                                toggleRateioLote(tableRow.loteId);
+                              }}
+                              title={expanded ? 'Recolher rateios' : 'Ver rateios'}
+                            >
+                              <ChevronDown className={`w-3 h-3 text-primary transition-transform ${expanded ? '' : '-rotate-90'}`} />
+                            </Button>
+                          </div>
                         </td>
                       )}
                       <td className="whitespace-nowrap font-semibold">{formatDate(row.data_lancamento)}</td>
@@ -867,6 +889,7 @@ export const ComissionamentoTable: React.FC<Props> = ({ data, onUpdate, onBulkUp
           onSave={onUpdate}
           onDelete={onDelete}
           record={editRecord}
+          rateioRecords={editRateioRecords}
           opcoes={opcoes}
         />
       )}

@@ -232,6 +232,8 @@ const Comissionamento: React.FC = () => {
           filteredData={hook.data}
           opcoes={hook.opcoes}
           onImportExcel={hook.importExcel}
+          onImportReports={hook.importOperationalReport}
+          showImportReports={activeTab === 'kpis'}
           showActions={!isDashboard}
           showGeneralSearch={activeTab === 'table'}
           canExportExcel={!isRh}
@@ -258,6 +260,7 @@ const Comissionamento: React.FC = () => {
             {activeTab === 'table' && (
               <ComissionamentoTable
                 data={hook.data}
+                allRecords={hook.allData}
                 onUpdate={hook.updateRecord}
                 onBulkUpdateStatus={hook.updateRecordsStatus}
                 onDelete={hook.deleteRecord}

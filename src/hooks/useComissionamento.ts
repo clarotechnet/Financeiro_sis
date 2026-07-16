@@ -8,6 +8,8 @@ import {
   RankingData,
   FrenteKPIData,
   OpcaoSelect,
+  OperationalReportImportResult,
+  OperationalReportImportRow,
 } from '@/types/comissionamento';
 
 interface OpcoesData {
@@ -165,6 +167,14 @@ const createClientUuid = () => (
     })
 );
 
+const chunkArray = <T,>(items: T[], size: number) => {
+  const chunks: T[][] = [];
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+  return chunks;
+};
+
 export function useComissionamento() {
   const [data, setData] = useState<LancamentoPix[]>([]);
   const [opcoes, setOpcoes] = useState<OpcoesData>(EMPTY_OPCOES);
@@ -242,7 +252,7 @@ export function useComissionamento() {
 
     const planoPromise = externalSupabase
       .from('vw_plano_contas_relatorio')
-      .select('conta_id, conta_codigo, conta_descricao, conta_ordem')
+      .select('conta_id, conta_codigo, conta_descricao, conta_natureza, conta_ordem')
       .order('conta_codigo', { ascending: true });
 
     const [, unidadesResult, setoresResult, bancosResult, planoResult] = await Promise.all([
@@ -289,6 +299,7 @@ export function useComissionamento() {
       next.plano_contas = planoRows.map((row: any) => ({
         id: row.conta_id,
         nome: `${row.conta_codigo} - ${row.conta_descricao}`,
+        natureza: row.conta_natureza || null,
         ordem: row.conta_ordem ?? null,
       }));
     }
@@ -466,6 +477,19 @@ export function useComissionamento() {
   }, [fetchData]);
 
   const updateRecord = useCallback(async (id: string, updates: Partial<LancamentoPix> & Record<string, any>) => {
+    if (Array.isArray(updates.rateios) && updates.rateios.length > 0) {
+      const { rateios, valor_total, ...dados } = updates;
+      const { error: rateioError } = await externalSupabase.rpc('atualizar_lancamento_com_rateios', {
+        p_lancamento_id: id,
+        p_dados: dados,
+        p_valor_total: valor_total,
+        p_rateios: rateios,
+      });
+      if (rateioError) throw rateioError;
+      await fetchData();
+      return;
+    }
+
     const { error: updateError } = await externalSupabase
       .from('lancamentos_pix')
       .update(updates)
@@ -486,10 +510,17 @@ export function useComissionamento() {
   }, [fetchData]);
 
   const deleteRecord = useCallback(async (id: string) => {
-    const { error: deleteError } = await externalSupabase
+    const { data: target, error: targetError } = await externalSupabase
       .from('lancamentos_pix')
-      .delete()
-      .eq('id', id);
+      .select('rateio_lote_id')
+      .eq('id', id)
+      .maybeSingle();
+    if (targetError) throw targetError;
+
+    const deleteQuery = externalSupabase.from('lancamentos_pix').delete();
+    const { error: deleteError } = target?.rateio_lote_id
+      ? await deleteQuery.eq('rateio_lote_id', target.rateio_lote_id)
+      : await deleteQuery.eq('id', id);
     if (deleteError) throw deleteError;
     await fetchData();
   }, [fetchData]);
@@ -674,6 +705,101 @@ export function useComissionamento() {
     return { inserted, skipped, errors };
   }, [fetchData]);
 
+  const importOperationalReport = useCallback(async (
+    rows: OperationalReportImportRow[],
+    planoContaId: string,
+    fileName: string,
+  ): Promise<OperationalReportImportResult> => {
+    const errors: string[] = [];
+    let inserted = 0;
+    let skipped = 0;
+
+    const normalize = (value: string) => normalizeFilterValue(value || '');
+    const unitByLookup = new Map<string, string>();
+    const costCenterByLookup = new Map<string, string>();
+
+    opcoes.unidade.forEach(option => {
+      unitByLookup.set(normalize(option.id), option.id);
+      unitByLookup.set(normalize(option.nome), option.id);
+    });
+    opcoes.centro_de_custo.forEach(option => {
+      costCenterByLookup.set(normalize(option.id), option.id);
+      costCenterByLookup.set(normalize(option.nome), option.id);
+    });
+
+    const keys = rows.map(row => `${row.report_id}:${row.row_number}`);
+    const existingKeys = new Set<string>();
+
+    for (const keyChunk of chunkArray(keys, 500)) {
+      const { data: existing, error: existingError } = await externalSupabase
+        .from('lancamentos_pix')
+        .select('relatorio_importacao_chave')
+        .in('relatorio_importacao_chave', keyChunk);
+
+      if (existingError) throw existingError;
+      (existing || []).forEach((item: any) => {
+        if (item.relatorio_importacao_chave) existingKeys.add(item.relatorio_importacao_chave);
+      });
+    }
+
+    const records = rows.flatMap(row => {
+      const importKey = `${row.report_id}:${row.row_number}`;
+      if (existingKeys.has(importKey)) {
+        skipped++;
+        return [];
+      }
+
+      const unidadeCodigo = unitByLookup.get(normalize(row.unidade_codigo))
+        || unitByLookup.get(normalize(row.unidade_nome));
+      const setorCodigo = costCenterByLookup.get(normalize(row.setor_codigo))
+        || costCenterByLookup.get(normalize(row.setor_nome));
+
+      if (!unidadeCodigo || !setorCodigo || !row.data_lancamento || row.valor <= 0) {
+        skipped++;
+        if (errors.length < 8) {
+          errors.push(`Linha ${row.row_number}: unidade, centro de custo, data ou valor invalido.`);
+        }
+        return [];
+      }
+
+      return [{
+        data_lancamento: row.data_lancamento,
+        nome: `RELATORIO - ${row.source_label}`,
+        chave_pix: null,
+        favorecido: row.source_label || 'Relatorio Operacional',
+        descricao: row.descricao || `${row.source_label} - ${row.setor_nome} - ${row.unidade_nome}`,
+        plano_conta_id: planoContaId,
+        valor: row.valor,
+        cnpj_id: null,
+        unidade_id: null,
+        unidade_codigo: unidadeCodigo,
+        centro_de_custo_id: null,
+        setor_codigo: setorCodigo,
+        categoria_id: null,
+        secao_custeio_id: null,
+        centro_custeio_id: null,
+        banco_codigo: null,
+        banco: null,
+        status_pag: 'PAGO',
+        relatorio_origem: row.source,
+        relatorio_arquivo_nome: fileName,
+        relatorio_importacao_chave: importKey,
+      }];
+    });
+
+    for (const recordChunk of chunkArray(records, 200)) {
+      const { error: insertError } = await externalSupabase
+        .from('lancamentos_pix')
+        .insert(recordChunk);
+
+      if (insertError) errors.push(insertError.message);
+      else inserted += recordChunk.length;
+    }
+
+    await fetchData();
+    return { inserted, skipped, errors };
+  }, [fetchData, opcoes.centro_de_custo, opcoes.unidade]);
+
 
 
   return {
@@ -690,6 +816,7 @@ export function useComissionamento() {
     updateRecordsStatus,
     deleteRecord,
     importExcel,
+    importOperationalReport,
     uniqueCidades,
     uniqueNomes,
     uniqueFrente,

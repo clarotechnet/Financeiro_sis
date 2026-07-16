@@ -18,7 +18,6 @@ const TABLE_BY_TIPO: Record<BeneficioTipo, string> = {
 const EMPTY_OPCOES: BeneficioOpcoes = {
   unidades: [],
   setores: [],
-  contas: [],
 };
 
 const formatDateInput = (date: Date) => {
@@ -44,7 +43,6 @@ const getDefaultFilters = (): BeneficioFilters => ({
   ...getCurrentMonthFilters(),
   unidade: [],
   setor: [],
-  contaAnalitica: [],
   busca: '',
 });
 
@@ -108,7 +106,7 @@ export function useBeneficios(tipo: BeneficioTipo) {
 
   const fetchOpcoes = useCallback(async () => {
     try {
-      const [unidadesResult, setoresResult, contasResult] = await Promise.all([
+      const [unidadesResult, setoresResult] = await Promise.all([
         externalSupabase
           .from('unidades')
           .select('codigo, unidade')
@@ -117,16 +115,10 @@ export function useBeneficios(tipo: BeneficioTipo) {
           .from('setor')
           .select('codigo, setor')
           .eq('ativo', true),
-        externalSupabase
-          .from('vw_plano_contas_relatorio')
-          .select('conta_id, conta_codigo, conta_descricao, conta_natureza, conta_ordem')
-          .in('conta_natureza', ['Custo', 'Despesa'])
-          .order('conta_codigo', { ascending: true }),
       ]);
 
       if (unidadesResult.error) throw unidadesResult.error;
       if (setoresResult.error) throw setoresResult.error;
-      if (contasResult.error) throw contasResult.error;
 
       setOpcoes({
         unidades: ((unidadesResult.data || []) as { codigo: string; unidade: string }[])
@@ -143,18 +135,6 @@ export function useBeneficios(tipo: BeneficioTipo) {
             ordem: Number(row.codigo.replace(/\D/g, '')) || null,
           }))
           .sort((a, b) => a.id.localeCompare(b.id, 'pt-BR', { numeric: true })),
-        contas: ((contasResult.data || []) as {
-          conta_id: string;
-          conta_codigo: string;
-          conta_descricao: string;
-          conta_natureza: string | null;
-          conta_ordem: number | null;
-        }[]).map(row => ({
-          id: row.conta_id,
-          nome: `${row.conta_codigo} - ${row.conta_descricao}`,
-          natureza: row.conta_natureza,
-          ordem: row.conta_ordem ?? null,
-        })),
       });
     } catch (err) {
       console.error('Erro ao buscar opcoes de beneficios:', err);
@@ -178,9 +158,6 @@ export function useBeneficios(tipo: BeneficioTipo) {
     }
     if (filters.setor.length > 0) {
       rows = rows.filter(row => row.setor_codigo && filters.setor.includes(row.setor_codigo));
-    }
-    if (filters.contaAnalitica.length > 0) {
-      rows = rows.filter(row => filters.contaAnalitica.includes(row.plano_conta_id));
     }
     if (filters.busca.trim()) {
       const q = filters.busca.trim().toLowerCase();
@@ -265,7 +242,6 @@ export function useBeneficios(tipo: BeneficioTipo) {
           nome: registro.nome,
           unidade_codigo: registro.unidade_codigo,
           setor_codigo: registro.setor_codigo,
-          plano_conta_id: payload.plano_conta_id,
           valor: row.valor,
           arquivo_nome: payload.arquivo_nome || null,
         };
