@@ -1,7 +1,7 @@
 import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
-    DollarSign, Wallet, BarChart3, PieChart, Layers, Table as TableIcon, Coins, ChevronDown, Settings, FileBarChart, TrendingUp, Gift, Fuel, PackagePlus, Zap,
+    DollarSign, Wallet, BarChart3, PieChart, Layers, Table as TableIcon, Coins, ChevronDown, Settings, FileBarChart, TrendingUp, Gift, Fuel, PackagePlus, Zap, ArrowLeftRight,
 } from 'lucide-react';
 import {
     Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
@@ -159,11 +159,11 @@ export const AppSidebar: React.FC = () => {
                                 >
                                     <NavLink to="/comissionamento?tab=kpis">
                                         <DollarSign className="h-4 w-4 flex-shrink-0" />
-                                        {!collapsed && <span className="text-[13px] leading-tight whitespace-normal break-words">Inclusão de Pagamentos</span>}
+                                        {!collapsed && <span className="text-[13px] leading-tight whitespace-normal break-words">Pagamentos</span>}
                                     </NavLink>
                                 </SidebarMenuButton>
                             </SidebarMenuItem>
-                            {!isRh && renderModule('/comissionamento', 'Relatórios', FileBarChart, RELATORIOS_TABS)}
+                            {!isRh && renderModule('/comissionamento', 'Relatórios de Pagamentos', FileBarChart, RELATORIOS_TABS)}
                             {canViewFinancialReports && renderModule('/beneficios', 'Benefícios', Gift, BENEFICIOS_TABS)}
                             {canViewFinancialReports && renderModule('/folha-pagamento', 'Folha de Pagamento', Wallet, FOLHA_TABS)}
                             {canViewFinancialReports && !isRh && (
@@ -176,6 +176,20 @@ export const AppSidebar: React.FC = () => {
                                         <NavLink to="/dre-consolidado">
                                             <FileBarChart className="h-4 w-4 flex-shrink-0" />
                                             {!collapsed && <span className="text-[13px]">DRE Consolidado</span>}
+                                        </NavLink>
+                                    </SidebarMenuButton>
+                                </SidebarMenuItem>
+                            )}
+                            {canViewFinancialReports && !isRh && (
+                                <SidebarMenuItem>
+                                    <SidebarMenuButton
+                                        asChild
+                                        isActive={pathname === '/fluxo-caixa'}
+                                        className="data-[active=true]:bg-primary data-[active=true]:text-primary-foreground"
+                                    >
+                                        <NavLink to="/fluxo-caixa">
+                                            <ArrowLeftRight className="h-4 w-4 flex-shrink-0" />
+                                            {!collapsed && <span className="text-[13px]">Fluxo de Caixa</span>}
                                         </NavLink>
                                     </SidebarMenuButton>
                                 </SidebarMenuItem>

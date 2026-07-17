@@ -286,9 +286,9 @@ const ImportDialog: React.FC<ImportDialogProps> = ({ open, tipo, importing, onCl
                 Use uma planilha com as colunas CPF, Placa e Valor. Nome, unidade e centro de custo serao buscados pelo CPF.
               </p>
             ) : (
-            <p className="text-xs text-muted-foreground">
-              Use uma planilha com as colunas CPF e Valor. Nome, unidade e centro de custo serao buscados pelo CPF.
-            </p>
+              <p className="text-xs text-muted-foreground">
+                Use uma planilha com as colunas CPF e Valor. Nome, unidade e centro de custo serao buscados pelo CPF.
+              </p>
             )}
           </div>
         </div>
@@ -439,7 +439,7 @@ const Beneficios: React.FC = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-4">
+          <div className={`grid grid-cols-1 md:grid-cols-3 gap-4 ${tipo === 'combustivel' ? 'xl:grid-cols-6' : 'xl:grid-cols-5'}`}>
             <div className="space-y-1">
               <Label className="form-label">Data Inicial</Label>
               <Input
@@ -458,10 +458,20 @@ const Beneficios: React.FC = () => {
             </div>
             <MultiSelect label="Unidade" options={opcoes.unidades} selected={filters.unidade} onChange={value => setFilters({ unidade: value })} />
             <MultiSelect label="Centro de Custo" options={opcoes.setores} selected={filters.setor} onChange={value => setFilters({ setor: value })} />
+            {tipo === 'combustivel' && (
+              <div className="space-y-1">
+                <Label className="form-label">Placa</Label>
+                <Input
+                  placeholder="Ex: ABC-1234"
+                  value={filters.placa}
+                  onChange={event => setFilters({ placa: event.target.value.toUpperCase() })}
+                />
+              </div>
+            )}
             <div className="space-y-1">
               <Label className="form-label">Buscar</Label>
               <Input
-                placeholder={tipo === 'combustivel' ? 'Nome, CPF ou placa' : 'Nome ou CPF'}
+                placeholder="CPF"
                 value={filters.busca}
                 onChange={event => setFilters({ busca: event.target.value })}
               />

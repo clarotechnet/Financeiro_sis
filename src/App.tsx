@@ -17,6 +17,7 @@ import FolhaPagamento from "./pages/FolhaPagamento";
 import Beneficios from "./pages/Beneficios";
 import ResetPassword from "./pages/ResetPassword";
 import DREConsolidado from "./pages/DREConsolidado";
+import FluxoCaixa from "./pages/FluxoCaixa";
 import { ROLE_ADMIN, ROLE_FINANCE_ASSISTANT, ROLE_RH } from "@/lib/profileRoles";
 import { useAuth } from "@/contexts/useAuth";
 
@@ -91,6 +92,14 @@ const App = () => (
                   element={
                     <ProtectedRoute allowedRoles={[ROLE_ADMIN, ROLE_FINANCE_ASSISTANT]}>
                       <DREConsolidado />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/fluxo-caixa"
+                  element={
+                    <ProtectedRoute allowedRoles={[ROLE_ADMIN, ROLE_FINANCE_ASSISTANT]}>
+                      <FluxoCaixa />
                     </ProtectedRoute>
                   }
                 />

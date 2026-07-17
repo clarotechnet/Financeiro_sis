@@ -77,7 +77,7 @@ export const FolhaTable: React.FC<Props> = ({ data }) => {
                                 <td className="px-3 py-2 whitespace-nowrap">{fmtDate(r.data)}</td>
                                 <td className="px-3 py-2 whitespace-nowrap">{r.nome}</td>
                                 <td className="px-3 py-2 whitespace-nowrap">{fmtCPF(r.cpf)}</td>
-                                <td className="px-3 py-2 whitespace-nowrap">{r.setor || '-'}</td>
+                                <td className="px-3 py-2 whitespace-nowrap">{r.setor_nome || r.setor || '-'}</td>
                                 {VERBA_FIELDS.map(v => {
                                     const n = Number(r[v.field]) || 0;
                                     return (

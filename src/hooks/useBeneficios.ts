@@ -43,6 +43,7 @@ const getDefaultFilters = (): BeneficioFilters => ({
   ...getCurrentMonthFilters(),
   unidade: [],
   setor: [],
+  placa: '',
   busca: '',
 });
 
@@ -54,6 +55,9 @@ const normalizeCpf = (value: string) => {
 
 const normalizePlaca = (value: string | null | undefined) =>
   String(value || '').trim().replace(/\s+/g, ' ').toUpperCase();
+
+const normalizePlacaSearch = (value: string | null | undefined) =>
+  String(value || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
 
 const chunkArray = <T,>(items: T[], size: number) => {
   const chunks: T[][] = [];
@@ -158,6 +162,10 @@ export function useBeneficios(tipo: BeneficioTipo) {
     }
     if (filters.setor.length > 0) {
       rows = rows.filter(row => row.setor_codigo && filters.setor.includes(row.setor_codigo));
+    }
+    if (tipo === 'combustivel' && filters.placa.trim()) {
+      const placa = normalizePlacaSearch(filters.placa);
+      rows = rows.filter(row => normalizePlacaSearch(row.placa).includes(placa));
     }
     if (filters.busca.trim()) {
       const q = filters.busca.trim().toLowerCase();

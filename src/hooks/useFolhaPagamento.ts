@@ -16,6 +16,7 @@ export interface DadoFinanceiro {
     sal_folha: number;
     sal_familia: number;
     desc_inss: number;
+    inss: number;
     irrf: number;
     ferias: number;
     decimo_terceiro: number;
@@ -38,6 +39,19 @@ export interface DadoFinanceiro {
     emprestimo: number;
     desc_fardamento: number;
     demais_desc: number;
+    pro_labore: number;
+    quinquenio: number;
+    distribuicao_lucros: number;
+    reflexo_extras_dsr: number;
+    estouro_mes: number;
+    diferenca_um_terco_ferias: number;
+    diferenca_media_hora_ferias: number;
+    horas_afast_doenca_integral: number;
+    media_afast_doenca_integral: number;
+    periculosidade_proporcional: number;
+    inss_diferenca_ferias: number;
+    inss_empregador: number;
+    irrf_empregador: number;
     total_proventos: number;
     total_descontos: number;
     salario_liquido: number;
@@ -45,26 +59,43 @@ export interface DadoFinanceiro {
 
 // Mapa: label exibido no filtro -> coluna do banco
 export const VERBA_FIELDS: { label: string; field: keyof DadoFinanceiro }[] = [
-    { label: 'Férias', field: 'ferias' },
-    { label: '13° Salário', field: 'decimo_terceiro' },
+    { label: 'Sal. Folha', field: 'sal_folha' },
+    { label: 'Pro-labore', field: 'pro_labore' },
     { label: 'Periculosidade', field: 'periculosidade' },
+    { label: 'Periculosidade proporcional', field: 'periculosidade_proporcional' },
     { label: 'Hora extra 50%', field: 'hora_extra_50' },
     { label: 'Hora extra 60%', field: 'hora_extra_60' },
     { label: 'Hora extra 70%', field: 'hora_extra_70' },
     { label: 'Hora extra 100%', field: 'hora_extra_100' },
     { label: 'DSR', field: 'dsr' },
+    { label: 'Reflexo extras DSR', field: 'reflexo_extras_dsr' },
+    { label: 'Quinquenio', field: 'quinquenio' },
+    { label: 'Distribuicao de lucros', field: 'distribuicao_lucros' },
+    { label: 'Estouro do mes', field: 'estouro_mes' },
+    { label: 'Diferenca de 1/3 de ferias', field: 'diferenca_um_terco_ferias' },
+    { label: 'Diferenca media hora ferias', field: 'diferenca_media_hora_ferias' },
+    { label: 'Horas afast. doenca', field: 'horas_afast_doenca_integral' },
+    { label: 'Media afast. doenca', field: 'media_afast_doenca_integral' },
+    { label: 'Ferias', field: 'ferias' },
+    { label: '13o Salario', field: 'decimo_terceiro' },
     { label: 'Sal. Maternidade', field: 'sal_maternidade' },
-    { label: 'Sal. Família', field: 'sal_familia' },
+    { label: 'Sal. Familia', field: 'sal_familia' },
     { label: 'Vale transporte', field: 'vale_transporte' },
-    { label: 'Desc plano saúde', field: 'desc_plano_saude' },
-    { label: 'Desc vale alimentação', field: 'desc_vale_alimentacao' },
+    { label: 'Desc INSS', field: 'desc_inss' },
+    { label: 'I.N.S.S.', field: 'inss' },
+    { label: 'INSS diferenca ferias', field: 'inss_diferenca_ferias' },
+    { label: 'INSS empregador', field: 'inss_empregador' },
+    { label: 'IRRF', field: 'irrf' },
+    { label: 'IRRF empregador', field: 'irrf_empregador' },
+    { label: 'Desc plano saude', field: 'desc_plano_saude' },
+    { label: 'Desc vale alimentacao', field: 'desc_vale_alimentacao' },
     { label: 'Desc odonto', field: 'desc_odonto' },
     { label: 'Desc faltas', field: 'desc_faltas' },
     { label: 'Desc adiantamento', field: 'desc_adiantamento' },
-    { label: 'Contribuição', field: 'contribuicao' },
-    { label: 'Desc Pensão', field: 'desc_pensao' },
-    { label: 'Dif. Salário', field: 'dif_salario' },
-    { label: 'Empréstimo', field: 'emprestimo' },
+    { label: 'Contribuicao', field: 'contribuicao' },
+    { label: 'Desc Pensao', field: 'desc_pensao' },
+    { label: 'Dif. Salario', field: 'dif_salario' },
+    { label: 'Emprestimo', field: 'emprestimo' },
     { label: 'Desc fardamento', field: 'desc_fardamento' },
     { label: 'Demais desc', field: 'demais_desc' },
 ];
@@ -110,7 +141,7 @@ export function useFolhaPagamento() {
             const size = 1000;
             while (true) {
                 const { data: rows, error: err } = await externalSupabase
-                    .from('vw_dados_financeiro')
+                    .from('vw_dados_financeiro_operacional')
                     .select('*')
                     .range(page * size, (page + 1) * size - 1)
                     .order('data', { ascending: false });
