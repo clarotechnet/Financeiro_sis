@@ -104,6 +104,7 @@ interface Props {
   onImportExcel?: (rows: Record<string, any>[]) => Promise<{ inserted: number; skipped: number; errors: string[] }>;
   onImportReports?: (rows: OperationalReportImportRow[], planoContaId: string, fileName: string) => Promise<OperationalReportImportResult>;
   showActions?: boolean;
+  showNewEntry?: boolean;
   showImportReports?: boolean;
   showGeneralSearch?: boolean;
   canExportExcel?: boolean;
@@ -113,7 +114,8 @@ interface Props {
 export const ComissionamentoFilters: React.FC<Props> = ({
   filters, setFilters, clearFilters, uniqueCidades, uniqueNomes, totalFiltered,
   onManualSubmit, filteredData, opcoes, onImportExcel, onImportReports, showActions = true,
-  showImportReports = false, showGeneralSearch = false, canExportExcel = true, actionsOnly = false
+  showNewEntry = true, showImportReports = false, showGeneralSearch = false,
+  canExportExcel = true, actionsOnly = false
 }) => {
   const { isAdmin, profile } = useAuth();
   const canRegisterFornecedor = isAdmin || profile?.role === ROLE_RH;
@@ -278,7 +280,7 @@ export const ComissionamentoFilters: React.FC<Props> = ({
       <div className={`flex flex-wrap justify-between items-center gap-3 ${actionsOnly ? 'mb-0' : 'mb-4'}`}>
         <h3 className="text-lg font-bold text-foreground">Filtros</h3>
         <div className="flex items-center gap-3 flex-wrap">
-          {showActions && (
+          {showActions && showNewEntry && (
             <Button variant="outline" size="sm" onClick={() => setFormOpen(true)} className="gap-1">
               <FileEdit className="w-4 h-4" /> Novo Lançamento
             </Button>
@@ -317,13 +319,15 @@ export const ComissionamentoFilters: React.FC<Props> = ({
 
       {showActions && (
         <>
-          <ComissionamentoFormDialog
-            open={formOpen}
-            onClose={() => setFormOpen(false)}
-            onSubmit={onManualSubmit}
-            opcoes={opcoes}
-            existingRecords={filteredData}
-          />
+          {showNewEntry && (
+            <ComissionamentoFormDialog
+              open={formOpen}
+              onClose={() => setFormOpen(false)}
+              onSubmit={onManualSubmit}
+              opcoes={opcoes}
+              existingRecords={filteredData}
+            />
+          )}
           <FornecedorDialog
             open={fornecedorOpen}
             onClose={() => setFornecedorOpen(false)}

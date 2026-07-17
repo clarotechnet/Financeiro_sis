@@ -235,6 +235,7 @@ const Comissionamento: React.FC = () => {
           onImportReports={hook.importOperationalReport}
           showImportReports={activeTab === 'kpis'}
           showActions={!isDashboard}
+          showNewEntry={activeTab === 'kpis'}
           showGeneralSearch={activeTab === 'table'}
           canExportExcel={!isRh}
           actionsOnly={isRhPaymentInclusion}
@@ -275,7 +276,9 @@ const Comissionamento: React.FC = () => {
         {!isRhPaymentInclusion && !hook.isLoading && !hasData && !hook.error && (
           <div className="text-center py-12">
             <p className="text-muted-foreground text-lg">
-              Clique em "Novo Lançamento" para começar.
+              {activeTab === 'kpis'
+                ? 'Clique em "Novo Lançamento" para começar.'
+                : 'Nenhum lançamento encontrado para os filtros informados.'}
             </p>
           </div>
         )}
