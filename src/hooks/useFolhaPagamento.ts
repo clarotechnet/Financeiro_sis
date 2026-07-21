@@ -57,6 +57,97 @@ export interface DadoFinanceiro {
     salario_liquido: number;
 }
 
+export interface FolhaKpiData {
+    folhaTotal: number;
+    receitaLiquida: number;
+    folhaSobreReceita: number | null;
+    encargos: number;
+    salarios: number;
+    encargosSobreSalarios: number | null;
+    colaboradores: number;
+    custoMedioColaborador: number;
+    beneficios: number;
+    beneficiosSobreFolha: number | null;
+    evolucaoMensal: number | null;
+    folhaMesAnterior: number;
+    horasExtras: number;
+    horasExtrasSobreFolha: number | null;
+    mediaHorasExtrasColaborador: number;
+    valeAlimentacao: number;
+    planoSaude: number;
+    premiacao: number;
+    premiacaoSobreFolha: number | null;
+    beneficiosPorColaborador: number;
+}
+
+export interface FolhaCentroIndicador {
+    centro: string;
+    valor: number;
+}
+
+export interface FolhaDespesaComposicao {
+    rubrica: string;
+    valor: number;
+    percentual: number;
+}
+
+export interface FolhaCentroDetalhe {
+    centro: string;
+    colaboradores: number;
+    movimentacao: number;
+    receitas: number;
+    despesas: number;
+    resultado: number;
+    variacaoResultado: number | null;
+    mediaReceitasColaborador: number;
+    mediaDespesasColaborador: number;
+}
+
+export interface FolhaUnidadeDetalhe {
+    unidade: string;
+    colaboradores: number;
+    movimentacao: number;
+    receitas: number;
+    despesas: number;
+    resultado: number;
+    variacaoResultado: number | null;
+    mediaReceitasColaborador: number;
+    mediaDespesasColaborador: number;
+    centros: FolhaCentroDetalhe[];
+}
+
+interface FolhaPagamentoFonte {
+    data_lancamento: string | null;
+    valor: number | null;
+    unidade_codigo?: string | null;
+    unidade_cadastro?: string | null;
+    unidade?: string | null;
+    setor_codigo?: string | null;
+    setor_nome?: string | null;
+    centro_de_custo?: string | null;
+    conta_analitica_descricao?: string | null;
+    conta_analitica?: string | null;
+}
+
+interface FolhaReceitaFonte {
+    data_recebimento: string;
+    valor: number | null;
+    unidade_codigo: string | null;
+    unidade_nome: string | null;
+    setor_codigo: string | null;
+    setor_nome: string | null;
+    conta_natureza: string | null;
+}
+
+interface FolhaColaboradorFonte {
+    cpf: string;
+    nome: string;
+    unidade_codigo: string | null;
+    unidade_nome?: string | null;
+    setor_codigo: string | null;
+    setor_nome?: string | null;
+}
+
 // Mapa: label exibido no filtro -> coluna do banco
 export const VERBA_FIELDS: { label: string; field: keyof DadoFinanceiro }[] = [
     { label: 'Sal. Folha', field: 'sal_folha' },
@@ -136,16 +227,100 @@ const normalizeCpf = (value: string | null | undefined) => {
     return digits.length < 11 ? digits.padStart(11, '0') : digits;
 };
 
-const chunkArray = <T,>(items: T[], size: number) => {
-    const chunks: T[][] = [];
-    for (let index = 0; index < items.length; index += size) {
-        chunks.push(items.slice(index, index + size));
+const CENTROS_CUSTO_INDICADORES = [
+    'T\u00e9cnico de Campo \u2014 ADS & SERVI\u00c7OS',
+    'T\u00e9cnico de Campo \u2014 Desconex\u00e3o',
+    'T\u00e9cnico de Campo \u2014 VT por equipe',
+    'T\u00e9cnico de Campo \u2014 MDU - Manuten\u00e7\u00e3o',
+    'T\u00e9cnico de Campo \u2014 MDU - Constru\u00e7\u00e3o',
+    'T\u00e9cnica \u2014 Consultivo',
+    'T\u00e9cnica \u2014 Gest\u00e3o',
+    'Suporte de Campo \u2014 ADS & SERVI\u00c7OS',
+    'Suporte de Campo \u2014 Desconex\u00e3o',
+    'Suporte de Campo \u2014 VT por equipe',
+    'Suporte de Campo \u2014 MDU - Manuten\u00e7\u00e3o',
+    'Suporte de Campo \u2014 MDU - Constru\u00e7\u00e3o',
+    'Comercial PPAP',
+    'Comercial TELEMARKETING',
+];
+
+const normalizeLabel = (value: string | null | undefined) =>
+    String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[\u2013\u2014-]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toUpperCase();
+
+const isSameLabel = (left: string | null | undefined, right: string | null | undefined) =>
+    normalizeLabel(left) === normalizeLabel(right);
+
+const inDateRange = (value: string | null | undefined, start: string, end: string) =>
+    Boolean(value && (!start || value >= start) && (!end || value <= end));
+
+const shiftMonth = (value: string, amount: number) => {
+    if (!value) return '';
+    const [year, month, day] = value.split('-').map(Number);
+    const targetMonth = month - 1 + amount;
+    const lastDay = new Date(year, targetMonth + 1, 0).getDate();
+    return formatDateInput(new Date(year, targetMonth, Math.min(day, lastDay)));
+};
+
+const percent = (numerator: number, denominator: number) =>
+    denominator === 0 ? null : (numerator / Math.abs(denominator)) * 100;
+
+const variation = (current: number, previous: number) =>
+    previous === 0 ? (current === 0 ? 0 : null) : ((current - previous) / Math.abs(previous)) * 100;
+
+const uniqueEmployeeKey = (row: { cpf?: string | null; nome?: string | null }) =>
+    normalizeCpf(row.cpf) || normalizeLabel(row.nome);
+
+const paymentUnit = (row: FolhaPagamentoFonte) =>
+    row.unidade_cadastro || row.unidade || row.unidade_codigo || 'Sem Unidade';
+
+const paymentSector = (row: FolhaPagamentoFonte) =>
+    row.setor_nome || row.centro_de_custo || row.setor_codigo || 'Sem Centro de Custo';
+
+const paymentAccount = (row: FolhaPagamentoFonte) =>
+    row.conta_analitica_descricao
+    || String(row.conta_analitica || '').replace(/^\d{2}-\d{2}-\d{3}\s*-\s*/, '')
+    || 'Sem Conta Anal\u00edtica';
+
+const receiptUnit = (row: FolhaReceitaFonte) =>
+    row.unidade_nome || row.unidade_codigo || 'Sem Unidade';
+
+const receiptSector = (row: FolhaReceitaFonte) =>
+    row.setor_nome || row.setor_codigo || 'Sem Centro de Custo';
+
+const isDeduction = (nature: string | null | undefined) =>
+    normalizeLabel(nature).startsWith('DEDU');
+
+const fetchAllRows = async <T,>(table: string, dateColumn: string): Promise<T[]> => {
+    const rows: T[] = [];
+    const pageSize = 1000;
+
+    for (let page = 0; ; page += 1) {
+        const { data, error } = await externalSupabase
+            .from(table)
+            .select('*')
+            .range(page * pageSize, (page + 1) * pageSize - 1)
+            .order(dateColumn, { ascending: false });
+
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        rows.push(...data as T[]);
+        if (data.length < pageSize) break;
     }
-    return chunks;
+
+    return rows;
 };
 
 export function useFolhaPagamento() {
     const [data, setData] = useState<DadoFinanceiro[]>([]);
+    const [pagamentos, setPagamentos] = useState<FolhaPagamentoFonte[]>([]);
+    const [receitas, setReceitas] = useState<FolhaReceitaFonte[]>([]);
+    const [cadastros, setCadastros] = useState<FolhaColaboradorFonte[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [filters, setFilters] = useState<FolhaFilters>(createDefaultFilters);
@@ -169,23 +344,19 @@ export function useFolhaPagamento() {
                 if (rows.length < size) break;
                 page++;
             }
-            const cpfs = Array.from(new Set(all.map(row => normalizeCpf(row.cpf)).filter(Boolean)));
+            const [pagamentosRows, receitasRows, registros] = await Promise.all([
+                fetchAllRows<FolhaPagamentoFonte>('vw_lancamentos_pix_com_conta_analitica', 'data_lancamento'),
+                fetchAllRows<FolhaReceitaFonte>('vw_receitas_plano_contas', 'data_recebimento'),
+                fetchAllRows<FolhaColaboradorFonte>('registros_dados', 'nome'),
+            ]);
             const registrosByCpf = new Map<string, { unidade_codigo: string | null; setor_codigo: string | null }>();
 
-            for (const cpfChunk of chunkArray(cpfs, 500)) {
-                const { data: registros, error: registrosError } = await externalSupabase
-                    .from('registros_dados')
-                    .select('cpf, unidade_codigo, setor_codigo')
-                    .in('cpf', cpfChunk);
-
-                if (registrosError) throw registrosError;
-                (registros || []).forEach((registro: any) => {
-                    registrosByCpf.set(normalizeCpf(registro.cpf), {
-                        unidade_codigo: registro.unidade_codigo || null,
-                        setor_codigo: registro.setor_codigo || null,
-                    });
+            registros.forEach(registro => {
+                registrosByCpf.set(normalizeCpf(registro.cpf), {
+                    unidade_codigo: registro.unidade_codigo || null,
+                    setor_codigo: registro.setor_codigo || null,
                 });
-            }
+            });
 
             const [unidadesResult, setoresResult] = await Promise.all([
                 externalSupabase.from('unidades').select('codigo, unidade'),
@@ -215,6 +386,17 @@ export function useFolhaPagamento() {
                     setor_nome: setorCodigo ? setoresByCodigo.get(setorCodigo) || row.setor || setorCodigo : row.setor,
                 };
             }));
+            setPagamentos(pagamentosRows);
+            setReceitas(receitasRows);
+            setCadastros(registros.map(registro => ({
+                ...registro,
+                unidade_nome: registro.unidade_codigo
+                    ? unidadesByCodigo.get(registro.unidade_codigo) || registro.unidade_codigo
+                    : null,
+                setor_nome: registro.setor_codigo
+                    ? setoresByCodigo.get(registro.setor_codigo) || registro.setor_codigo
+                    : null,
+            })));
         } catch (e: any) {
             console.error('Erro Folha:', e);
             setError(e.message || 'Erro ao carregar');
@@ -230,6 +412,7 @@ export function useFolhaPagamento() {
         if (filters.dataInicio) r = r.filter(x => x.data && x.data >= filters.dataInicio);
         if (filters.dataFim) r = r.filter(x => x.data && x.data <= filters.dataFim);
         if (filters.categoria.length) r = r.filter(x => filters.categoria.includes(x.setor_nome || x.setor || ''));
+        if (filters.unidade.length) r = r.filter(x => filters.unidade.includes(x.unidade_nome || x.unidade_codigo || ''));
         if (filters.nome.length) r = r.filter(x => filters.nome.includes(x.nome || ''));
         if (filters.verbas.length) {
             const fields = VERBA_FIELDS.filter(v => filters.verbas.includes(v.label)).map(v => v.field);
@@ -248,26 +431,218 @@ export function useFolhaPagamento() {
         [data]
     );
 
-    const kpis = useMemo(() => {
-        const acc = { total: filtered.length, proventos: 0, descontos: 0, liquido: 0 };
-        const map = new Map<string, { qtd: number; liquido: number; proventos: number; descontos: number }>();
-        filtered.forEach(r => {
-            acc.proventos += Number(r.total_proventos) || 0;
-            acc.descontos += Number(r.total_descontos) || 0;
-            acc.liquido += Number(r.salario_liquido) || 0;
-            const k = r.setor_nome || r.setor || 'Sem Setor';
-            if (!map.has(k)) map.set(k, { qtd: 0, liquido: 0, proventos: 0, descontos: 0 });
-            const it = map.get(k)!;
-            it.qtd += 1;
-            it.liquido += Number(r.salario_liquido) || 0;
-            it.proventos += Number(r.total_proventos) || 0;
-            it.descontos += Number(r.total_descontos) || 0;
+    const opcoesUnidades = useMemo(
+        () => [...new Set(data.map(d => d.unidade_nome || d.unidade_codigo).filter(Boolean))]
+            .sort((a, b) => a!.localeCompare(b!, 'pt-BR')) as string[],
+        [data]
+    );
+
+    const dashboard = useMemo(() => {
+        const previousStart = shiftMonth(filters.dataInicio, -1);
+        const previousEnd = shiftMonth(filters.dataFim, -1);
+        const matchesSelected = (selected: string[], value: string) =>
+            selected.length === 0 || selected.some(item => isSameLabel(item, value));
+        const matchesDimensions = (unit: string, sector: string) =>
+            matchesSelected(filters.unidade, unit) && matchesSelected(filters.categoria, sector);
+
+        const previousFolha = data.filter(row => {
+            const unit = row.unidade_nome || row.unidade_codigo || 'Sem Unidade';
+            const sector = row.setor_nome || row.setor || 'Sem Centro de Custo';
+            if (!inDateRange(row.data, previousStart, previousEnd) || !matchesDimensions(unit, sector)) return false;
+            if (filters.nome.length && !filters.nome.includes(row.nome || '')) return false;
+            if (filters.verbas.length) {
+                const fields = VERBA_FIELDS.filter(item => filters.verbas.includes(item.label)).map(item => item.field);
+                if (!fields.some(field => (Number(row[field]) || 0) !== 0)) return false;
+            }
+            return true;
         });
-        const porSetor = Array.from(map.entries())
-            .map(([setor, v]) => ({ setor, ...v }))
-            .sort((a, b) => b.liquido - a.liquido);
-        return { ...acc, porSetor };
-    }, [filtered]);
+
+        const pagamentosAtuais = pagamentos.filter(row =>
+            inDateRange(row.data_lancamento, filters.dataInicio, filters.dataFim)
+            && matchesDimensions(paymentUnit(row), paymentSector(row))
+        );
+        const pagamentosAnteriores = pagamentos.filter(row =>
+            inDateRange(row.data_lancamento, previousStart, previousEnd)
+            && matchesDimensions(paymentUnit(row), paymentSector(row))
+        );
+        const receitasAtuais = receitas.filter(row =>
+            inDateRange(row.data_recebimento, filters.dataInicio, filters.dataFim)
+            && matchesDimensions(receiptUnit(row), receiptSector(row))
+        );
+        const receitasAnteriores = receitas.filter(row =>
+            inDateRange(row.data_recebimento, previousStart, previousEnd)
+            && matchesDimensions(receiptUnit(row), receiptSector(row))
+        );
+
+        const colaboradores = new Set(filtered.map(uniqueEmployeeKey).filter(Boolean)).size;
+        const folhaTotal = filtered.reduce((sum, row) => sum + (Number(row.total_proventos) || 0), 0);
+        const folhaMesAnterior = previousFolha.reduce((sum, row) => sum + (Number(row.total_proventos) || 0), 0);
+        const salarios = filtered.reduce((sum, row) => sum + (Number(row.sal_folha) || 0), 0);
+        const encargos = filtered.reduce(
+            (sum, row) => sum + Math.abs(Number(row.inss_empregador) || 0) + Math.abs(Number(row.irrf_empregador) || 0),
+            0,
+        );
+        const horasExtras = filtered.reduce(
+            (sum, row) => sum
+                + Math.abs(Number(row.hora_extra_50) || 0)
+                + Math.abs(Number(row.hora_extra_60) || 0)
+                + Math.abs(Number(row.hora_extra_70) || 0)
+                + Math.abs(Number(row.hora_extra_100) || 0),
+            0,
+        );
+        const receitaLiquida = receitasAtuais.reduce(
+            (sum, row) => sum + (isDeduction(row.conta_natureza) ? -Math.abs(Number(row.valor) || 0) : Math.abs(Number(row.valor) || 0)),
+            0,
+        );
+
+        let valeAlimentacao = 0;
+        let planoSaude = 0;
+        let premiacao = 0;
+        pagamentosAtuais.forEach(row => {
+            const account = normalizeLabel(paymentAccount(row));
+            const value = Math.abs(Number(row.valor) || 0);
+            if (account === 'ALIMENTACAO' || account === 'VALE ALIMENTACAO') valeAlimentacao += value;
+            if (account === 'PLANO DE SAUDE') planoSaude += value;
+            if (account === 'PREMIACAO') premiacao += value;
+        });
+        const beneficios = valeAlimentacao + planoSaude + premiacao;
+
+        const kpis: FolhaKpiData = {
+            folhaTotal,
+            receitaLiquida,
+            folhaSobreReceita: percent(folhaTotal, receitaLiquida),
+            encargos,
+            salarios,
+            encargosSobreSalarios: percent(encargos, salarios),
+            colaboradores,
+            custoMedioColaborador: colaboradores ? folhaTotal / colaboradores : 0,
+            beneficios,
+            beneficiosSobreFolha: percent(beneficios, folhaTotal),
+            evolucaoMensal: variation(folhaTotal, folhaMesAnterior),
+            folhaMesAnterior,
+            horasExtras,
+            horasExtrasSobreFolha: percent(horasExtras, folhaTotal),
+            mediaHorasExtrasColaborador: colaboradores ? horasExtras / colaboradores : 0,
+            valeAlimentacao,
+            planoSaude,
+            premiacao,
+            premiacaoSobreFolha: percent(premiacao, folhaTotal),
+            beneficiosPorColaborador: colaboradores ? beneficios / colaboradores : 0,
+        };
+
+        const despesasPorRubrica = new Map<string, number>();
+        const despesasPorCentro = new Map<string, number>();
+        pagamentosAtuais.forEach(row => {
+            const rubrica = paymentAccount(row);
+            const valor = Math.abs(Number(row.valor) || 0);
+            despesasPorRubrica.set(rubrica, (despesasPorRubrica.get(rubrica) || 0) + valor);
+            const centroKey = normalizeLabel(paymentSector(row));
+            despesasPorCentro.set(centroKey, (despesasPorCentro.get(centroKey) || 0) + valor);
+        });
+        const totalDespesas = Array.from(despesasPorRubrica.values()).reduce((sum, value) => sum + value, 0);
+        const composicaoDespesas: FolhaDespesaComposicao[] = Array.from(despesasPorRubrica.entries())
+            .map(([rubrica, valor]) => ({
+                rubrica,
+                valor,
+                percentual: totalDespesas ? (valor / totalDespesas) * 100 : 0,
+            }))
+            .sort((a, b) => b.valor - a.valor);
+        const centrosCusto: FolhaCentroIndicador[] = CENTROS_CUSTO_INDICADORES.map(centro => ({
+            centro,
+            valor: despesasPorCentro.get(normalizeLabel(centro)) || 0,
+        }));
+
+        type DetailBucket = {
+            unidade: string;
+            centro: string;
+            colaboradores: Set<string>;
+            receitas: number;
+            despesas: number;
+        };
+        const currentBuckets = new Map<string, DetailBucket>();
+        const previousResults = new Map<string, number>();
+        const previousUnitResults = new Map<string, number>();
+        const bucketKey = (unit: string, sector: string) => `${normalizeLabel(unit)}::${normalizeLabel(sector)}`;
+        const getCurrentBucket = (unit: string, sector: string) => {
+            const key = bucketKey(unit, sector);
+            if (!currentBuckets.has(key)) {
+                currentBuckets.set(key, { unidade: unit, centro: sector, colaboradores: new Set(), receitas: 0, despesas: 0 });
+            }
+            return currentBuckets.get(key)!;
+        };
+
+        cadastros.forEach(row => {
+            const unit = row.unidade_nome || row.unidade_codigo || 'Sem Unidade';
+            const sector = row.setor_nome || row.setor_codigo || 'Sem Centro de Custo';
+            if (!matchesDimensions(unit, sector)) return;
+            if (filters.nome.length && !filters.nome.includes(row.nome || '')) return;
+            getCurrentBucket(unit, sector).colaboradores.add(uniqueEmployeeKey(row));
+        });
+        pagamentosAtuais.forEach(row => {
+            getCurrentBucket(paymentUnit(row), paymentSector(row)).despesas += Math.abs(Number(row.valor) || 0);
+        });
+        receitasAtuais.forEach(row => {
+            const signedValue = isDeduction(row.conta_natureza) ? -Math.abs(Number(row.valor) || 0) : Math.abs(Number(row.valor) || 0);
+            getCurrentBucket(receiptUnit(row), receiptSector(row)).receitas += signedValue;
+        });
+        const addPreviousResult = (unit: string, sector: string, value: number) => {
+            const key = bucketKey(unit, sector);
+            previousResults.set(key, (previousResults.get(key) || 0) + value);
+            const unitKey = normalizeLabel(unit);
+            previousUnitResults.set(unitKey, (previousUnitResults.get(unitKey) || 0) + value);
+        };
+        pagamentosAnteriores.forEach(row => {
+            addPreviousResult(paymentUnit(row), paymentSector(row), -Math.abs(Number(row.valor) || 0));
+        });
+        receitasAnteriores.forEach(row => {
+            const value = isDeduction(row.conta_natureza) ? -Math.abs(Number(row.valor) || 0) : Math.abs(Number(row.valor) || 0);
+            addPreviousResult(receiptUnit(row), receiptSector(row), value);
+        });
+
+        const units = new Map<string, { unidade: string; centros: FolhaCentroDetalhe[]; colaboradores: Set<string> }>();
+        currentBuckets.forEach((bucket, key) => {
+            const colaboradoresCentro = bucket.colaboradores.size;
+            const resultado = bucket.receitas - bucket.despesas;
+            const detalhe: FolhaCentroDetalhe = {
+                centro: bucket.centro,
+                colaboradores: colaboradoresCentro,
+                movimentacao: Math.abs(bucket.receitas) + bucket.despesas,
+                receitas: bucket.receitas,
+                despesas: bucket.despesas,
+                resultado,
+                variacaoResultado: variation(resultado, previousResults.get(key) || 0),
+                mediaReceitasColaborador: colaboradoresCentro ? bucket.receitas / colaboradoresCentro : 0,
+                mediaDespesasColaborador: colaboradoresCentro ? bucket.despesas / colaboradoresCentro : 0,
+            };
+            const unitKey = normalizeLabel(bucket.unidade);
+            if (!units.has(unitKey)) units.set(unitKey, { unidade: bucket.unidade, centros: [], colaboradores: new Set() });
+            const unit = units.get(unitKey)!;
+            unit.centros.push(detalhe);
+            bucket.colaboradores.forEach(employee => unit.colaboradores.add(employee));
+        });
+        const unidadesDetalhe: FolhaUnidadeDetalhe[] = Array.from(units.entries())
+            .map(([unitKey, unit]) => {
+                const receitasUnidade = unit.centros.reduce((sum, center) => sum + center.receitas, 0);
+                const despesasUnidade = unit.centros.reduce((sum, center) => sum + center.despesas, 0);
+                const resultadoUnidade = receitasUnidade - despesasUnidade;
+                const colaboradoresUnidade = unit.colaboradores.size;
+                return {
+                    unidade: unit.unidade,
+                    colaboradores: colaboradoresUnidade,
+                    movimentacao: Math.abs(receitasUnidade) + despesasUnidade,
+                    receitas: receitasUnidade,
+                    despesas: despesasUnidade,
+                    resultado: resultadoUnidade,
+                    variacaoResultado: variation(resultadoUnidade, previousUnitResults.get(unitKey) || 0),
+                    mediaReceitasColaborador: colaboradoresUnidade ? receitasUnidade / colaboradoresUnidade : 0,
+                    mediaDespesasColaborador: colaboradoresUnidade ? despesasUnidade / colaboradoresUnidade : 0,
+                    centros: unit.centros.sort((a, b) => a.centro.localeCompare(b.centro, 'pt-BR')),
+                };
+            })
+            .sort((a, b) => a.unidade.localeCompare(b.unidade, 'pt-BR'));
+
+        return { kpis, centrosCusto, composicaoDespesas, unidadesDetalhe };
+    }, [cadastros, data, filtered, filters, pagamentos, receitas]);
 
     const importExcel = useCallback(async (rows: Record<string, any>[]) => {
         const errors: string[] = [];
@@ -299,6 +674,10 @@ export function useFolhaPagamento() {
         importExcel,
         opcoesCategoria,
         opcoesNomes,
-        kpis,
+        opcoesUnidades,
+        kpis: dashboard.kpis,
+        centrosCusto: dashboard.centrosCusto,
+        composicaoDespesas: dashboard.composicaoDespesas,
+        unidadesDetalhe: dashboard.unidadesDetalhe,
     };
 }

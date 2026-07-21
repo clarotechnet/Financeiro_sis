@@ -78,7 +78,7 @@ const MultiSelect: React.FC<MultiSelectProps> = ({ label, options, selected, onC
 const TABS = [
   { id: 'kpis', label: 'KPIs' },
   { id: 'charts', label: 'Gráficos' },
-  { id: 'frentes', label: 'Frentes' },
+  { id: 'frentes', label: 'Detalhe por centro de custo' },
 ];
 
 const FolhaPagamento: React.FC = () => {
@@ -89,7 +89,8 @@ const FolhaPagamento: React.FC = () => {
   const { toast } = useToast();
   const {
     data, isLoading, error, filters, setFilters, clearFilters,
-    fetchData, importExcel, opcoesCategoria, opcoesNomes, kpis
+    fetchData, importExcel, opcoesCategoria, opcoesNomes, opcoesUnidades,
+    kpis, centrosCusto, composicaoDespesas, unidadesDetalhe,
   } = useFolhaPagamento();
 
   const formatDatePtBr = (dateStr: string) => {
@@ -176,6 +177,7 @@ const FolhaPagamento: React.FC = () => {
           </div>
 
           <div className="filter-section">
+            <MultiSelect label="Unidade" options={opcoesUnidades} selected={filters.unidade} onChange={v => setFilters({ unidade: v })} />
             <div className="form-group">
               <Label className="form-label">Data Inicial</Label>
               <input
@@ -210,8 +212,8 @@ const FolhaPagamento: React.FC = () => {
         ) : (
           <div className="tab-content">
             {activeTab === 'kpis' && <FolhaKPIs kpis={kpis} />}
-            {activeTab === 'charts' && <FolhaCharts porSetor={kpis.porSetor} data={data} />}
-            {activeTab === 'frentes' && <FolhaFrentes porSetor={kpis.porSetor} />}
+            {activeTab === 'charts' && <FolhaCharts centrosCusto={centrosCusto} composicaoDespesas={composicaoDespesas} />}
+            {activeTab === 'frentes' && <FolhaFrentes unidades={unidadesDetalhe} />}
             {activeTab === 'table' && <FolhaTable data={data} />}
           </div>
         )}

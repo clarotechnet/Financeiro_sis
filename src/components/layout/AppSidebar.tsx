@@ -23,7 +23,7 @@ const RELATORIOS_TABS: SubItem[] = [
 const FOLHA_TABS: SubItem[] = [
     { id: 'kpis', label: 'KPIs', icon: BarChart3 },
     { id: 'charts', label: 'Gráficos', icon: PieChart },
-    { id: 'frentes', label: 'Frentes', icon: Layers },
+    { id: 'frentes', label: 'Detalhe por centro de custo', icon: Layers },
     { id: 'table', label: 'Dados Detalhados', icon: TableIcon },
 ];
 
