@@ -109,8 +109,26 @@ export interface FolhaFilters {
     nome: string[];      // placeholder
 }
 
-const EMPTY_FILTERS: FolhaFilters = {
-    dataInicio: '', dataFim: '', categoria: [], verbas: [], unidade: [], nome: [],
+const formatDateInput = (date: Date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
+
+const createDefaultFilters = (): FolhaFilters => {
+    const today = new Date();
+    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+    const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+
+    return {
+        dataInicio: formatDateInput(firstDay),
+        dataFim: formatDateInput(lastDay),
+        categoria: [],
+        verbas: [],
+        unidade: [],
+        nome: [],
+    };
 };
 
 const normalizeCpf = (value: string | null | undefined) => {
@@ -130,7 +148,7 @@ export function useFolhaPagamento() {
     const [data, setData] = useState<DadoFinanceiro[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [filters, setFilters] = useState<FolhaFilters>(EMPTY_FILTERS);
+    const [filters, setFilters] = useState<FolhaFilters>(createDefaultFilters);
 
     const fetchData = useCallback(async () => {
         setIsLoading(true);
@@ -276,7 +294,7 @@ export function useFolhaPagamento() {
         error,
         filters,
         setFilters: (p: Partial<FolhaFilters>) => setFilters(prev => ({ ...prev, ...p })),
-        clearFilters: () => setFilters(EMPTY_FILTERS),
+        clearFilters: () => setFilters(createDefaultFilters()),
         fetchData,
         importExcel,
         opcoesCategoria,

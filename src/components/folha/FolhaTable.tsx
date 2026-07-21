@@ -37,6 +37,11 @@ export const FolhaTable: React.FC<Props> = ({ data }) => {
         );
     }, [data, search]);
 
+    const totalLiquido = useMemo(
+        () => filtered.reduce((total, row) => total + (Number(row.salario_liquido) || 0), 0),
+        [filtered],
+    );
+
     const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
     const pageData = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
@@ -46,13 +51,21 @@ export const FolhaTable: React.FC<Props> = ({ data }) => {
                 <h3 className="text-lg font-bold text-foreground">
                     Dados Detalhados <span className="text-sm text-muted-foreground font-normal">({filtered.length})</span>
                 </h3>
-                <input
-                    type="text"
-                    placeholder="Buscar CPF ..."
-                    value={search}
-                    onChange={e => { setSearch(e.target.value); setPage(0); }}
-                    className="bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground w-72"
-                />
+                <div className="flex flex-wrap items-center justify-end gap-3">
+                    <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-right">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                            L&iacute;quido dos registros
+                        </p>
+                        <p className="text-base font-extrabold text-emerald-500">{fmtMoney(totalLiquido)}</p>
+                    </div>
+                    <input
+                        type="text"
+                        placeholder="Buscar CPF ..."
+                        value={search}
+                        onChange={e => { setSearch(e.target.value); setPage(0); }}
+                        className="bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground w-72"
+                    />
+                </div>
             </div>
 
             <div className="overflow-x-auto rounded-lg border border-border">
