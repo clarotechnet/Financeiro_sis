@@ -89,7 +89,7 @@ const FolhaPagamento: React.FC = () => {
   const { toast } = useToast();
   const {
     data, isLoading, error, filters, setFilters, clearFilters,
-    fetchData, importExcel, opcoesCategoria, opcoesNomes, opcoesUnidades,
+    fetchData, importExcel, opcoesCentrosCusto, opcoesNomes, opcoesUnidades,
     kpis, centrosCusto, composicaoDespesas, unidadesDetalhe,
   } = useFolhaPagamento();
 
@@ -196,7 +196,12 @@ const FolhaPagamento: React.FC = () => {
                 onChange={e => setFilters({ dataFim: e.target.value })}
               />
             </div>
-            <MultiSelect label="Categoria (Setor)" options={opcoesCategoria} selected={filters.categoria} onChange={v => setFilters({ categoria: v })} />
+            <MultiSelect
+              label="Centro de Custo"
+              options={opcoesCentrosCusto}
+              selected={filters.centroCusto}
+              onChange={v => setFilters({ centroCusto: v })}
+            />
             <MultiSelect label="Verba" options={VERBA_FIELDS.map(v => v.label)} selected={filters.verbas} onChange={v => setFilters({ verbas: v })} />
             <MultiSelect label="Nome" options={opcoesNomes} selected={filters.nome} onChange={v => setFilters({ nome: v })} />
           </div>

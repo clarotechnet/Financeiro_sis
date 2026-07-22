@@ -194,10 +194,10 @@ export const VERBA_FIELDS: { label: string; field: keyof DadoFinanceiro }[] = [
 export interface FolhaFilters {
     dataInicio: string;
     dataFim: string;
-    categoria: string[]; // setor
+    centroCusto: string[];
     verbas: string[]; // labels selecionadas em VERBA_FIELDS
-    unidade: string[];   // placeholder
-    nome: string[];      // placeholder
+    unidade: string[];
+    nome: string[];
 }
 
 const formatDateInput = (date: Date) => {
@@ -215,7 +215,7 @@ const createDefaultFilters = (): FolhaFilters => {
     return {
         dataInicio: formatDateInput(firstDay),
         dataFim: formatDateInput(lastDay),
-        categoria: [],
+        centroCusto: [],
         verbas: [],
         unidade: [],
         nome: [],
@@ -321,6 +321,8 @@ export function useFolhaPagamento() {
     const [pagamentos, setPagamentos] = useState<FolhaPagamentoFonte[]>([]);
     const [receitas, setReceitas] = useState<FolhaReceitaFonte[]>([]);
     const [cadastros, setCadastros] = useState<FolhaColaboradorFonte[]>([]);
+    const [opcoesUnidades, setOpcoesUnidades] = useState<string[]>([]);
+    const [opcoesCentrosCusto, setOpcoesCentrosCusto] = useState<string[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [filters, setFilters] = useState<FolhaFilters>(createDefaultFilters);
@@ -373,6 +375,19 @@ export function useFolhaPagamento() {
                 (setoresResult.data || []).map((row: any) => [String(row.codigo), String(row.setor)]),
             );
 
+            setOpcoesUnidades(
+                (unidadesResult.data || [])
+                    .map((row: any) => String(row.unidade || '').trim())
+                    .filter(Boolean)
+                    .sort((a: string, b: string) => a.localeCompare(b, 'pt-BR')),
+            );
+            setOpcoesCentrosCusto(
+                (setoresResult.data || [])
+                    .map((row: any) => String(row.setor || '').trim())
+                    .filter(Boolean)
+                    .sort((a: string, b: string) => a.localeCompare(b, 'pt-BR')),
+            );
+
             setData(all.map(row => {
                 const cadastro = registrosByCpf.get(normalizeCpf(row.cpf));
                 const unidadeCodigo = cadastro?.unidade_codigo || row.unidade_codigo || null;
@@ -411,7 +426,7 @@ export function useFolhaPagamento() {
         let r = [...data];
         if (filters.dataInicio) r = r.filter(x => x.data && x.data >= filters.dataInicio);
         if (filters.dataFim) r = r.filter(x => x.data && x.data <= filters.dataFim);
-        if (filters.categoria.length) r = r.filter(x => filters.categoria.includes(x.setor_nome || x.setor || ''));
+        if (filters.centroCusto.length) r = r.filter(x => filters.centroCusto.includes(x.setor_nome || x.setor || ''));
         if (filters.unidade.length) r = r.filter(x => filters.unidade.includes(x.unidade_nome || x.unidade_codigo || ''));
         if (filters.nome.length) r = r.filter(x => filters.nome.includes(x.nome || ''));
         if (filters.verbas.length) {
@@ -421,19 +436,8 @@ export function useFolhaPagamento() {
         return r;
     }, [data, filters]);
 
-    const opcoesCategoria = useMemo(
-        () => [...new Set(data.map(d => d.setor_nome || d.setor).filter(Boolean))].sort((a, b) => a!.localeCompare(b!, 'pt-BR')) as string[],
-        [data]
-    );
-
     const opcoesNomes = useMemo(
         () => [...new Set(data.map(d => d.nome).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR')),
-        [data]
-    );
-
-    const opcoesUnidades = useMemo(
-        () => [...new Set(data.map(d => d.unidade_nome || d.unidade_codigo).filter(Boolean))]
-            .sort((a, b) => a!.localeCompare(b!, 'pt-BR')) as string[],
         [data]
     );
 
@@ -443,7 +447,7 @@ export function useFolhaPagamento() {
         const matchesSelected = (selected: string[], value: string) =>
             selected.length === 0 || selected.some(item => isSameLabel(item, value));
         const matchesDimensions = (unit: string, sector: string) =>
-            matchesSelected(filters.unidade, unit) && matchesSelected(filters.categoria, sector);
+            matchesSelected(filters.unidade, unit) && matchesSelected(filters.centroCusto, sector);
 
         const previousFolha = data.filter(row => {
             const unit = row.unidade_nome || row.unidade_codigo || 'Sem Unidade';
@@ -672,7 +676,7 @@ export function useFolhaPagamento() {
         clearFilters: () => setFilters(createDefaultFilters()),
         fetchData,
         importExcel,
-        opcoesCategoria,
+        opcoesCentrosCusto,
         opcoesNomes,
         opcoesUnidades,
         kpis: dashboard.kpis,
