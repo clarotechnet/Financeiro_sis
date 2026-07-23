@@ -205,7 +205,7 @@ export const FolhaImportExcel: React.FC<Props> = ({ onImport }) => {
             if (rows.length === 0) throw new Error('Nenhuma linha valida encontrada no arquivo.');
 
             const response = await onImport(rows);
-            const message = `${response.inserted} importado(s), ${response.skipped} ignorado(s).${response.errors.length ? ` ${response.errors[0]}` : ''}`;
+            const message = `${response.inserted} sincronizado(s), ${response.skipped} ignorado(s).${response.errors.length ? ` ${response.errors[0]}` : ''}`;
             const ok = response.errors.length === 0;
             setResult({ ok, message });
         } catch (error: any) {

@@ -652,13 +652,29 @@ export function useFolhaPagamento() {
         const errors: string[] = [];
         let inserted = 0;
         let skipped = 0;
-        const records = rows.filter(r => {
-            if (!r.data || !r.cpf || !r.nome) { skipped++; return false; }
-            return true;
+        const recordsByKey = new Map<string, Record<string, any>>();
+
+        rows.forEach(row => {
+            const cpf = normalizeCpf(row.cpf);
+            if (!row.data || !cpf || !row.nome) {
+                skipped += 1;
+                return;
+            }
+
+            const key = `${row.data}|${cpf}`;
+            if (recordsByKey.has(key)) skipped += 1;
+            recordsByKey.set(key, { ...row, cpf });
         });
+
+        const records = Array.from(recordsByKey.values());
         for (let i = 0; i < records.length; i += 200) {
             const chunk = records.slice(i, i + 200);
-            const { error: err } = await externalSupabase.from('dados_financeiro').insert(chunk);
+            const { error: err } = await externalSupabase
+                .from('dados_financeiro')
+                .upsert(chunk, {
+                    onConflict: 'data,cpf',
+                    ignoreDuplicates: false,
+                });
             if (err) errors.push(err.message);
             else inserted += chunk.length;
         }
