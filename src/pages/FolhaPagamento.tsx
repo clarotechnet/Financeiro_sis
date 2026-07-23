@@ -7,6 +7,7 @@ import * as XLSX from 'xlsx';
 
 import { LoadingSpinner } from '@/components/comissionamento/LoadingSpinner';
 import { useFolhaPagamento, VERBA_FIELDS } from '@/hooks/useFolhaPagamento';
+import type { DadoFinanceiro } from '@/hooks/useFolhaPagamento';
 import { FolhaImportExcel } from '@/components/folha/FolhaImportExcel';
 import { FolhaKPIs } from '@/components/folha/FolhaKPIs';
 import { FolhaCharts } from '@/components/folha/FolhaCharts';
@@ -81,6 +82,30 @@ const TABS = [
   { id: 'frentes', label: 'Detalhe por centro de custo' },
 ];
 
+const FOLHA_EXPORT_COLUMNS: { header: string; field: keyof DadoFinanceiro }[] = [
+  { header: 'HORAS NORMAIS', field: 'sal_folha' },
+  { header: 'PRO-LABORE', field: 'pro_labore' },
+  { header: 'PERICULOSIDADE', field: 'periculosidade' },
+  { header: 'HORAS EXTRAS 60%', field: 'hora_extra_60' },
+  { header: 'HORAS EXTRAS 100%', field: 'hora_extra_100' },
+  { header: 'QUINQUENIO', field: 'quinquenio' },
+  { header: 'DISTRIBUICAO DE LUCROS', field: 'distribuicao_lucros' },
+  { header: 'REFLEXO EXTRAS DSR', field: 'reflexo_extras_dsr' },
+  { header: 'ESTOURO DO MES', field: 'estouro_mes' },
+  { header: 'DIFERENCA DE 1/3 DE FERIAS', field: 'diferenca_um_terco_ferias' },
+  { header: 'DIFERENCA MEDIA HORA FERIAS', field: 'diferenca_media_hora_ferias' },
+  { header: 'HORAS AFAST. P/DOENCA C/DIR.INTEGRAIS', field: 'horas_afast_doenca_integral' },
+  { header: 'MEDIA AFAST DOENCA DIR. INTEGRAL', field: 'media_afast_doenca_integral' },
+  { header: 'PERICULOSIDADE IGUAL OU INFE. 15/30 DIAS', field: 'periculosidade_proporcional' },
+  { header: 'INSS DIFERENCA FERIAS', field: 'inss_diferenca_ferias' },
+  { header: 'INSS EMPREGADOR', field: 'inss_empregador' },
+  { header: 'IRRF EMPREGADOR', field: 'irrf_empregador' },
+  { header: 'I.N.S.S.', field: 'inss' },
+  { header: 'Total proventos', field: 'total_proventos' },
+  { header: 'Total descontos', field: 'total_descontos' },
+  { header: 'Líquidos', field: 'salario_liquido' },
+];
+
 const FolhaPagamento: React.FC = () => {
   const [params] = useSearchParams();
   const activeTab = params.get('tab') || 'kpis';
@@ -105,14 +130,32 @@ const FolhaPagamento: React.FC = () => {
       Data: formatDatePtBr(r.data),
       Nome: r.nome,
       CPF: r.cpf,
-      Unidade: r.unidade_nome || r.unidade_codigo || '',
-      'Centro de Custo': r.setor_nome || r.setor || '',
-      ...Object.fromEntries(VERBA_FIELDS.map(verba => [verba.label, Number(r[verba.field]) || 0])),
-      'T. Proventos': r.total_proventos,
-      'T. Descontos': r.total_descontos,
-      'Salario liquido': r.salario_liquido,
+      Setor: r.setor_nome || r.setor || '',
+      ...Object.fromEntries(
+        FOLHA_EXPORT_COLUMNS.map(column => [column.header, Number(r[column.field]) || 0]),
+      ),
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [
+      { wch: 12 },
+      { wch: 34 },
+      { wch: 16 },
+      { wch: 38 },
+      ...FOLHA_EXPORT_COLUMNS.map(column => ({
+        wch: Math.max(16, Math.min(column.header.length + 3, 44)),
+      })),
+    ];
+
+    const worksheetRange = ws['!ref'] ? XLSX.utils.decode_range(ws['!ref']) : null;
+    if (worksheetRange) {
+      for (let row = worksheetRange.s.r + 1; row <= worksheetRange.e.r; row += 1) {
+        for (let column = 4; column <= worksheetRange.e.c; column += 1) {
+          const cell = ws[XLSX.utils.encode_cell({ r: row, c: column })];
+          if (cell?.t === 'n') cell.z = '"R$" #,##0.00;[Red]-"R$" #,##0.00';
+        }
+      }
+    }
+
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Folha');
     XLSX.writeFile(wb, `folha_pagamento_${new Date().toISOString().slice(0, 10)}.xlsx`);

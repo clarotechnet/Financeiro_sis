@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from 'react';
 import type { DadoFinanceiro } from '@/hooks/useFolhaPagamento';
-import { VERBA_FIELDS } from '@/hooks/useFolhaPagamento';
 
 interface Props {
     data: DadoFinanceiro[];
@@ -22,6 +21,15 @@ const fmtDate = (s: string) => {
 };
 
 const PAGE_SIZE = 50;
+
+const DETAIL_FIELDS: { label: string; field: keyof DadoFinanceiro }[] = [
+    { label: 'Sal. Folha', field: 'sal_folha' },
+    { label: 'PERICULOSIDADE', field: 'periculosidade' },
+    { label: 'I.N.S.S.', field: 'inss' },
+    { label: 'Total proventos', field: 'total_proventos' },
+    { label: 'Total descontos', field: 'total_descontos' },
+    { label: 'Líquido', field: 'salario_liquido' },
+];
 
 export const FolhaTable: React.FC<Props> = ({ data }) => {
     const [search, setSearch] = useState('');
@@ -76,12 +84,11 @@ export const FolhaTable: React.FC<Props> = ({ data }) => {
                             <th className="px-3 py-2 text-left whitespace-nowrap">Nome</th>
                             <th className="px-3 py-2 text-left whitespace-nowrap">CPF</th>
                             <th className="px-3 py-2 text-left whitespace-nowrap">Setor</th>
-                            {VERBA_FIELDS.map(v => (
-                                <th key={v.field} className="px-3 py-2 text-right whitespace-nowrap">{v.label}</th>
+                            {DETAIL_FIELDS.map(item => (
+                                <th key={item.field} className="px-3 py-2 text-right whitespace-nowrap">
+                                    {item.label}
+                                </th>
                             ))}
-                            <th className="px-3 py-2 text-right whitespace-nowrap">T. Proventos</th>
-                            <th className="px-3 py-2 text-right whitespace-nowrap">T. Descontos</th>
-                            <th className="px-3 py-2 text-right whitespace-nowrap font-bold">Líquido</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -91,21 +98,27 @@ export const FolhaTable: React.FC<Props> = ({ data }) => {
                                 <td className="px-3 py-2 whitespace-nowrap">{r.nome}</td>
                                 <td className="px-3 py-2 whitespace-nowrap">{fmtCPF(r.cpf)}</td>
                                 <td className="px-3 py-2 whitespace-nowrap">{r.setor_nome || r.setor || '-'}</td>
-                                {VERBA_FIELDS.map(v => {
-                                    const n = Number(r[v.field]) || 0;
+                                {DETAIL_FIELDS.map(item => {
+                                    const value = Number(r[item.field]) || 0;
+                                    const valueClass = item.field === 'total_descontos'
+                                        ? 'text-destructive'
+                                        : item.field === 'total_proventos'
+                                            ? 'text-emerald-500'
+                                            : item.field === 'salario_liquido'
+                                                ? 'font-bold'
+                                                : value === 0
+                                                    ? 'text-muted-foreground/60'
+                                                    : '';
                                     return (
-                                        <td key={v.field} className={`px-3 py-2 text-right whitespace-nowrap ${n === 0 ? 'text-muted-foreground/60' : ''}`}>
-                                            {fmtMoney(n)}
+                                        <td key={item.field} className={`px-3 py-2 text-right whitespace-nowrap ${valueClass}`}>
+                                            {fmtMoney(value)}
                                         </td>
                                     );
                                 })}
-                                <td className="px-3 py-2 text-right whitespace-nowrap text-emerald-500">{fmtMoney(r.total_proventos)}</td>
-                                <td className="px-3 py-2 text-right whitespace-nowrap text-destructive">{fmtMoney(r.total_descontos)}</td>
-                                <td className="px-3 py-2 text-right whitespace-nowrap font-bold">{fmtMoney(r.salario_liquido)}</td>
                             </tr>
                         ))}
                         {pageData.length === 0 && (
-                            <tr><td colSpan={VERBA_FIELDS.length + 7} className="px-3 py-8 text-center text-muted-foreground">
+                            <tr><td colSpan={DETAIL_FIELDS.length + 4} className="px-3 py-8 text-center text-muted-foreground">
                                 Nenhum registro encontrado.
                             </td></tr>
                         )}
