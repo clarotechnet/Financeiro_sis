@@ -54,6 +54,7 @@ const COLUMN_MAP: Record<string, string> = {
     'IRRF EMPREGADOR': 'irrf_empregador',
     'I.N.S.S.': 'inss',
     'I.N.S.S': 'inss',
+    'INSS': 'inss',
     'SAL FAMILIA': 'sal_familia',
     'SAL. FAMILIA': 'sal_familia',
     'SALARIO FAMILIA': 'sal_familia',
