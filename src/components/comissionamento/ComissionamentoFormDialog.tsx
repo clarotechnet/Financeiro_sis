@@ -3,11 +3,16 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { CheckCircle, Loader2, Plus, Search, Trash2 } from 'lucide-react';
+import { CheckCircle, Loader2, Minus, Plus, Search, Trash2 } from 'lucide-react';
 import { LancamentoPix, OpcaoSelect } from '@/types/comissionamento';
 import { useAuth } from '@/contexts/useAuth';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { SearchableSelect } from './SearchableSelect';
+import {
+  addMonthsPreservingDay,
+  clampMonthlyOccurrences,
+  MAX_MONTHLY_OCCURRENCES,
+} from '@/utils/monthlyDates';
 
 interface RegistroDados {
   id: string;
@@ -70,6 +75,7 @@ interface Props {
     banco_codigo: string | null;
     banco: string | null;
     status_pag: string;
+    quantidade_despesas?: number;
     rateios?: {
       unidade_id: string;
       centro_de_custo_id: string;
@@ -204,6 +210,8 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
   const [fornecedorQuery, setFornecedorQuery] = useState('');
   const [fornecedores, setFornecedores] = useState<FornecedorResumo[]>([]);
   const [fornecedorSearchError, setFornecedorSearchError] = useState('');
+  const [usarMultiplasDespesas, setUsarMultiplasDespesas] = useState(false);
+  const [quantidadeDespesas, setQuantidadeDespesas] = useState(1);
   const [usarRateio, setUsarRateio] = useState(false);
   const [rateios, setRateios] = useState<RateioState[]>([]);
 
@@ -380,6 +388,17 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
     setValorDisplay(fmtCurrencyDisplay(digits));
   };
 
+  const updateQuantidadeDespesas = (value: number) => {
+    setQuantidadeDespesas(Math.max(2, clampMonthlyOccurrences(value)));
+    setError('');
+  };
+
+  const handleToggleMultiplasDespesas = (checked: boolean) => {
+    setUsarMultiplasDespesas(checked);
+    setQuantidadeDespesas(checked ? Math.max(2, quantidadeDespesas) : 1);
+    setError('');
+  };
+
   const handleToggleRateio = (checked: boolean) => {
     setUsarRateio(checked);
     setError('');
@@ -436,6 +455,14 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
   const classificacaoPrincipalValida = Boolean(form.unidade_id && form.centro_de_custo_id && form.plano_conta_id);
   const rateioBalanceado = !usarRateio || (valorTotalCents > 0 && rateiosValidos && diferencaRateioCents === 0);
   const isValid = camposPrincipaisValidos && (usarRateio ? rateioBalanceado : classificacaoPrincipalValida);
+  const quantidadeFinal = usarMultiplasDespesas ? clampMonthlyOccurrences(quantidadeDespesas) : 1;
+  const ultimaDataDespesa = form.data_lancamento
+    ? addMonthsPreservingDay(form.data_lancamento, quantidadeFinal - 1)
+    : '';
+  const formatDateBR = (value: string) => {
+    const [year, month, day] = value.split('-');
+    return year && month && day ? `${day}/${month}/${year}` : value;
+  };
 
   const handleSubmit = async () => {
     if (!isValid) { setError('Preencha todos os campos obrigatórios.'); return; }
@@ -464,6 +491,7 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
         banco_codigo: bancoSelecionado?.id || null,
         banco: bancoSelecionado?.nome || null,
         status_pag: form.status_pag || 'A PAGAR',
+        quantidade_despesas: quantidadeFinal,
         rateios: usarRateio
           ? rateios.map(rateio => ({
             unidade_id: rateio.unidade_id,
@@ -480,6 +508,8 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
         setSuccess(false);
         setForm({ ...emptyForm, nome: userName });
         setValorDisplay('');
+        setUsarMultiplasDespesas(false);
+        setQuantidadeDespesas(1);
         setUsarRateio(false);
         setRateios([]);
         onClose();
@@ -498,6 +528,8 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
     setFornecedorQuery('');
     setFornecedores([]);
     setFornecedorSearchError('');
+    setUsarMultiplasDespesas(false);
+    setQuantidadeDespesas(1);
     setUsarRateio(false);
     setRateios([]);
     setActiveSuggest(null);
@@ -548,7 +580,11 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
         {success ? (
           <div className="flex flex-col items-center gap-3 py-8">
             <CheckCircle className="w-12 h-12 text-primary" />
-            <p className="text-lg font-semibold text-foreground">Lançamento registrado com sucesso!</p>
+            <p className="text-lg font-semibold text-foreground">
+              {usarMultiplasDespesas
+                ? `${quantidadeFinal} lançamentos registrados com sucesso!`
+                : 'Lançamento registrado com sucesso!'}
+            </p>
           </div>
         ) : (
           <>
@@ -689,6 +725,79 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
                 onChange={value => set('status_pag', value)}
                 options={STATUS_OPTIONS}
               />
+
+              <div className="space-y-4 md:col-span-2 rounded-xl border border-border bg-muted/20 p-4">
+                <label className="flex items-start gap-3 text-sm font-semibold text-foreground">
+                  <input
+                    type="checkbox"
+                    className="mt-1 h-4 w-4 accent-primary"
+                    checked={usarMultiplasDespesas}
+                    onChange={event => handleToggleMultiplasDespesas(event.target.checked)}
+                  />
+                  <span>
+                    Múltiplas Despesas
+                    <span className="block text-xs font-normal text-muted-foreground">
+                      Repete este lançamento mensalmente, começando pela data informada.
+                    </span>
+                  </span>
+                </label>
+
+                {usarMultiplasDespesas && (
+                  <div className="grid gap-4 md:grid-cols-[220px_minmax(0,1fr)] md:items-end">
+                    <div className="space-y-1">
+                      <Label className="text-sm font-medium">Quantidade de lançamentos *</Label>
+                      <div className="grid grid-cols-[40px_minmax(0,1fr)_40px] overflow-hidden rounded-md border border-input bg-background">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          className="h-10 rounded-none border-r border-input p-0"
+                          onClick={() => updateQuantidadeDespesas(quantidadeDespesas - 1)}
+                          disabled={quantidadeDespesas <= 2}
+                          aria-label="Diminuir quantidade"
+                          title="Diminuir quantidade"
+                        >
+                          <Minus className="h-4 w-4" />
+                        </Button>
+                        <Input
+                          type="number"
+                          min={2}
+                          max={MAX_MONTHLY_OCCURRENCES}
+                          step={1}
+                          inputMode="numeric"
+                          className="h-10 rounded-none border-0 text-center font-semibold focus-visible:ring-0"
+                          value={quantidadeDespesas}
+                          onChange={event => updateQuantidadeDespesas(Number(event.target.value))}
+                          aria-label="Quantidade de lançamentos mensais"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          className="h-10 rounded-none border-l border-input p-0"
+                          onClick={() => updateQuantidadeDespesas(quantidadeDespesas + 1)}
+                          disabled={quantidadeDespesas >= MAX_MONTHLY_OCCURRENCES}
+                          aria-label="Aumentar quantidade"
+                          title="Aumentar quantidade"
+                        >
+                          <Plus className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="rounded-lg border border-border bg-card px-3 py-2">
+                      <div className="text-xs font-semibold uppercase text-muted-foreground">Resumo</div>
+                      <div className="mt-1 text-sm font-semibold text-foreground">
+                        {quantidadeFinal} lançamentos de {fmtCentsBRL(valorTotalCents)}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {form.data_lancamento
+                          ? `${formatDateBR(form.data_lancamento)} até ${formatDateBR(ultimaDataDespesa)}`
+                          : 'Informe a data inicial para visualizar o período.'}
+                        {' · '}Total previsto: {fmtCentsBRL(valorTotalCents * quantidadeFinal)}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
 
               <div className="space-y-4 md:col-span-2 rounded-xl border border-border bg-muted/20 p-4">
                 <label className="flex items-start gap-3 text-sm font-semibold text-foreground">

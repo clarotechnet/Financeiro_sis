@@ -11,6 +11,7 @@ import {
   OperationalReportImportResult,
   OperationalReportImportRow,
 } from '@/types/comissionamento';
+import { buildMonthlyDates, clampMonthlyOccurrences } from '@/utils/monthlyDates';
 
 interface OpcoesData {
   cnpj: OpcaoSelect[];
@@ -443,9 +444,15 @@ export function useComissionamento() {
 
   const submitManualEntry = useCallback(async (formData: Record<string, any>) => {
     const rateios = Array.isArray(formData.rateios) ? formData.rateios : [];
-    const rateioLoteId = rateios.length > 0 ? createClientUuid() : null;
-    const buildRecord = (rateio?: Record<string, any>, index?: number) => ({
-      data_lancamento: formData.data_lancamento,
+    const quantidadeDespesas = clampMonthlyOccurrences(Number(formData.quantidade_despesas) || 1);
+    const datasLancamento = buildMonthlyDates(formData.data_lancamento, quantidadeDespesas);
+    const buildRecord = (
+      dataLancamento: string,
+      rateioLoteId: string | null,
+      rateio?: Record<string, any>,
+      index?: number,
+    ) => ({
+      data_lancamento: dataLancamento,
       nome: formData.nome,
       chave_pix: formData.chave_pix || null,
       favorecido: formData.favorecido,
@@ -466,9 +473,12 @@ export function useComissionamento() {
       rateio_lote_id: rateioLoteId,
       rateio_item_ordem: rateioLoteId ? (index ?? 0) + 1 : null,
     });
-    const records = rateios.length > 0
-      ? rateios.map((rateio, index) => buildRecord(rateio, index))
-      : [buildRecord()];
+    const records = datasLancamento.flatMap(dataLancamento => {
+      const rateioLoteId = rateios.length > 0 ? createClientUuid() : null;
+      return rateios.length > 0
+        ? rateios.map((rateio, index) => buildRecord(dataLancamento, rateioLoteId, rateio, index))
+        : [buildRecord(dataLancamento, null)];
+    });
     const { error: insertError } = await externalSupabase
       .from('lancamentos_pix')
       .insert(records);
