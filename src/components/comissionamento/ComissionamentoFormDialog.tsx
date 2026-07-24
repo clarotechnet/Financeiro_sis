@@ -794,6 +794,9 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
                           : 'Informe a data inicial para visualizar o período.'}
                         {' · '}Total previsto: {fmtCentsBRL(valorTotalCents * quantidadeFinal)}
                       </div>
+                      <div className="mt-1 text-xs font-medium text-primary">
+                        Parcelas identificadas de 1/{quantidadeFinal} até {quantidadeFinal}/{quantidadeFinal}.
+                      </div>
                     </div>
                   </div>
                 )}

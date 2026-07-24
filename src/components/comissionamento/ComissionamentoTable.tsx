@@ -145,8 +145,14 @@ const renderBreakableText = (value: string) =>
       : part
   ));
 
+const getInstallmentLabel = (row: LancamentoPix) =>
+  row.parcela_numero && row.parcela_total
+    ? `${row.parcela_numero}/${row.parcela_total}`
+    : '';
+
 type PdfColumnKey =
   | 'data_lancamento'
+  | 'parcela'
   | 'unidade'
   | 'favorecido'
   | 'chave_pix'
@@ -165,6 +171,7 @@ interface PdfColumn {
 
 const PDF_COLUMNS: PdfColumn[] = [
   { key: 'data_lancamento', label: 'Data', getValue: row => formatDate(row.data_lancamento) },
+  { key: 'parcela', label: 'Parcela', getValue: row => getInstallmentLabel(row) || '-' },
   { key: 'unidade', label: 'Cidade/Unidade', getValue: row => row.unidade || '-' },
   { key: 'favorecido', label: 'Favorecido', getValue: row => row.favorecido || '-' },
   { key: 'chave_pix', label: 'Chave PIX', getValue: row => row.chave_pix || '-' },
@@ -784,7 +791,14 @@ export const ComissionamentoTable: React.FC<Props> = ({ data, allRecords = data,
                           </div>
                         </td>
                       )}
-                      <td className="whitespace-nowrap font-semibold">{formatDate(row.data_lancamento)}</td>
+                      <td className="whitespace-nowrap font-semibold">
+                        <div>{formatDate(row.data_lancamento)}</div>
+                        {getInstallmentLabel(row) && (
+                          <span className="mt-1 inline-flex rounded border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[9px] font-bold text-primary">
+                            Parcela {getInstallmentLabel(row)}
+                          </span>
+                        )}
+                      </td>
                       <td className={wrappedCellClass}>{unidadeLabel}</td>
                       <td className={`font-semibold ${wrappedCellClass}`}>{row.favorecido || '-'}</td>
                       <td className="text-xs text-muted-foreground truncate" title={row.chave_pix || ''}>{row.chave_pix || '-'}</td>
@@ -834,7 +848,14 @@ export const ComissionamentoTable: React.FC<Props> = ({ data, allRecords = data,
                         </Button>
                       </td>
                     )}
-                    <td className="whitespace-nowrap">{formatDate(row.data_lancamento)}</td>
+                    <td className="whitespace-nowrap">
+                      <div>{formatDate(row.data_lancamento)}</div>
+                      {getInstallmentLabel(row) && (
+                        <span className="mt-1 inline-flex rounded border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[9px] font-bold text-primary">
+                          Parcela {getInstallmentLabel(row)}
+                        </span>
+                      )}
+                    </td>
                     <td className={wrappedCellClass}>{isRateioItem ? `Item ${tableRow.index + 1}: ${row.unidade || '-'}` : row.unidade || '-'}</td>
                     <td className={`font-medium ${wrappedCellClass}`}>{row.favorecido || '-'}</td>
                     <td className="text-xs text-muted-foreground truncate" title={row.chave_pix || ''}>{row.chave_pix || '-'}</td>

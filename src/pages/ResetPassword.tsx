@@ -184,7 +184,7 @@ export default function ResetPassword() {
         <div className="text-center mb-8">
           <div className="flex justify-center mb-4">
             <img
-              src={`${import.meta.env.BASE_URL}LogoNovo.png`}
+              src={`${import.meta.env.BASE_URL}LogoNovo.svg`}
               alt="Logo"
               className="h-20 w-20 object-contain"
             />

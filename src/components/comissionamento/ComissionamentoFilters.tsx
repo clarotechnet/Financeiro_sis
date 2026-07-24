@@ -157,6 +157,9 @@ export const ComissionamentoFilters: React.FC<Props> = ({
     };
     const exportRows = filteredData.map(r => ({
       'Data': fmtDate(r.data_lancamento),
+      'Parcela': r.parcela_numero && r.parcela_total
+        ? `${r.parcela_numero}/${r.parcela_total}`
+        : '',
       'Nome': r.nome || '',
       'Favorecido': r.favorecido || '',
       'Chave PIX': r.chave_pix || '',

@@ -145,6 +145,9 @@ const matchesGeneralSearch = (row: LancamentoPix, query: string) => {
     row.categoria,
     row.secao_custeio,
     row.centro_custeio,
+    row.parcela_numero && row.parcela_total
+      ? `Parcela ${row.parcela_numero}/${row.parcela_total}`
+      : null,
     row.valor,
     formatCurrencyBR(row.valor),
   ];
@@ -449,6 +452,7 @@ export function useComissionamento() {
     const buildRecord = (
       dataLancamento: string,
       rateioLoteId: string | null,
+      parcelaNumero: number | null,
       rateio?: Record<string, any>,
       index?: number,
     ) => ({
@@ -472,12 +476,15 @@ export function useComissionamento() {
       status_pag: formData.status_pag || 'A PAGAR',
       rateio_lote_id: rateioLoteId,
       rateio_item_ordem: rateioLoteId ? (index ?? 0) + 1 : null,
+      parcela_numero: parcelaNumero,
+      parcela_total: parcelaNumero ? quantidadeDespesas : null,
     });
-    const records = datasLancamento.flatMap(dataLancamento => {
+    const records = datasLancamento.flatMap((dataLancamento, parcelaIndex) => {
       const rateioLoteId = rateios.length > 0 ? createClientUuid() : null;
+      const parcelaNumero = quantidadeDespesas > 1 ? parcelaIndex + 1 : null;
       return rateios.length > 0
-        ? rateios.map((rateio, index) => buildRecord(dataLancamento, rateioLoteId, rateio, index))
-        : [buildRecord(dataLancamento, null)];
+        ? rateios.map((rateio, index) => buildRecord(dataLancamento, rateioLoteId, parcelaNumero, rateio, index))
+        : [buildRecord(dataLancamento, null, parcelaNumero)];
     });
     const { error: insertError } = await externalSupabase
       .from('lancamentos_pix')

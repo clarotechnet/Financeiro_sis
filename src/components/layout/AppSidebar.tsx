@@ -104,7 +104,7 @@ export const AppSidebar: React.FC = () => {
                         className="w-10 h-10 rounded-lg flex items-center justify-center overflow-hidden shadow-glow bg-background/40"
                     >
                         <img
-                            src={`${import.meta.env.BASE_URL}LogoNovo.png`}
+                            src={`${import.meta.env.BASE_URL}LogoNovo.svg`}
                             alt="TECHNET"
                             className="w-full h-full object-contain"
                         />

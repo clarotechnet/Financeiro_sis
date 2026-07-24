@@ -30,6 +30,8 @@ export interface LancamentoPix {
   status_pag: string | null;
   rateio_lote_id?: string | null;
   rateio_item_ordem?: number | null;
+  parcela_numero?: number | null;
+  parcela_total?: number | null;
   created_at?: string;
   updated_at?: string;
 }

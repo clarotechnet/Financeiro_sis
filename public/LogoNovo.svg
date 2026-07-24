@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title">
+  <title id="title">TechNET</title>
+  <rect width="256" height="256" rx="40" fill="#ffffff"/>
+  <g fill="none" stroke="#e30613" shape-rendering="geometricPrecision">
+    <circle cx="128" cy="128" r="33.25" stroke-width="5.75"/>
+    <circle cx="128" cy="128" r="41.5" stroke-width="5.25"/>
+    <circle cx="128" cy="128" r="49.5" stroke-width="4.75"/>
+    <circle cx="128" cy="128" r="57.38" stroke-width="4"/>
+    <circle cx="128" cy="128" r="65.13" stroke-width="3.5"/>
+    <circle cx="128" cy="128" r="73" stroke-width="3.25"/>
+    <circle cx="128" cy="128" r="80.63" stroke-width="2.5"/>
+    <circle cx="128" cy="128" r="88.38" stroke-width="2"/>
+    <circle cx="128" cy="128" r="96" stroke-width="1.75"/>
+    <circle cx="128" cy="128" r="103.38" stroke-width="1"/>
+    <circle cx="128" cy="128" r="111" stroke-width="0.8" opacity="0.65"/>
+  </g>
+</svg>
