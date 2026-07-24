@@ -150,6 +150,13 @@ const getInstallmentLabel = (row: LancamentoPix) =>
     ? `${row.parcela_numero}/${row.parcela_total}`
     : '';
 
+const getPdfDateLabel = (row: LancamentoPix) => {
+  const installmentLabel = getInstallmentLabel(row);
+  return installmentLabel
+    ? `${formatDate(row.data_lancamento)}\nParcela ${installmentLabel}`
+    : formatDate(row.data_lancamento);
+};
+
 type PdfColumnKey =
   | 'data_lancamento'
   | 'parcela'
@@ -522,7 +529,7 @@ export const ComissionamentoTable: React.FC<Props> = ({ data, allRecords = data,
         startY: tableStartY,
         head: [['Data', 'Cidade/Unidade', 'Favorecido', 'Chave PIX', 'Conta Analítica', 'Centro de Custo', 'Observação', 'Banco', 'Status', 'Valor']],
         body: sorted.map(r => [
-          formatDate(r.data_lancamento),
+          getPdfDateLabel(r),
           r.unidade || '-',
           r.favorecido || '-',
           r.chave_pix || '-',
@@ -586,7 +593,7 @@ export const ComissionamentoTable: React.FC<Props> = ({ data, allRecords = data,
         startY: tableStartY,
         head: [['Data', 'Cidade/Unidade', 'Favorecido', 'Conta Analitica', 'Centro de Custo', 'Observacao', 'Banco', 'Status', 'Valor']],
         body: sorted.map(r => [
-          formatDate(r.data_lancamento),
+          getPdfDateLabel(r),
           r.unidade || '-',
           r.favorecido || '-',
           r.conta_analitica || '-',
