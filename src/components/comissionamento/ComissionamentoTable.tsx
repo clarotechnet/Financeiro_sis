@@ -200,6 +200,14 @@ const compareLaunchOrder = (a: LancamentoPix, b: LancamentoPix) => {
   return (a.id || '').localeCompare(b.id || '');
 };
 
+const compareBankOrder = (a: LancamentoPix, b: LancamentoPix) => {
+  const bankA = (a.banco_cadastro || a.banco || a.banco_codigo || '').trim();
+  const bankB = (b.banco_cadastro || b.banco || b.banco_codigo || '').trim();
+  if (!bankA && bankB) return 1;
+  if (bankA && !bankB) return -1;
+  return bankA.localeCompare(bankB, 'pt-BR', { sensitivity: 'base', numeric: true });
+};
+
 const compareSortValues = (a: LancamentoPix, b: LancamentoPix, field: keyof LancamentoPix, ascending: boolean) => {
   const va = (a as any)[field];
   const vb = (b as any)[field];
@@ -212,6 +220,10 @@ const compareSortValues = (a: LancamentoPix, b: LancamentoPix, field: keyof Lanc
   else primaryCompare = String(va).localeCompare(String(vb), 'pt-BR');
 
   if (primaryCompare !== 0) return ascending ? primaryCompare : -primaryCompare;
+  if (field === 'data_lancamento') {
+    const bankCompare = compareBankOrder(a, b);
+    if (bankCompare !== 0) return bankCompare;
+  }
   return compareLaunchOrder(a, b);
 };
 
