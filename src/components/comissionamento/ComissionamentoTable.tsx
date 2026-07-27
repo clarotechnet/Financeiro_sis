@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { ComissionamentoEditDialog } from './ComissionamentoEditDialog';
+import { ComissionamentoFormDialog } from './ComissionamentoFormDialog';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -21,6 +22,7 @@ interface OpcoesData {
   centro_de_custo: OpcaoSelect[];
   categoria: OpcaoSelect[];
   secao_custeio: OpcaoSelect[];
+  centro_custeio: OpcaoSelect[];
   plano_contas: OpcaoSelect[];
   bancos: OpcaoSelect[];
 }
@@ -28,6 +30,7 @@ interface OpcoesData {
 interface Props {
   data: LancamentoPix[];
   allRecords?: LancamentoPix[];
+  onCreate?: (data: Record<string, any>) => Promise<void>;
   onUpdate: (id: string, updates: Record<string, any>) => Promise<void>;
   onBulkUpdateStatus?: (ids: string[], status: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
@@ -280,11 +283,22 @@ type RateioTableRow =
 const isPaidStatus = (status: string | null | undefined) =>
   (status || '').toUpperCase() === 'PAGO';
 
-export const ComissionamentoTable: React.FC<Props> = ({ data, allRecords = data, onUpdate, onBulkUpdateStatus, onDelete, opcoes, canManage = true }) => {
+export const ComissionamentoTable: React.FC<Props> = ({
+  data,
+  allRecords = data,
+  onCreate,
+  onUpdate,
+  onBulkUpdateStatus,
+  onDelete,
+  opcoes,
+  canManage = true,
+}) => {
   const [page, setPage] = useState(0);
   const [sortField, setSortField] = useState<keyof LancamentoPix>('data_lancamento');
   const [sortAsc, setSortAsc] = useState(false);
   const [editRecord, setEditRecord] = useState<LancamentoPix | null>(null);
+  const [cloneRecord, setCloneRecord] = useState<LancamentoPix | null>(null);
+  const [cloneRateioRecords, setCloneRateioRecords] = useState<LancamentoPix[]>([]);
   const [exportingPdf, setExportingPdf] = useState(false);
   const [previewingPdf, setPreviewingPdf] = useState(false);
   const [exportingFilteredPdf, setExportingFilteredPdf] = useState(false);
@@ -928,9 +942,29 @@ export const ComissionamentoTable: React.FC<Props> = ({ data, allRecords = data,
           onClose={() => setEditRecord(null)}
           onSave={onUpdate}
           onDelete={onDelete}
+          onClone={onCreate ? () => {
+            setCloneRecord(editRecord);
+            setCloneRateioRecords(editRateioRecords);
+            setEditRecord(null);
+          } : undefined}
           record={editRecord}
           rateioRecords={editRateioRecords}
           opcoes={opcoes}
+        />
+      )}
+
+      {canManage && onCreate && (
+        <ComissionamentoFormDialog
+          open={!!cloneRecord}
+          onClose={() => {
+            setCloneRecord(null);
+            setCloneRateioRecords([]);
+          }}
+          onSubmit={onCreate}
+          opcoes={opcoes}
+          existingRecords={allRecords}
+          initialRecord={cloneRecord}
+          initialRateioRecords={cloneRateioRecords}
         />
       )}
 

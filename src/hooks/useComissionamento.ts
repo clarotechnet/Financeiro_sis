@@ -494,13 +494,37 @@ export function useComissionamento() {
   }, [fetchData]);
 
   const updateRecord = useCallback(async (id: string, updates: Partial<LancamentoPix> & Record<string, any>) => {
-    if (Array.isArray(updates.rateios) && updates.rateios.length > 0) {
-      const { rateios, valor_total, ...dados } = updates;
+    const {
+      rateios,
+      valor_total,
+      quantidade_despesas,
+      ...dados
+    } = updates;
+    const quantidadeDespesas = clampMonthlyOccurrences(Number(quantidade_despesas) || 1);
+    const rateioItems = Array.isArray(rateios) ? rateios : [];
+
+    if (quantidadeDespesas > 1) {
+      const { error: multipleError } = await externalSupabase.rpc(
+        'atualizar_lancamento_com_multiplas_despesas',
+        {
+          p_lancamento_id: id,
+          p_dados: dados,
+          p_valor_total: valor_total ?? dados.valor,
+          p_rateios: rateioItems,
+          p_quantidade: quantidadeDespesas,
+        },
+      );
+      if (multipleError) throw multipleError;
+      await fetchData();
+      return;
+    }
+
+    if (rateioItems.length > 0) {
       const { error: rateioError } = await externalSupabase.rpc('atualizar_lancamento_com_rateios', {
         p_lancamento_id: id,
         p_dados: dados,
         p_valor_total: valor_total,
-        p_rateios: rateios,
+        p_rateios: rateioItems,
       });
       if (rateioError) throw rateioError;
       await fetchData();
@@ -509,7 +533,7 @@ export function useComissionamento() {
 
     const { error: updateError } = await externalSupabase
       .from('lancamentos_pix')
-      .update(updates)
+      .update(dados)
       .eq('id', id);
     if (updateError) throw updateError;
     await fetchData();

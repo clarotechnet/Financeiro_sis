@@ -3,9 +3,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { CheckCircle, Loader2, Plus, Trash2 } from 'lucide-react';
+import { CheckCircle, Copy, Loader2, Minus, Plus, Trash2 } from 'lucide-react';
 import { LancamentoPix, OpcaoSelect } from '@/types/comissionamento';
 import { SearchableSelect } from './SearchableSelect';
+import {
+  addMonthsPreservingDay,
+  clampMonthlyOccurrences,
+  MAX_MONTHLY_OCCURRENCES,
+} from '@/utils/monthlyDates';
 
 interface OpcoesData {
   unidade: OpcaoSelect[];
@@ -20,6 +25,7 @@ interface Props {
   onClose: () => void;
   onSave: (id: string, data: Record<string, any>) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
+  onClone?: () => void;
   record: LancamentoPix | null;
   rateioRecords?: LancamentoPix[];
   opcoes: OpcoesData;
@@ -90,12 +96,15 @@ export const ComissionamentoEditDialog: React.FC<Props> = ({
   onClose,
   onSave,
   onDelete,
+  onClone,
   record,
   rateioRecords = [],
   opcoes,
 }) => {
   const [form, setForm] = useState<Record<string, string>>({});
   const [valorDigits, setValorDigits] = useState('');
+  const [usarMultiplasDespesas, setUsarMultiplasDespesas] = useState(false);
+  const [quantidadeDespesas, setQuantidadeDespesas] = useState(1);
   const [usarRateio, setUsarRateio] = useState(false);
   const [rateios, setRateios] = useState<RateioState[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -106,6 +115,11 @@ export const ComissionamentoEditDialog: React.FC<Props> = ({
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const existingRateio = Boolean(record?.rateio_lote_id);
+  const existingInstallment = Boolean(
+    record?.parcela_numero
+    && record?.parcela_total
+    && record.parcela_total > 1
+  );
 
   useEffect(() => {
     if (!record) return;
@@ -132,6 +146,8 @@ export const ComissionamentoEditDialog: React.FC<Props> = ({
       plano_conta_id: editingRateio ? '' : record.plano_conta_id || '',
     });
     setValorDigits(digitsFromNumber(totalValue));
+    setUsarMultiplasDespesas(false);
+    setQuantidadeDespesas(1);
     setUsarRateio(editingRateio);
     setRateios(editingRateio
       ? loteItems.map(item => createRateio({
@@ -147,6 +163,18 @@ export const ComissionamentoEditDialog: React.FC<Props> = ({
   }, [record, rateioRecords, opcoes]);
 
   const set = (field: string, value: string) => setForm(previous => ({ ...previous, [field]: value }));
+
+  const updateQuantidadeDespesas = (value: number) => {
+    setQuantidadeDespesas(Math.max(2, clampMonthlyOccurrences(value)));
+    setError('');
+  };
+
+  const handleToggleMultiplasDespesas = (checked: boolean) => {
+    if (existingInstallment && checked) return;
+    setUsarMultiplasDespesas(checked);
+    setQuantidadeDespesas(checked ? Math.max(2, quantidadeDespesas) : 1);
+    setError('');
+  };
 
   const handleToggleRateio = (checked: boolean) => {
     if (existingRateio && !checked) return;
@@ -200,6 +228,16 @@ export const ComissionamentoEditDialog: React.FC<Props> = ({
     && rateio.plano_conta_id
     && centsFromDigits(rateio.valor) > 0
   );
+  const quantidadeFinal = usarMultiplasDespesas
+    ? clampMonthlyOccurrences(quantidadeDespesas)
+    : 1;
+  const ultimaDataDespesa = form.data_lancamento
+    ? addMonthsPreservingDay(form.data_lancamento, quantidadeFinal - 1)
+    : '';
+  const formatDateBR = (value: string) => {
+    const [year, month, day] = value.split('-');
+    return year && month && day ? `${day}/${month}/${year}` : value;
+  };
 
   const handleSave = async () => {
     if (!record?.id) return;
@@ -235,6 +273,7 @@ export const ComissionamentoEditDialog: React.FC<Props> = ({
         centro_de_custo_id: null,
         setor_codigo: usarRateio ? null : form.centro_de_custo_id,
         plano_conta_id: usarRateio ? null : form.plano_conta_id,
+        quantidade_despesas: quantidadeFinal,
       };
 
       if (usarRateio) {
@@ -248,7 +287,11 @@ export const ComissionamentoEditDialog: React.FC<Props> = ({
       }
 
       await onSave(record.id, updates);
-      setSuccessMsg(usarRateio ? 'Rateios atualizados com sucesso!' : 'Registro atualizado com sucesso!');
+      setSuccessMsg(usarMultiplasDespesas
+        ? `${quantidadeFinal} lançamentos mensais salvos com sucesso!`
+        : usarRateio
+          ? 'Rateios atualizados com sucesso!'
+          : 'Registro atualizado com sucesso!');
       setSuccess(true);
       setTimeout(() => {
         setSuccess(false);
@@ -369,6 +412,80 @@ export const ComissionamentoEditDialog: React.FC<Props> = ({
               />
 
               <div className="space-y-4 rounded-xl border border-border bg-muted/20 p-4 md:col-span-2">
+                <label className={`flex items-start gap-3 text-sm font-semibold text-foreground ${existingInstallment ? 'cursor-default' : 'cursor-pointer'}`}>
+                  <input
+                    type="checkbox"
+                    className="mt-1 h-4 w-4 accent-primary"
+                    checked={usarMultiplasDespesas}
+                    disabled={existingInstallment}
+                    onChange={event => handleToggleMultiplasDespesas(event.target.checked)}
+                  />
+                  <span>
+                    Múltiplas Despesas
+                    <span className="block text-xs font-normal text-muted-foreground">
+                      {existingInstallment
+                        ? `Este lançamento já pertence à parcela ${record?.parcela_numero}/${record?.parcela_total}.`
+                        : 'Atualiza este lançamento e repete os mesmos dados mensalmente, começando pela data informada.'}
+                    </span>
+                  </span>
+                </label>
+
+                {usarMultiplasDespesas && (
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-[200px_minmax(0,1fr)]">
+                    <div className="space-y-1">
+                      <Label className="text-sm font-medium">Quantidade de lançamentos *</Label>
+                      <div className="grid h-10 grid-cols-[40px_minmax(0,1fr)_40px] overflow-hidden rounded-md border border-input bg-background">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          className="h-full rounded-none border-r border-input p-0"
+                          onClick={() => updateQuantidadeDespesas(quantidadeDespesas - 1)}
+                          disabled={quantidadeDespesas <= 2}
+                          title="Diminuir quantidade"
+                        >
+                          <Minus className="h-4 w-4" />
+                        </Button>
+                        <Input
+                          type="number"
+                          min={2}
+                          max={MAX_MONTHLY_OCCURRENCES}
+                          className="h-full rounded-none border-0 text-center focus-visible:ring-0"
+                          value={quantidadeDespesas}
+                          onChange={event => updateQuantidadeDespesas(Number(event.target.value) || 2)}
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          className="h-full rounded-none border-l border-input p-0"
+                          onClick={() => updateQuantidadeDespesas(quantidadeDespesas + 1)}
+                          disabled={quantidadeDespesas >= MAX_MONTHLY_OCCURRENCES}
+                          title="Aumentar quantidade"
+                        >
+                          <Plus className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="rounded-lg border border-border bg-card px-3 py-2">
+                      <div className="text-xs font-semibold uppercase text-muted-foreground">Resumo</div>
+                      <div className="mt-1 text-sm font-semibold text-foreground">
+                        {quantidadeFinal} lançamentos de {formatCurrency(valorDigits)}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {form.data_lancamento
+                          ? `${formatDateBR(form.data_lancamento)} até ${formatDateBR(ultimaDataDespesa)}`
+                          : 'Informe a data inicial para visualizar o período.'}
+                        {' · '}Total previsto: {formatCurrency(String(valorTotalCents * quantidadeFinal))}
+                      </div>
+                      <div className="mt-1 text-xs font-medium text-primary">
+                        Parcelas identificadas de 1/{quantidadeFinal} até {quantidadeFinal}/{quantidadeFinal}.
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-4 rounded-xl border border-border bg-muted/20 p-4 md:col-span-2">
                 <label className={`flex items-start gap-3 text-sm font-semibold text-foreground ${existingRateio ? 'cursor-default' : 'cursor-pointer'}`}>
                   <input
                     type="checkbox"
@@ -487,7 +604,18 @@ export const ComissionamentoEditDialog: React.FC<Props> = ({
                   ? (existingRateio ? 'Confirmar Exclusão do Lote' : 'Confirmar Exclusão')
                   : (existingRateio ? 'Excluir Lote' : 'Excluir')}
               </Button>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
+                {onClone && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={onClone}
+                    disabled={submitting || deleting}
+                  >
+                    <Copy className="mr-2 h-4 w-4" />
+                    Clonar Lançamento
+                  </Button>
+                )}
                 <Button variant="ghost" onClick={() => {
                   setConfirmDelete(false);
                   onClose();

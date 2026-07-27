@@ -262,6 +262,7 @@ const Comissionamento: React.FC = () => {
               <ComissionamentoTable
                 data={hook.data}
                 allRecords={hook.allData}
+                onCreate={hook.submitManualEntry}
                 onUpdate={hook.updateRecord}
                 onBulkUpdateStatus={hook.updateRecordsStatus}
                 onDelete={hook.deleteRecord}

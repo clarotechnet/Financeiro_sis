@@ -85,6 +85,8 @@ interface Props {
   }) => Promise<void>;
   opcoes: OpcoesData;
   existingRecords?: LancamentoPix[];
+  initialRecord?: LancamentoPix | null;
+  initialRateioRecords?: LancamentoPix[];
 }
 
 const emptyForm = {
@@ -162,6 +164,9 @@ const centsFromDigits = (raw: string): number => {
   return digits ? parseInt(digits, 10) : 0;
 };
 
+const digitsFromNumber = (value: number | null | undefined): string =>
+  String(Math.max(0, Math.round((Number(value) || 0) * 100)));
+
 const fmtCentsBRL = (cents: number): string =>
   `R$ ${(cents / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -175,7 +180,15 @@ const createRateio = (base?: Partial<RateioState>): RateioState => ({
   valor: base?.valor || '',
 });
 
-export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSubmit, opcoes, existingRecords = [] }) => {
+export const ComissionamentoFormDialog: React.FC<Props> = ({
+  open,
+  onClose,
+  onSubmit,
+  opcoes,
+  existingRecords = [],
+  initialRecord = null,
+  initialRateioRecords = [],
+}) => {
   const { profile } = useAuth();
   const userName = profile?.display_name || '';
 
@@ -214,6 +227,60 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
   const [quantidadeDespesas, setQuantidadeDespesas] = useState(1);
   const [usarRateio, setUsarRateio] = useState(false);
   const [rateios, setRateios] = useState<RateioState[]>([]);
+
+  useEffect(() => {
+    if (!open || !initialRecord) return;
+
+    const loteItems = initialRecord.rateio_lote_id
+      ? (initialRateioRecords.length > 0 ? initialRateioRecords : [initialRecord])
+      : [];
+    const cloningRateio = loteItems.length > 0;
+    const totalValue = cloningRateio
+      ? loteItems.reduce((sum, item) => sum + (Number(item.valor) || 0), 0)
+      : Number(initialRecord.valor) || 0;
+    const valueDigits = digitsFromNumber(totalValue);
+
+    setForm({
+      ...emptyForm,
+      data_lancamento: '',
+      nome: userName || '',
+      chave_pix: initialRecord.chave_pix || '',
+      favorecido: initialRecord.favorecido || '',
+      descricao: initialRecord.descricao || '',
+      plano_conta_id: cloningRateio ? '' : initialRecord.plano_conta_id || '',
+      valor: valueDigits,
+      cnpj_id: findIdByName(opcoes.cnpj, initialRecord.cnpj),
+      unidade_id: cloningRateio
+        ? ''
+        : initialRecord.unidade_codigo || findIdByName(opcoes.unidade, initialRecord.unidade),
+      centro_de_custo_id: cloningRateio
+        ? ''
+        : initialRecord.setor_codigo || findIdByName(opcoes.centro_de_custo, initialRecord.centro_de_custo),
+      secao_custeio_id: findIdByName(opcoes.secao_custeio, initialRecord.secao_custeio),
+      centro_custeio_id: findIdByName(opcoes.centro_custeio, initialRecord.centro_custeio),
+      banco_codigo: initialRecord.banco_codigo || findIdByName(opcoes.bancos, initialRecord.banco),
+      status_pag: initialRecord.status_pag || 'A PAGAR',
+    });
+    setValorDisplay(fmtCurrencyDisplay(valueDigits));
+    setUsarMultiplasDespesas(false);
+    setQuantidadeDespesas(1);
+    setUsarRateio(cloningRateio);
+    setRateios(cloningRateio
+      ? loteItems.map(item => createRateio({
+        unidade_id: item.unidade_codigo || findIdByName(opcoes.unidade, item.unidade),
+        centro_de_custo_id: item.setor_codigo || findIdByName(opcoes.centro_de_custo, item.centro_de_custo),
+        plano_conta_id: item.plano_conta_id || '',
+        valor: digitsFromNumber(item.valor),
+      }))
+      : []);
+    setCpfQuery('');
+    setFornecedorQuery('');
+    setFornecedores([]);
+    setFornecedorSearchError('');
+    setActiveSuggest(null);
+    setError('');
+    setSuccess(false);
+  }, [initialRateioRecords, initialRecord, open, opcoes, userName]);
 
   useEffect(() => {
     if (!open) return;
@@ -324,10 +391,11 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
   }, [userName]);
 
   useEffect(() => {
+    if (initialRecord) return;
     const hasDraft = Object.values(form).some(value => value?.toString().trim());
     if (hasDraft) window.localStorage.setItem(DRAFT_KEY, JSON.stringify(form));
     else window.localStorage.removeItem(DRAFT_KEY);
-  }, [form]);
+  }, [form, initialRecord]);
 
   useEffect(() => {
     const onClickOutside = (e: MouseEvent) => {
@@ -502,7 +570,7 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
           : undefined,
       };
       await onSubmit(payload);
-      window.localStorage.removeItem(DRAFT_KEY);
+      if (!initialRecord) window.localStorage.removeItem(DRAFT_KEY);
       setSuccess(true);
       setTimeout(() => {
         setSuccess(false);
@@ -522,7 +590,7 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
   };
 
   const handleClear = () => {
-    window.localStorage.removeItem(DRAFT_KEY);
+    if (!initialRecord) window.localStorage.removeItem(DRAFT_KEY);
     setForm({ ...emptyForm, nome: userName || form.nome });
     setCpfQuery('');
     setFornecedorQuery('');
@@ -574,7 +642,7 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
       <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Novo Lançamento</DialogTitle>
+          <DialogTitle>{initialRecord ? 'Clonar Lançamento' : 'Novo Lançamento'}</DialogTitle>
         </DialogHeader>
 
         {success ? (
@@ -583,7 +651,9 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
             <p className="text-lg font-semibold text-foreground">
               {usarMultiplasDespesas
                 ? `${quantidadeFinal} lançamentos registrados com sucesso!`
-                : 'Lançamento registrado com sucesso!'}
+                : initialRecord
+                  ? 'Cópia registrada com sucesso!'
+                  : 'Lançamento registrado com sucesso!'}
             </p>
           </div>
         ) : (
@@ -916,7 +986,7 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({ open, onClose, onSu
               <Button variant="outline" onClick={handleClear} disabled={submitting}>Limpar</Button>
               <Button onClick={handleSubmit} disabled={submitting || !isValid}>
                 {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                Salvar
+                {initialRecord ? 'Criar Cópia' : 'Salvar'}
               </Button>
             </DialogFooter>
           </>
