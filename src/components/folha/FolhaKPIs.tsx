@@ -71,37 +71,37 @@ export const FolhaKPIs: React.FC<Props> = ({ kpis }) => {
                 <SectionTitle>Indicadores Financeiros</SectionTitle>
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
                     <MetricCard
-                        label="Folha sobre Receita"
+                        label="Folha Líquida sobre Receita"
                         value={fmtPct(kpis.folhaSobreReceita)}
-                        detail={`${fmtBRL(kpis.folhaTotal)} / ${fmtBRL(kpis.receitaLiquida)}`}
+                        detail={`${fmtBRL(kpis.folhaLiquida)} / ${fmtBRL(kpis.receitaLiquida)}`}
                         icon={<Percent className="h-5 w-5" />}
                         tone="blue"
                     />
                     <MetricCard
-                        label={<>Encargos sobre Sal&aacute;rios</>}
-                        value={fmtPct(kpis.encargosSobreSalarios)}
-                        detail={`${fmtBRL(kpis.encargos)} / ${fmtBRL(kpis.salarios)}`}
+                        label={<>Encargos sobre Folha L&iacute;quida</>}
+                        value={fmtPct(kpis.encargosSobreFolhaLiquida)}
+                        detail={`${fmtBRL(kpis.encargos)} / ${fmtBRL(kpis.folhaLiquida)}`}
                         icon={<ReceiptText className="h-5 w-5" />}
                         tone="orange"
                     />
                     <MetricCard
-                        label={<>Custo M&eacute;dio por Colaborador</>}
-                        value={fmtBRL(kpis.custoMedioColaborador)}
+                        label={<>L&iacute;quido M&eacute;dio por Colaborador</>}
+                        value={fmtBRL(kpis.liquidoMedioColaborador)}
                         detail={`${kpis.colaboradores.toLocaleString('pt-BR')} colaborador(es)`}
                         icon={<Users className="h-5 w-5" />}
                         tone="green"
                     />
                     <MetricCard
-                        label={<>Benef&iacute;cios sobre Folha</>}
-                        value={fmtPct(kpis.beneficiosSobreFolha)}
-                        detail={`${fmtBRL(kpis.beneficios)} / ${fmtBRL(kpis.folhaTotal)}`}
+                        label={<>Benef&iacute;cios sobre Folha L&iacute;quida</>}
+                        value={fmtPct(kpis.beneficiosSobreFolhaLiquida)}
+                        detail={`${fmtBRL(kpis.beneficios)} / ${fmtBRL(kpis.folhaLiquida)}`}
                         icon={<Gift className="h-5 w-5" />}
                         tone="pink"
                     />
                     <MetricCard
-                        label={<>Evolu&ccedil;&atilde;o Mensal da Folha</>}
+                        label={<>Evolu&ccedil;&atilde;o Mensal da Folha L&iacute;quida</>}
                         value={fmtPct(kpis.evolucaoMensal)}
-                        detail={`M\u00eas anterior: ${fmtBRL(kpis.folhaMesAnterior)}`}
+                        detail={`M\u00eas anterior: ${fmtBRL(kpis.folhaLiquidaMesAnterior)}`}
                         icon={<TrendingUp className="h-5 w-5" />}
                         tone={evolutionTone}
                     />
@@ -119,9 +119,9 @@ export const FolhaKPIs: React.FC<Props> = ({ kpis }) => {
                         tone="orange"
                     />
                     <MetricCard
-                        label="Horas Extras sobre a Folha"
-                        value={fmtPct(kpis.horasExtrasSobreFolha)}
-                        detail={`${fmtBRL(kpis.horasExtras)} / ${fmtBRL(kpis.folhaTotal)}`}
+                        label="Horas Extras sobre a Folha Líquida"
+                        value={fmtPct(kpis.horasExtrasSobreFolhaLiquida)}
+                        detail={`${fmtBRL(kpis.horasExtras)} / ${fmtBRL(kpis.folhaLiquida)}`}
                         icon={<Percent className="h-5 w-5" />}
                         tone="blue"
                     />
@@ -160,9 +160,9 @@ export const FolhaKPIs: React.FC<Props> = ({ kpis }) => {
                         tone="orange"
                     />
                     <MetricCard
-                        label={<>Premia&ccedil;&atilde;o sobre Folha</>}
-                        value={fmtPct(kpis.premiacaoSobreFolha)}
-                        detail={`${fmtBRL(kpis.premiacao)} / ${fmtBRL(kpis.folhaTotal)}`}
+                        label={<>Premia&ccedil;&atilde;o sobre Folha L&iacute;quida</>}
+                        value={fmtPct(kpis.premiacaoSobreFolhaLiquida)}
+                        detail={`${fmtBRL(kpis.premiacao)} / ${fmtBRL(kpis.folhaLiquida)}`}
                         icon={<Percent className="h-5 w-5" />}
                         tone="blue"
                     />

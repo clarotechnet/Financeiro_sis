@@ -58,25 +58,24 @@ export interface DadoFinanceiro {
 }
 
 export interface FolhaKpiData {
-    folhaTotal: number;
+    folhaLiquida: number;
     receitaLiquida: number;
     folhaSobreReceita: number | null;
     encargos: number;
-    salarios: number;
-    encargosSobreSalarios: number | null;
+    encargosSobreFolhaLiquida: number | null;
     colaboradores: number;
-    custoMedioColaborador: number;
+    liquidoMedioColaborador: number;
     beneficios: number;
-    beneficiosSobreFolha: number | null;
+    beneficiosSobreFolhaLiquida: number | null;
     evolucaoMensal: number | null;
-    folhaMesAnterior: number;
+    folhaLiquidaMesAnterior: number;
     horasExtras: number;
-    horasExtrasSobreFolha: number | null;
+    horasExtrasSobreFolhaLiquida: number | null;
     mediaHorasExtrasColaborador: number;
     valeAlimentacao: number;
     planoSaude: number;
     premiacao: number;
-    premiacaoSobreFolha: number | null;
+    premiacaoSobreFolhaLiquida: number | null;
     beneficiosPorColaborador: number;
 }
 
@@ -479,9 +478,11 @@ export function useFolhaPagamento() {
         );
 
         const colaboradores = new Set(filtered.map(uniqueEmployeeKey).filter(Boolean)).size;
-        const folhaTotal = filtered.reduce((sum, row) => sum + (Number(row.total_proventos) || 0), 0);
-        const folhaMesAnterior = previousFolha.reduce((sum, row) => sum + (Number(row.total_proventos) || 0), 0);
-        const salarios = filtered.reduce((sum, row) => sum + (Number(row.sal_folha) || 0), 0);
+        const folhaLiquida = filtered.reduce((sum, row) => sum + (Number(row.salario_liquido) || 0), 0);
+        const folhaLiquidaMesAnterior = previousFolha.reduce(
+            (sum, row) => sum + (Number(row.salario_liquido) || 0),
+            0,
+        );
         const encargos = filtered.reduce(
             (sum, row) => sum + Math.abs(Number(row.inss_empregador) || 0) + Math.abs(Number(row.irrf_empregador) || 0),
             0,
@@ -512,25 +513,24 @@ export function useFolhaPagamento() {
         const beneficios = valeAlimentacao + planoSaude + premiacao;
 
         const kpis: FolhaKpiData = {
-            folhaTotal,
+            folhaLiquida,
             receitaLiquida,
-            folhaSobreReceita: percent(folhaTotal, receitaLiquida),
+            folhaSobreReceita: percent(folhaLiquida, receitaLiquida),
             encargos,
-            salarios,
-            encargosSobreSalarios: percent(encargos, salarios),
+            encargosSobreFolhaLiquida: percent(encargos, folhaLiquida),
             colaboradores,
-            custoMedioColaborador: colaboradores ? folhaTotal / colaboradores : 0,
+            liquidoMedioColaborador: colaboradores ? folhaLiquida / colaboradores : 0,
             beneficios,
-            beneficiosSobreFolha: percent(beneficios, folhaTotal),
-            evolucaoMensal: variation(folhaTotal, folhaMesAnterior),
-            folhaMesAnterior,
+            beneficiosSobreFolhaLiquida: percent(beneficios, folhaLiquida),
+            evolucaoMensal: variation(folhaLiquida, folhaLiquidaMesAnterior),
+            folhaLiquidaMesAnterior,
             horasExtras,
-            horasExtrasSobreFolha: percent(horasExtras, folhaTotal),
+            horasExtrasSobreFolhaLiquida: percent(horasExtras, folhaLiquida),
             mediaHorasExtrasColaborador: colaboradores ? horasExtras / colaboradores : 0,
             valeAlimentacao,
             planoSaude,
             premiacao,
-            premiacaoSobreFolha: percent(premiacao, folhaTotal),
+            premiacaoSobreFolhaLiquida: percent(premiacao, folhaLiquida),
             beneficiosPorColaborador: colaboradores ? beneficios / colaboradores : 0,
         };
 
