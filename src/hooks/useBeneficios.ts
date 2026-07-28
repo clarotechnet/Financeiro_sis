@@ -70,6 +70,7 @@ export function useBeneficios(tipo: BeneficioTipo) {
   const [opcoes, setOpcoes] = useState<BeneficioOpcoes>(EMPTY_OPCOES);
   const [isLoading, setIsLoading] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFiltersState] = useState<BeneficioFilters>(() => getDefaultFilters());
 
@@ -188,6 +189,8 @@ export function useBeneficios(tipo: BeneficioTipo) {
   const importExcel = useCallback(async (payload: BeneficioImportPayload): Promise<BeneficioImportResult> => {
     setIsImporting(true);
     const errors: string[] = [];
+    const duplicateCpfs = new Set<string>();
+    let duplicateCount = 0;
     let skipped = 0;
     let inserted = 0;
 
@@ -207,10 +210,69 @@ export function useBeneficios(tipo: BeneficioTipo) {
         });
 
       if (normalizedRows.length === 0) {
-        return { inserted: 0, skipped, errors: ['Nenhuma linha valida para importar.'] };
+        return {
+          inserted: 0,
+          skipped,
+          duplicateCount,
+          duplicateCpfs: [],
+          errors: ['Nenhuma linha valida para importar.'],
+        };
       }
 
-      const cpfs = Array.from(new Set(normalizedRows.map(row => row.cpf)));
+      const table = TABLE_BY_TIPO[tipo];
+      const existingKeys = new Set<string>();
+      let existingPage = 0;
+      const existingPageSize = 1000;
+
+      while (true) {
+        const { data: existingRows, error: existingError } = await externalSupabase
+          .from(table)
+          .select('id, cpf, valor')
+          .eq('data_beneficio', payload.data_beneficio)
+          .order('id', { ascending: true })
+          .range(
+            existingPage * existingPageSize,
+            (existingPage + 1) * existingPageSize - 1,
+          );
+
+        if (existingError) throw existingError;
+
+        (existingRows || []).forEach((row: any) => {
+          const cpf = normalizeCpf(row.cpf);
+          const valueInCents = Math.round((Number(row.valor) || 0) * 100);
+          if (cpf && valueInCents > 0) existingKeys.add(`${cpf}:${valueInCents}`);
+        });
+
+        if (!existingRows || existingRows.length < existingPageSize) break;
+        existingPage++;
+      }
+
+      const uniqueRows = normalizedRows.filter(row => {
+        const valueInCents = Math.round(row.valor * 100);
+        const key = `${row.cpf}:${valueInCents}`;
+        if (existingKeys.has(key)) {
+          duplicateCount++;
+          skipped++;
+          duplicateCpfs.add(row.cpf);
+          return false;
+        }
+
+        existingKeys.add(key);
+        row.valor = valueInCents / 100;
+        return true;
+      });
+
+      if (uniqueRows.length === 0) {
+        return {
+          inserted,
+          skipped,
+          duplicateCount,
+          duplicateCpfs: Array.from(duplicateCpfs),
+          errors,
+        };
+      }
+
+      const cpfs = Array.from(new Set(uniqueRows.map(row => row.cpf)));
       const registros = new Map<string, {
         cpf: string;
         nome: string;
@@ -236,7 +298,7 @@ export function useBeneficios(tipo: BeneficioTipo) {
         });
       }
 
-      const insertRows = normalizedRows.flatMap(row => {
+      const insertRows = uniqueRows.flatMap(row => {
         const registro = registros.get(row.cpf);
         if (!registro) {
           skipped++;
@@ -261,7 +323,6 @@ export function useBeneficios(tipo: BeneficioTipo) {
         ];
       });
 
-      const table = TABLE_BY_TIPO[tipo];
       for (const chunk of chunkArray(insertRows, 200)) {
         const { error: insertError } = await externalSupabase
           .from(table)
@@ -272,11 +333,49 @@ export function useBeneficios(tipo: BeneficioTipo) {
       }
 
       await fetchData();
-      return { inserted, skipped, errors };
+      return {
+        inserted,
+        skipped,
+        duplicateCount,
+        duplicateCpfs: Array.from(duplicateCpfs),
+        errors,
+      };
     } catch (err: any) {
-      return { inserted, skipped, errors: [err.message || 'Erro ao importar beneficios.'] };
+      return {
+        inserted,
+        skipped,
+        duplicateCount,
+        duplicateCpfs: Array.from(duplicateCpfs),
+        errors: [err.message || 'Erro ao importar beneficios.'],
+      };
     } finally {
       setIsImporting(false);
+    }
+  }, [fetchData, tipo]);
+
+  const deleteSelected = useCallback(async (ids: string[]) => {
+    const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
+    if (uniqueIds.length === 0) return 0;
+
+    setIsDeleting(true);
+    let deleted = 0;
+    try {
+      const table = TABLE_BY_TIPO[tipo];
+      for (const chunk of chunkArray(uniqueIds, 200)) {
+        const { data: deletedRows, error: deleteError } = await externalSupabase
+          .from(table)
+          .delete()
+          .in('id', chunk)
+          .select('id');
+
+        if (deleteError) throw deleteError;
+        deleted += deletedRows?.length || 0;
+      }
+
+      return deleted;
+    } finally {
+      await fetchData();
+      setIsDeleting(false);
     }
   }, [fetchData, tipo]);
 
@@ -285,12 +384,14 @@ export function useBeneficios(tipo: BeneficioTipo) {
     allData: data,
     isLoading,
     isImporting,
+    isDeleting,
     error,
     filters,
     setFilters: (patch: Partial<BeneficioFilters>) => setFiltersState(prev => ({ ...prev, ...patch })),
     clearFilters: () => setFiltersState(getDefaultFilters()),
     fetchData,
     importExcel,
+    deleteSelected,
     opcoes,
     kpis,
   };

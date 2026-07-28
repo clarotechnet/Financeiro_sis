@@ -1,8 +1,19 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { AlertCircle, CheckCircle, ChevronDown, ChevronLeft, ChevronRight, Download, Fuel, Gift, Loader2, PackagePlus, RefreshCw, Upload, X, Zap } from 'lucide-react';
+import { AlertCircle, CheckCircle, ChevronDown, ChevronLeft, ChevronRight, Download, Fuel, Gift, ListChecks, Loader2, PackagePlus, RefreshCw, Trash2, Upload, X, Zap } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -12,6 +23,8 @@ import { useToast } from '@/hooks/use-toast';
 import { BeneficioImportPayload, BeneficioImportRow, BeneficioTipo } from '@/types/beneficios';
 import { OpcaoSelect } from '@/types/comissionamento';
 import { downloadOperationalReport, OperationalReportSource } from '@/lib/operationalReports';
+import { useAuth } from '@/contexts/useAuth';
+import { canManageExistingFinancialData } from '@/lib/profileRoles';
 
 const PAGE_SIZE = 50;
 
@@ -56,6 +69,12 @@ const normalizeCpf = (value: any) => {
   const digits = String(value ?? '').replace(/\D/g, '');
   if (!digits) return '';
   return digits.length < 11 ? digits.padStart(11, '0') : digits;
+};
+
+const fmtCpf = (value: string) => {
+  const cpf = normalizeCpf(value);
+  if (cpf.length !== 11) return value;
+  return cpf.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4');
 };
 
 const parseNum = (value: any): number => {
@@ -320,34 +339,95 @@ const Beneficios: React.FC = () => {
     data,
     isLoading,
     isImporting,
+    isDeleting,
     error,
     filters,
     setFilters,
     clearFilters,
     fetchData,
     importExcel,
+    deleteSelected,
     opcoes,
     kpis,
   } = useBeneficios(tipo);
+  const { profile } = useAuth();
+  const canDelete = canManageExistingFinancialData(profile?.role);
   const { toast } = useToast();
   const [page, setPage] = useState(1);
   const [importOpen, setImportOpen] = useState(false);
+  const [importResult, setImportResult] = useState<Awaited<ReturnType<typeof importExcel>> | null>(null);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   useEffect(() => { setPage(1); }, [tipo, data.length]);
+  useEffect(() => {
+    setSelectionMode(false);
+    setSelectedIds(new Set());
+  }, [tipo]);
+  useEffect(() => {
+    const availableIds = new Set(data.map(row => row.id));
+    setSelectedIds(previous => new Set(Array.from(previous).filter(id => availableIds.has(id))));
+  }, [data]);
 
   const activeTab = TABS.find(tab => tab.id === tipo) || TABS[0];
   const ActiveIcon = activeTab.icon;
   const totalPages = Math.max(1, Math.ceil(data.length / PAGE_SIZE));
   const paginated = data.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const pageIds = paginated.map(row => row.id);
+  const allPageSelected = pageIds.length > 0 && pageIds.every(id => selectedIds.has(id));
+  const somePageSelected = pageIds.some(id => selectedIds.has(id));
 
   const handleImport = async (payload: BeneficioImportPayload) => {
     const result = await importExcel(payload);
     const hasErrors = result.errors.length > 0;
+    const hasDuplicates = result.duplicateCount > 0;
+    setImportResult(result);
     toast({
-      title: hasErrors ? 'Importação concluída com avisos' : 'Importação concluída',
-      description: `${result.inserted} importado(s), ${result.skipped} ignorado(s).${hasErrors ? ` ${result.errors[0]}` : ''}`,
+      title: hasErrors || hasDuplicates ? 'Importação concluída com avisos' : 'Importação concluída',
+      description: `${result.inserted} importado(s), ${result.skipped} ignorado(s).${hasDuplicates ? ` ${result.duplicateCount} duplicado(s) não foram gravados.` : ''}${hasErrors ? ` ${result.errors[0]}` : ''}`,
       variant: hasErrors ? 'destructive' : 'default',
     });
+  };
+
+  const togglePageSelection = (selected: boolean) => {
+    setSelectedIds(previous => {
+      const next = new Set(previous);
+      pageIds.forEach(id => {
+        if (selected) next.add(id);
+        else next.delete(id);
+      });
+      return next;
+    });
+  };
+
+  const toggleRowSelection = (id: string, selected: boolean) => {
+    setSelectedIds(previous => {
+      const next = new Set(previous);
+      if (selected) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const handleDeleteSelected = async () => {
+    try {
+      const deleted = await deleteSelected(Array.from(selectedIds));
+      setSelectedIds(new Set());
+      setSelectionMode(false);
+      setDeleteConfirmOpen(false);
+      toast({
+        title: 'Registros excluídos',
+        description: `${deleted} benefício(s) foram excluídos.`,
+      });
+    } catch (deleteError: any) {
+      setDeleteConfirmOpen(false);
+      toast({
+        title: 'Não foi possível excluir',
+        description: deleteError.message || 'Confira sua permissão e tente novamente.',
+        variant: 'destructive',
+      });
+    }
   };
 
   const handleGenerateReport = () => {
@@ -504,7 +584,36 @@ const Beneficios: React.FC = () => {
               <h3 className="font-bold text-foreground">Dados Importados</h3>
               <p className="text-xs text-muted-foreground">Linhas paginadas de 50 em 50 para conferência.</p>
             </div>
-            <div className="flex items-center gap-3 text-sm text-muted-foreground">
+            <div className="flex flex-wrap items-center justify-end gap-3 text-sm text-muted-foreground">
+              {canDelete && (
+                <>
+                  <Button
+                    variant={selectionMode ? 'secondary' : 'outline'}
+                    size="sm"
+                    className="gap-1"
+                    disabled={isDeleting || data.length === 0}
+                    onClick={() => {
+                      setSelectionMode(previous => !previous);
+                      setSelectedIds(new Set());
+                    }}
+                  >
+                    <ListChecks className="w-4 h-4" />
+                    {selectionMode ? 'Cancelar seleção' : 'Selecionar'}
+                  </Button>
+                  {selectionMode && selectedIds.size > 0 && (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="gap-1"
+                      disabled={isDeleting}
+                      onClick={() => setDeleteConfirmOpen(true)}
+                    >
+                      {isDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                      Excluir selecionados ({selectedIds.size})
+                    </Button>
+                  )}
+                </>
+              )}
               <span>{data.length === 0 ? '0-0' : `${(page - 1) * PAGE_SIZE + 1}-${Math.min(page * PAGE_SIZE, data.length)}`} de {data.length}</span>
               <Button variant="outline" size="icon" disabled={page <= 1} onClick={() => setPage(prev => Math.max(1, prev - 1))}>
                 <ChevronLeft className="w-4 h-4" />
@@ -527,6 +636,15 @@ const Beneficios: React.FC = () => {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border text-muted-foreground">
+                    {canDelete && selectionMode && (
+                      <th className="w-10 py-3 px-3 text-left">
+                        <Checkbox
+                          checked={allPageSelected ? true : somePageSelected ? 'indeterminate' : false}
+                          onCheckedChange={checked => togglePageSelection(checked === true)}
+                          aria-label="Selecionar benefícios desta página"
+                        />
+                      </th>
+                    )}
                     <th className="text-left py-3 px-3 font-semibold">Data</th>
                     <th className="text-left py-3 px-3 font-semibold">Unidade</th>
                     <th className="text-left py-3 px-3 font-semibold">Nome</th>
@@ -542,6 +660,15 @@ const Beneficios: React.FC = () => {
                 <tbody>
                   {paginated.map(row => (
                     <tr key={`${row.tipo}-${row.id}`} className="border-b border-border/70 hover:bg-muted/20">
+                      {canDelete && selectionMode && (
+                        <td className="py-3 px-3">
+                          <Checkbox
+                            checked={selectedIds.has(row.id)}
+                            onCheckedChange={checked => toggleRowSelection(row.id, checked === true)}
+                            aria-label={`Selecionar benefício de ${row.nome}`}
+                          />
+                        </td>
+                      )}
                       <td className="py-3 px-3 font-medium">{fmtDate(row.data_beneficio)}</td>
                       <td className="py-3 px-3">{row.unidade_nome || '-'}</td>
                       <td className="py-3 px-3 font-semibold">{row.nome}</td>
@@ -567,6 +694,84 @@ const Beneficios: React.FC = () => {
           onClose={() => setImportOpen(false)}
           onImport={handleImport}
         />
+
+        <Dialog open={importResult !== null} onOpenChange={open => !open && setImportResult(null)}>
+          <DialogContent className="max-w-xl bg-card border-border">
+            <DialogHeader>
+              <DialogTitle>Resumo da importação</DialogTitle>
+            </DialogHeader>
+            {importResult && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="rounded-lg border border-border bg-muted/20 p-3">
+                    <p className="text-xs font-semibold uppercase text-muted-foreground">Importados</p>
+                    <strong className="text-xl text-foreground">{importResult.inserted}</strong>
+                  </div>
+                  <div className="rounded-lg border border-border bg-muted/20 p-3">
+                    <p className="text-xs font-semibold uppercase text-muted-foreground">Ignorados</p>
+                    <strong className="text-xl text-foreground">{importResult.skipped}</strong>
+                  </div>
+                  <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
+                    <p className="text-xs font-semibold uppercase text-amber-600">Duplicados</p>
+                    <strong className="text-xl text-amber-600">{importResult.duplicateCount}</strong>
+                  </div>
+                </div>
+
+                {importResult.duplicateCpfs.length > 0 && (
+                  <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
+                    <p className="text-sm font-semibold text-foreground">
+                      CPFs repetidos na mesma data e com o mesmo valor
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Essas linhas não foram gravadas. A placa não participa dessa comparação.
+                    </p>
+                    <div className="mt-3 max-h-40 overflow-y-auto rounded border border-border bg-background p-2 font-mono text-sm">
+                      {importResult.duplicateCpfs.map(cpf => (
+                        <div key={cpf}>{fmtCpf(cpf)}</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {importResult.errors.length > 0 && (
+                  <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3">
+                    <p className="text-sm font-semibold text-destructive">Avisos da importação</p>
+                    <ul className="mt-2 max-h-32 overflow-y-auto space-y-1 text-sm text-destructive">
+                      {importResult.errors.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+            <DialogFooter>
+              <Button onClick={() => setImportResult(null)}>Fechar</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Excluir benefícios selecionados?</AlertDialogTitle>
+              <AlertDialogDescription>
+                {selectedIds.size} registro(s) serão removidos definitivamente de {activeTab.label}.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
+              <AlertDialogAction
+                disabled={isDeleting}
+                onClick={event => {
+                  event.preventDefault();
+                  handleDeleteSelected();
+                }}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                {isDeleting ? 'Excluindo...' : 'Excluir'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         {isImporting && (
           <div className="fixed bottom-4 right-4 z-50 flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-3 shadow-lg text-sm">

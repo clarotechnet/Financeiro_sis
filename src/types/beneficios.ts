@@ -40,6 +40,8 @@ export interface BeneficioImportPayload {
 export interface BeneficioImportResult {
   inserted: number;
   skipped: number;
+  duplicateCount: number;
+  duplicateCpfs: string[];
   errors: string[];
 }
 
