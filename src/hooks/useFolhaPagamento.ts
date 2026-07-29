@@ -376,9 +376,12 @@ export function useFolhaPagamento() {
 
             setOpcoesUnidades(
                 (unidadesResult.data || [])
+                    .slice()
+                    .sort((a: any, b: any) =>
+                        String(a.codigo).localeCompare(String(b.codigo), 'pt-BR', { numeric: true })
+                    )
                     .map((row: any) => String(row.unidade || '').trim())
-                    .filter(Boolean)
-                    .sort((a: string, b: string) => a.localeCompare(b, 'pt-BR')),
+                    .filter(Boolean),
             );
             setOpcoesCentrosCusto(
                 (setoresResult.data || [])
@@ -624,6 +627,9 @@ export function useFolhaPagamento() {
             unit.centros.push(detalhe);
             bucket.colaboradores.forEach(employee => unit.colaboradores.add(employee));
         });
+        const unidadeOrder = new Map(
+            opcoesUnidades.map((unidade, index) => [normalizeLabel(unidade), index]),
+        );
         const unidadesDetalhe: FolhaUnidadeDetalhe[] = Array.from(units.entries())
             .map(([unitKey, unit]) => {
                 const receitasUnidade = unit.centros.reduce((sum, center) => sum + center.receitas, 0);
@@ -643,10 +649,15 @@ export function useFolhaPagamento() {
                     centros: unit.centros.sort((a, b) => a.centro.localeCompare(b.centro, 'pt-BR')),
                 };
             })
-            .sort((a, b) => a.unidade.localeCompare(b.unidade, 'pt-BR'));
+            .sort((a, b) => {
+                const ordemA = unidadeOrder.get(normalizeLabel(a.unidade)) ?? Number.MAX_SAFE_INTEGER;
+                const ordemB = unidadeOrder.get(normalizeLabel(b.unidade)) ?? Number.MAX_SAFE_INTEGER;
+
+                return ordemA - ordemB || a.unidade.localeCompare(b.unidade, 'pt-BR');
+            });
 
         return { kpis, centrosCusto, composicaoDespesas, unidadesDetalhe };
-    }, [cadastros, data, filtered, filters, pagamentos, receitas]);
+    }, [cadastros, data, filtered, filters, opcoesUnidades, pagamentos, receitas]);
 
     const importExcel = useCallback(async (rows: Record<string, any>[]) => {
         const errors: string[] = [];
