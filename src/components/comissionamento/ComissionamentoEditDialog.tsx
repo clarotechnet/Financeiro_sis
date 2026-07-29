@@ -600,8 +600,8 @@ export const ComissionamentoEditDialog: React.FC<Props> = ({
               <PaymentReceiptField
                 file={receiptFile}
                 onFileChange={setReceiptFile}
-                existingPath={record.comprovante_path}
-                existingName={record.comprovante_nome}
+                existingPath={record?.comprovante_path}
+                existingName={record?.comprovante_nome}
                 disabled={submitting || deleting}
               />
             </div>
