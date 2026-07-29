@@ -50,6 +50,7 @@ export interface BeneficioFilters {
   dataFim: string;
   unidade: string[];
   setor: string[];
+  nome: string[];
   placa: string;
   busca: string;
 }

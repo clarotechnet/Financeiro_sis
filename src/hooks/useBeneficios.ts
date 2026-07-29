@@ -43,6 +43,7 @@ const getDefaultFilters = (): BeneficioFilters => ({
   ...getCurrentMonthFilters(),
   unidade: [],
   setor: [],
+  nome: [],
   placa: '',
   busca: '',
 });
@@ -164,6 +165,9 @@ export function useBeneficios(tipo: BeneficioTipo) {
     if (filters.setor.length > 0) {
       rows = rows.filter(row => row.setor_codigo && filters.setor.includes(row.setor_codigo));
     }
+    if ((tipo === 'flash' || tipo === 'agregamento') && filters.nome.length > 0) {
+      rows = rows.filter(row => filters.nome.includes(row.nome));
+    }
     if (tipo === 'combustivel' && filters.placa.trim()) {
       const placa = normalizePlacaSearch(filters.placa);
       rows = rows.filter(row => normalizePlacaSearch(row.placa).includes(placa));
@@ -179,6 +183,12 @@ export function useBeneficios(tipo: BeneficioTipo) {
 
     return rows;
   }, [data, filters, tipo]);
+
+  const opcoesNomes = useMemo(() => (
+    Array.from(new Set(data.map(row => row.nome.trim()).filter(Boolean)))
+      .sort((a, b) => a.localeCompare(b, 'pt-BR'))
+      .map(nome => ({ id: nome, nome }))
+  ), [data]);
 
   const kpis = useMemo(() => ({
     totalRegistros: filteredData.length,
@@ -393,6 +403,7 @@ export function useBeneficios(tipo: BeneficioTipo) {
     importExcel,
     deleteSelected,
     opcoes,
+    opcoesNomes,
     kpis,
   };
 }

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { AlertCircle, CheckCircle, ChevronDown, ChevronLeft, ChevronRight, Download, Fuel, Gift, ListChecks, Loader2, PackagePlus, RefreshCw, Trash2, Upload, X, Zap } from 'lucide-react';
+import { AlertCircle, CheckCircle, ChevronDown, ChevronLeft, ChevronRight, Download, FileSpreadsheet, Fuel, Gift, ListChecks, Loader2, PackagePlus, RefreshCw, Trash2, Upload, X, Zap } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import {
   AlertDialog,
@@ -348,6 +348,7 @@ const Beneficios: React.FC = () => {
     importExcel,
     deleteSelected,
     opcoes,
+    opcoesNomes,
     kpis,
   } = useBeneficios(tipo);
   const { profile } = useAuth();
@@ -457,6 +458,65 @@ const Beneficios: React.FC = () => {
     }
   };
 
+  const handleExportExcel = () => {
+    if (data.length === 0) {
+      toast({
+        title: 'Sem dados para exportar',
+        description: 'Nenhum benefício foi encontrado para os filtros atuais.',
+      });
+      return;
+    }
+
+    const rows = data.map(row => ({
+      Data: fmtDate(row.data_beneficio),
+      Unidade: row.unidade_nome || '',
+      Nome: row.nome,
+      CPF: fmtCpf(row.cpf),
+      ...(tipo === 'combustivel' ? { Placa: row.placa || '' } : {}),
+      'Centro de Custo': row.setor_nome || '',
+      Valor: Number(row.valor) || 0,
+      'Importado em': fmtDateTime(row.created_at),
+    }));
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    const valueColumn = tipo === 'combustivel' ? 6 : 5;
+    const range = worksheet['!ref'] ? XLSX.utils.decode_range(worksheet['!ref']) : null;
+
+    if (range) {
+      for (let row = range.s.r + 1; row <= range.e.r; row += 1) {
+        const cell = worksheet[XLSX.utils.encode_cell({ r: row, c: valueColumn })];
+        if (cell?.t === 'n') cell.z = '"R$" #,##0.00;[Red]-"R$" #,##0.00';
+      }
+    }
+
+    worksheet['!cols'] = tipo === 'combustivel'
+      ? [
+          { wch: 12 },
+          { wch: 30 },
+          { wch: 34 },
+          { wch: 16 },
+          { wch: 14 },
+          { wch: 38 },
+          { wch: 18 },
+          { wch: 22 },
+        ]
+      : [
+          { wch: 12 },
+          { wch: 30 },
+          { wch: 34 },
+          { wch: 16 },
+          { wch: 38 },
+          { wch: 18 },
+          { wch: 22 },
+        ];
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, activeTab.label.slice(0, 31));
+    XLSX.writeFile(
+      workbook,
+      `beneficios_${tipo}_${new Date().toISOString().slice(0, 10)}.xlsx`,
+    );
+  };
+
   return (
     <div className="min-h-full">
       <div className="max-w-[1500px] mx-auto p-6 md:p-8 space-y-6">
@@ -509,6 +569,10 @@ const Beneficios: React.FC = () => {
                 <Download className="w-4 h-4" />
                 Gerar Relatorio
               </Button>
+              <Button variant="outline" size="sm" onClick={handleExportExcel} disabled={data.length === 0} className="gap-1">
+                <FileSpreadsheet className="w-4 h-4" />
+                Exportar Excel
+              </Button>
               <Button variant="outline" size="sm" onClick={() => fetchData()} className="gap-1">
                 <RefreshCw className="w-4 h-4" />
                 Atualizar
@@ -519,7 +583,7 @@ const Beneficios: React.FC = () => {
             </div>
           </div>
 
-          <div className={`grid grid-cols-1 md:grid-cols-3 gap-4 ${tipo === 'combustivel' ? 'xl:grid-cols-6' : 'xl:grid-cols-5'}`}>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-6">
             <div className="space-y-1">
               <Label className="form-label">Data Inicial</Label>
               <Input
@@ -538,6 +602,14 @@ const Beneficios: React.FC = () => {
             </div>
             <MultiSelect label="Unidade" options={opcoes.unidades} selected={filters.unidade} onChange={value => setFilters({ unidade: value })} />
             <MultiSelect label="Centro de Custo" options={opcoes.setores} selected={filters.setor} onChange={value => setFilters({ setor: value })} />
+            {(tipo === 'flash' || tipo === 'agregamento') && (
+              <MultiSelect
+                label="Nome"
+                options={opcoesNomes}
+                selected={filters.nome}
+                onChange={value => setFilters({ nome: value })}
+              />
+            )}
             {tipo === 'combustivel' && (
               <div className="space-y-1">
                 <Label className="form-label">Placa</Label>
