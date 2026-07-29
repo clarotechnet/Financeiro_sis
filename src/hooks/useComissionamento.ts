@@ -12,6 +12,7 @@ import {
   OperationalReportImportRow,
 } from '@/types/comissionamento';
 import { buildMonthlyDates, clampMonthlyOccurrences } from '@/utils/monthlyDates';
+import { removePaymentReceipt, uploadPaymentReceipt } from '@/lib/paymentReceipt';
 
 interface OpcoesData {
   cnpj: OpcaoSelect[];
@@ -446,6 +447,16 @@ export function useComissionamento() {
   }, [filteredData]);
 
   const submitManualEntry = useCallback(async (formData: Record<string, any>) => {
+    const receiptFile = typeof File !== 'undefined' && formData.comprovante_arquivo instanceof File
+      ? formData.comprovante_arquivo
+      : null;
+    let uploadedReceipt: { path: string; name: string } | null = null;
+    let recordsInserted = false;
+
+    if (receiptFile) {
+      uploadedReceipt = await uploadPaymentReceipt(receiptFile);
+    }
+
     const rateios = Array.isArray(formData.rateios) ? formData.rateios : [];
     const quantidadeDespesas = clampMonthlyOccurrences(Number(formData.quantidade_despesas) || 1);
     const datasLancamento = buildMonthlyDates(formData.data_lancamento, quantidadeDespesas);
@@ -478,6 +489,8 @@ export function useComissionamento() {
       rateio_item_ordem: rateioLoteId ? (index ?? 0) + 1 : null,
       parcela_numero: parcelaNumero,
       parcela_total: parcelaNumero ? quantidadeDespesas : null,
+      comprovante_path: uploadedReceipt?.path || null,
+      comprovante_nome: uploadedReceipt?.name || null,
     });
     const records = datasLancamento.flatMap((dataLancamento, parcelaIndex) => {
       const rateioLoteId = rateios.length > 0 ? createClientUuid() : null;
@@ -486,11 +499,19 @@ export function useComissionamento() {
         ? rateios.map((rateio, index) => buildRecord(dataLancamento, rateioLoteId, parcelaNumero, rateio, index))
         : [buildRecord(dataLancamento, null, parcelaNumero)];
     });
-    const { error: insertError } = await externalSupabase
-      .from('lancamentos_pix')
-      .insert(records);
-    if (insertError) throw insertError;
-    await fetchData();
+    try {
+      const { error: insertError } = await externalSupabase
+        .from('lancamentos_pix')
+        .insert(records);
+      if (insertError) throw insertError;
+      recordsInserted = true;
+      await fetchData();
+    } catch (submitError) {
+      if (uploadedReceipt && !recordsInserted) {
+        await removePaymentReceipt(uploadedReceipt.path);
+      }
+      throw submitError;
+    }
   }, [fetchData]);
 
   const updateRecord = useCallback(async (id: string, updates: Partial<LancamentoPix> & Record<string, any>) => {
@@ -498,45 +519,91 @@ export function useComissionamento() {
       rateios,
       valor_total,
       quantidade_despesas,
+      comprovante_arquivo,
       ...dados
     } = updates;
     const quantidadeDespesas = clampMonthlyOccurrences(Number(quantidade_despesas) || 1);
     const rateioItems = Array.isArray(rateios) ? rateios : [];
+    const receiptFile = typeof File !== 'undefined' && comprovante_arquivo instanceof File
+      ? comprovante_arquivo
+      : null;
+    let uploadedReceipt: { path: string; name: string } | null = null;
+    let recordUpdated = false;
 
-    if (quantidadeDespesas > 1) {
-      const { error: multipleError } = await externalSupabase.rpc(
-        'atualizar_lancamento_com_multiplas_despesas',
-        {
+    if (receiptFile) {
+      uploadedReceipt = await uploadPaymentReceipt(receiptFile);
+      dados.comprovante_path = uploadedReceipt.path;
+      dados.comprovante_nome = uploadedReceipt.name;
+    }
+
+    const syncReceiptAfterRpc = async () => {
+      if (!uploadedReceipt) return;
+
+      const { data: target, error: targetError } = await externalSupabase
+        .from('lancamentos_pix')
+        .select('rateio_lote_id')
+        .eq('id', id)
+        .maybeSingle();
+      if (targetError) throw targetError;
+
+      const receiptUpdate = externalSupabase
+        .from('lancamentos_pix')
+        .update({
+          comprovante_path: uploadedReceipt.path,
+          comprovante_nome: uploadedReceipt.name,
+        });
+      const { error: receiptError } = target?.rateio_lote_id
+        ? await receiptUpdate.eq('rateio_lote_id', target.rateio_lote_id)
+        : await receiptUpdate.eq('id', id);
+      if (receiptError) throw receiptError;
+    };
+
+    try {
+      if (quantidadeDespesas > 1) {
+        const { error: multipleError } = await externalSupabase.rpc(
+          'atualizar_lancamento_com_multiplas_despesas',
+          {
+            p_lancamento_id: id,
+            p_dados: dados,
+            p_valor_total: valor_total ?? dados.valor,
+            p_rateios: rateioItems,
+            p_quantidade: quantidadeDespesas,
+          },
+        );
+        if (multipleError) throw multipleError;
+        await syncReceiptAfterRpc();
+        recordUpdated = true;
+        await fetchData();
+        return;
+      }
+
+      if (rateioItems.length > 0) {
+        const { error: rateioError } = await externalSupabase.rpc('atualizar_lancamento_com_rateios', {
           p_lancamento_id: id,
           p_dados: dados,
-          p_valor_total: valor_total ?? dados.valor,
+          p_valor_total: valor_total,
           p_rateios: rateioItems,
-          p_quantidade: quantidadeDespesas,
-        },
-      );
-      if (multipleError) throw multipleError;
-      await fetchData();
-      return;
-    }
+        });
+        if (rateioError) throw rateioError;
+        await syncReceiptAfterRpc();
+        recordUpdated = true;
+        await fetchData();
+        return;
+      }
 
-    if (rateioItems.length > 0) {
-      const { error: rateioError } = await externalSupabase.rpc('atualizar_lancamento_com_rateios', {
-        p_lancamento_id: id,
-        p_dados: dados,
-        p_valor_total: valor_total,
-        p_rateios: rateioItems,
-      });
-      if (rateioError) throw rateioError;
+      const { error: updateError } = await externalSupabase
+        .from('lancamentos_pix')
+        .update(dados)
+        .eq('id', id);
+      if (updateError) throw updateError;
+      recordUpdated = true;
       await fetchData();
-      return;
+    } catch (updateError) {
+      if (uploadedReceipt && !recordUpdated) {
+        await removePaymentReceipt(uploadedReceipt.path);
+      }
+      throw updateError;
     }
-
-    const { error: updateError } = await externalSupabase
-      .from('lancamentos_pix')
-      .update(dados)
-      .eq('id', id);
-    if (updateError) throw updateError;
-    await fetchData();
   }, [fetchData]);
 
   const updateRecordsStatus = useCallback(async (ids: string[], status: string) => {

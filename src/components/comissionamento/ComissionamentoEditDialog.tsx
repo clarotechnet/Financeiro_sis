@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { CheckCircle, Copy, Loader2, Minus, Plus, Trash2 } from 'lucide-react';
 import { LancamentoPix, OpcaoSelect } from '@/types/comissionamento';
 import { SearchableSelect } from './SearchableSelect';
+import { PaymentReceiptField } from './PaymentReceiptField';
 import {
   addMonthsPreservingDay,
   clampMonthlyOccurrences,
@@ -107,6 +108,7 @@ export const ComissionamentoEditDialog: React.FC<Props> = ({
   const [quantidadeDespesas, setQuantidadeDespesas] = useState(1);
   const [usarRateio, setUsarRateio] = useState(false);
   const [rateios, setRateios] = useState<RateioState[]>([]);
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -123,6 +125,7 @@ export const ComissionamentoEditDialog: React.FC<Props> = ({
 
   useEffect(() => {
     if (!record) return;
+    setReceiptFile(null);
 
     const loteItems = record.rateio_lote_id
       ? (rateioRecords.length > 0 ? rateioRecords : [record])
@@ -273,6 +276,7 @@ export const ComissionamentoEditDialog: React.FC<Props> = ({
         centro_de_custo_id: null,
         setor_codigo: usarRateio ? null : form.centro_de_custo_id,
         plano_conta_id: usarRateio ? null : form.plano_conta_id,
+        comprovante_arquivo: receiptFile,
         quantidade_despesas: quantidadeFinal,
       };
 
@@ -592,6 +596,14 @@ export const ComissionamentoEditDialog: React.FC<Props> = ({
                 <Label className="text-sm text-muted-foreground">Observação</Label>
                 <Input value={form.descricao || ''} onChange={event => set('descricao', event.target.value)} />
               </div>
+
+              <PaymentReceiptField
+                file={receiptFile}
+                onFileChange={setReceiptFile}
+                existingPath={record.comprovante_path}
+                existingName={record.comprovante_nome}
+                disabled={submitting || deleting}
+              />
             </div>
 
             {error && <p className="text-sm text-destructive">{error}</p>}

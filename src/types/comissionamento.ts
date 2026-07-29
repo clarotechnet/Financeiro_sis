@@ -32,6 +32,8 @@ export interface LancamentoPix {
   rateio_item_ordem?: number | null;
   parcela_numero?: number | null;
   parcela_total?: number | null;
+  comprovante_path?: string | null;
+  comprovante_nome?: string | null;
   created_at?: string;
   updated_at?: string;
 }

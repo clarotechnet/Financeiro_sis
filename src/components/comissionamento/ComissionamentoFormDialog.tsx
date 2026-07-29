@@ -8,6 +8,7 @@ import { LancamentoPix, OpcaoSelect } from '@/types/comissionamento';
 import { useAuth } from '@/contexts/useAuth';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { SearchableSelect } from './SearchableSelect';
+import { PaymentReceiptField } from './PaymentReceiptField';
 import {
   addMonthsPreservingDay,
   clampMonthlyOccurrences,
@@ -75,6 +76,7 @@ interface Props {
     banco_codigo: string | null;
     banco: string | null;
     status_pag: string;
+    comprovante_arquivo?: File | null;
     quantidade_despesas?: number;
     rateios?: {
       unidade_id: string;
@@ -227,9 +229,15 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({
   const [quantidadeDespesas, setQuantidadeDespesas] = useState(1);
   const [usarRateio, setUsarRateio] = useState(false);
   const [rateios, setRateios] = useState<RateioState[]>([]);
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
+
+  useEffect(() => {
+    if (!open) setReceiptFile(null);
+  }, [open]);
 
   useEffect(() => {
     if (!open || !initialRecord) return;
+    setReceiptFile(null);
 
     const loteItems = initialRecord.rateio_lote_id
       ? (initialRateioRecords.length > 0 ? initialRateioRecords : [initialRecord])
@@ -559,6 +567,7 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({
         banco_codigo: bancoSelecionado?.id || null,
         banco: bancoSelecionado?.nome || null,
         status_pag: form.status_pag || 'A PAGAR',
+        comprovante_arquivo: receiptFile,
         quantidade_despesas: quantidadeFinal,
         rateios: usarRateio
           ? rateios.map(rateio => ({
@@ -580,6 +589,7 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({
         setQuantidadeDespesas(1);
         setUsarRateio(false);
         setRateios([]);
+        setReceiptFile(null);
         onClose();
       }, 1300);
     } catch (err: unknown) {
@@ -600,6 +610,7 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({
     setQuantidadeDespesas(1);
     setUsarRateio(false);
     setRateios([]);
+    setReceiptFile(null);
     setActiveSuggest(null);
     setValorDisplay('');
     setError('');
@@ -977,6 +988,12 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({
                 <Label className="text-sm text-muted-foreground">Observação</Label>
                 <Input placeholder="Observação (opcional)" value={form.descricao} onChange={e => set('descricao', e.target.value)} />
               </div>
+
+              <PaymentReceiptField
+                file={receiptFile}
+                onFileChange={setReceiptFile}
+                disabled={submitting}
+              />
             </div>
 
             {error && <p className="text-sm text-destructive">{error}</p>}
