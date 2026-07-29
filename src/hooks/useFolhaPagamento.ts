@@ -554,10 +554,12 @@ export function useFolhaPagamento() {
                 percentual: totalDespesas ? (valor / totalDespesas) * 100 : 0,
             }))
             .sort((a, b) => b.valor - a.valor);
-        const centrosCusto: FolhaCentroIndicador[] = CENTROS_CUSTO_INDICADORES.map(centro => ({
-            centro,
-            valor: despesasPorCentro.get(normalizeLabel(centro)) || 0,
-        }));
+        const centrosCusto: FolhaCentroIndicador[] = CENTROS_CUSTO_INDICADORES
+            .map(centro => ({
+                centro,
+                valor: despesasPorCentro.get(normalizeLabel(centro)) || 0,
+            }))
+            .sort((a, b) => b.valor - a.valor || a.centro.localeCompare(b.centro, 'pt-BR'));
 
         type DetailBucket = {
             unidade: string;

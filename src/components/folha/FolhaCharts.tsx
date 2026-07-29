@@ -16,7 +16,7 @@ import { BarChart3, PieChart as PieChartIcon } from 'lucide-react';
 import type { FolhaCentroIndicador, FolhaDespesaComposicao } from '@/hooks/useFolhaPagamento';
 import { chartTooltipContentStyle, chartTooltipCursor, chartTooltipItemStyle, chartTooltipLabelStyle } from '@/lib/chartTooltip';
 
-const COLORS = ['#ef4444', '#f59e0b', '#22c55e', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#06b6d4', '#84cc16'];
+const COLORS = ['#ef4444', '#f59e0b', '#22c55e', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#06b6d4', '#84cc16', '#64748b'];
 
 const fmtBRL = (value: number) =>
     value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -39,6 +39,26 @@ interface Props {
 
 export const FolhaCharts: React.FC<Props> = ({ centrosCusto, composicaoDespesas }) => {
     const totalDespesas = composicaoDespesas.reduce((sum, item) => sum + item.valor, 0);
+    const composicaoResumida = React.useMemo(() => {
+        const ordenadas = [...composicaoDespesas].sort(
+            (a, b) => b.valor - a.valor || a.rubrica.localeCompare(b.rubrica, 'pt-BR'),
+        );
+        const principais = ordenadas.slice(0, 10);
+        const valorOutros = ordenadas
+            .slice(10)
+            .reduce((sum, item) => sum + item.valor, 0);
+
+        if (valorOutros <= 0) return principais;
+
+        return [
+            ...principais,
+            {
+                rubrica: 'Outros',
+                valor: valorOutros,
+                percentual: totalDespesas ? (valorOutros / totalDespesas) * 100 : 0,
+            },
+        ];
+    }, [composicaoDespesas, totalDespesas]);
 
     return (
         <div className="space-y-6">
@@ -107,7 +127,7 @@ export const FolhaCharts: React.FC<Props> = ({ centrosCusto, composicaoDespesas 
                             <ResponsiveContainer width="100%" height="100%">
                                 <PieChart>
                                     <Pie
-                                        data={composicaoDespesas}
+                                        data={composicaoResumida}
                                         dataKey="valor"
                                         nameKey="rubrica"
                                         cx="50%"
@@ -116,7 +136,7 @@ export const FolhaCharts: React.FC<Props> = ({ centrosCusto, composicaoDespesas 
                                         outerRadius={150}
                                         paddingAngle={1}
                                     >
-                                        {composicaoDespesas.map((item, index) => (
+                                        {composicaoResumida.map((item, index) => (
                                             <Cell key={item.rubrica} fill={COLORS[index % COLORS.length]} />
                                         ))}
                                     </Pie>
@@ -131,7 +151,7 @@ export const FolhaCharts: React.FC<Props> = ({ centrosCusto, composicaoDespesas 
                         </div>
 
                         <div className="max-h-[430px] overflow-y-auto pr-2">
-                            {composicaoDespesas.map((item, index) => (
+                            {composicaoResumida.map((item, index) => (
                                 <div key={item.rubrica} className="flex items-center justify-between gap-4 border-b border-border py-2.5 last:border-b-0">
                                     <div className="flex min-w-0 items-center gap-2">
                                         <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
