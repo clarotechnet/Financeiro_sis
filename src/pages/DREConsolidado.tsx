@@ -373,6 +373,21 @@ const DREConsolidado: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
   const [generatedAt, setGeneratedAt] = useState<Date | null>(null);
+  const [loadedFilterSignature, setLoadedFilterSignature] = useState('');
+  const fetchDreRequestRef = useRef(0);
+
+  const currentFilterSignature = useMemo(
+    () => JSON.stringify({
+      dataInicio,
+      dataFim,
+      unidades: [...unidadeCodigos].sort(),
+      setores: [...setorCodigos].sort(),
+      grupos: [...grupoCodigos].sort(),
+      subgrupos: [...subgrupoCodigos].sort(),
+      contas: [...contaCodigos].sort(),
+    }),
+    [contaCodigos, dataFim, dataInicio, grupoCodigos, setorCodigos, subgrupoCodigos, unidadeCodigos],
+  );
 
   const fetchOpcoes = useCallback(async () => {
     const [unidadesResult, setoresResult, planoContasResult] = await Promise.all([
@@ -411,6 +426,7 @@ const DREConsolidado: React.FC = () => {
   }, []);
 
   const fetchDre = useCallback(async () => {
+    const requestId = ++fetchDreRequestRef.current;
     setIsLoading(true);
     setError(null);
 
@@ -436,17 +452,31 @@ const DREConsolidado: React.FC = () => {
       ]);
 
       if (dreResult.error) throw dreResult.error;
+      if (requestId !== fetchDreRequestRef.current) return;
 
       setLinhas((dreResult.data || []) as DreLinha[]);
       setMovimentos(movimentosRows);
       setGeneratedAt(new Date());
+      setLoadedFilterSignature(currentFilterSignature);
     } catch (err: any) {
+      if (requestId !== fetchDreRequestRef.current) return;
       console.error('Erro ao gerar DRE:', err);
       setError(err.message || 'Erro ao gerar DRE');
     } finally {
-      setIsLoading(false);
+      if (requestId === fetchDreRequestRef.current) {
+        setIsLoading(false);
+      }
     }
-  }, [contaCodigos, dataFim, dataInicio, grupoCodigos, setorCodigos, subgrupoCodigos, unidadeCodigos]);
+  }, [
+    contaCodigos,
+    currentFilterSignature,
+    dataFim,
+    dataInicio,
+    grupoCodigos,
+    setorCodigos,
+    subgrupoCodigos,
+    unidadeCodigos,
+  ]);
 
   useEffect(() => {
     fetchOpcoes().catch((err: any) => {
@@ -456,7 +486,11 @@ const DREConsolidado: React.FC = () => {
   }, [fetchOpcoes]);
 
   useEffect(() => {
-    fetchDre();
+    const timer = window.setTimeout(() => {
+      void fetchDre();
+    }, 200);
+
+    return () => window.clearTimeout(timer);
   }, [fetchDre]);
 
   const opcoesContasGerais = useMemo(
@@ -506,6 +540,7 @@ const DREConsolidado: React.FC = () => {
   }, [linhas, movimentos]);
 
   const linhasCalculadas = useMemo(() => computeDreTotals(linhasComTotaisFiltrados), [linhasComTotaisFiltrados]);
+  const exportsReady = loadedFilterSignature === currentFilterSignature && !isLoading && !error;
   const totalByCodigo = useMemo(
     () => new Map(linhasCalculadas.map(row => [row.codigo, Number(row.total) || 0])),
     [linhasCalculadas],
@@ -667,6 +702,11 @@ const DREConsolidado: React.FC = () => {
   };
 
   const handleExportPdf = async () => {
+    if (!exportsReady) {
+      alert('Aguarde a DRE terminar de aplicar os filtros antes de exportar.');
+      return;
+    }
+
     if (exportingPdf || dreDisplayRows.length === 0) {
       if (dreDisplayRows.length === 0) alert('Sem dados para exportar.');
       return;
@@ -784,6 +824,11 @@ const DREConsolidado: React.FC = () => {
   };
 
   const handleExportExcel = () => {
+    if (!exportsReady) {
+      alert('Aguarde a DRE terminar de aplicar os filtros antes de exportar.');
+      return;
+    }
+
     if (dreDisplayRows.length === 0) {
       alert('Sem dados para exportar.');
       return;
@@ -899,14 +944,20 @@ const DREConsolidado: React.FC = () => {
           <div className="flex flex-wrap justify-between items-center mb-4 gap-3">
             <h3 className="text-lg font-bold text-foreground">Filtros</h3>
             <div className="flex items-center gap-3 flex-wrap">
-              <Button variant="outline" size="sm" onClick={handleExportExcel} className="gap-1">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExportExcel}
+                disabled={!exportsReady || dreDisplayRows.length === 0}
+                className="gap-1"
+              >
                 <Download className="w-4 h-4" /> Exportar Excel
               </Button>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={handleExportPdf}
-                disabled={exportingPdf || dreDisplayRows.length === 0}
+                disabled={!exportsReady || exportingPdf || dreDisplayRows.length === 0}
                 className="gap-1"
               >
                 <FileText className="w-4 h-4" /> {exportingPdf ? 'Gerando PDF...' : 'Exportar PDF'}
