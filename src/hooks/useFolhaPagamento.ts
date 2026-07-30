@@ -118,6 +118,7 @@ export interface FolhaUnidadeDetalhe {
 interface FolhaPagamentoFonte {
     data_lancamento: string | null;
     valor: number | null;
+    status_pag?: string | null;
     unidade_codigo?: string | null;
     unidade_cadastro?: string | null;
     unidade?: string | null;
@@ -304,7 +305,8 @@ const fetchAllRows = async <T,>(table: string, dateColumn: string): Promise<T[]>
             .from(table)
             .select('*')
             .range(page * pageSize, (page + 1) * pageSize - 1)
-            .order(dateColumn, { ascending: false });
+            .order(dateColumn, { ascending: false })
+            .order('id', { ascending: true });
 
         if (error) throw error;
         if (!data || data.length === 0) break;
@@ -506,13 +508,15 @@ export function useFolhaPagamento() {
         let valeAlimentacao = 0;
         let planoSaude = 0;
         let premiacao = 0;
-        pagamentosAtuais.forEach(row => {
-            const account = normalizeLabel(paymentAccount(row));
-            const value = Math.abs(Number(row.valor) || 0);
-            if (account === 'ALIMENTACAO' || account === 'VALE ALIMENTACAO') valeAlimentacao += value;
-            if (account === 'PLANO DE SAUDE') planoSaude += value;
-            if (account === 'PREMIACAO') premiacao += value;
-        });
+        pagamentosAtuais
+            .filter(row => normalizeLabel(row.status_pag) === 'PAGO')
+            .forEach(row => {
+                const account = normalizeLabel(paymentAccount(row));
+                const value = Math.abs(Number(row.valor) || 0);
+                if (account === 'ALIMENTACAO' || account === 'VALE ALIMENTACAO') valeAlimentacao += value;
+                if (account === 'PLANO DE SAUDE') planoSaude += value;
+                if (account === 'PREMIACAO') premiacao += value;
+            });
         const beneficios = valeAlimentacao + planoSaude + premiacao;
 
         const kpis: FolhaKpiData = {
