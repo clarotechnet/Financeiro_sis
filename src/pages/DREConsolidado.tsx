@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -59,6 +59,113 @@ interface PlanoContaOpcao {
   e_analitica: boolean;
 }
 
+interface DreMultiSelectOption {
+  value: string;
+  label: string;
+}
+
+interface DreMultiSelectProps {
+  label: string;
+  options: DreMultiSelectOption[];
+  selected: string[];
+  onChange: (selected: string[]) => void;
+  allLabel: string;
+}
+
+const DreMultiSelect: React.FC<DreMultiSelectProps> = ({
+  label,
+  options,
+  selected,
+  onChange,
+  allLabel,
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const filteredOptions = options.filter(option =>
+    option.label.toLocaleLowerCase('pt-BR').includes(search.trim().toLocaleLowerCase('pt-BR'))
+  );
+
+  const toggleOption = (value: string) => {
+    onChange(
+      selected.includes(value)
+        ? selected.filter(item => item !== value)
+        : [...selected, value],
+    );
+  };
+
+  return (
+    <div
+      ref={ref}
+      className="form-group"
+      style={{ position: 'relative', zIndex: isOpen ? 60 : 'auto' }}
+    >
+      <Label className="form-label">{label}</Label>
+      <div className="multi-select">
+        <div
+          className={`multi-select-button ${isOpen ? 'open' : ''}`}
+          onClick={() => setIsOpen(current => !current)}
+        >
+          <span className="multi-select-text">
+            {selected.length === 0 ? allLabel : `${selected.length} selecionado(s)`}
+          </span>
+          {selected.length > 0 && <span className="selected-count">{selected.length}</span>}
+          <span className={`multi-select-arrow ${isOpen ? 'rotate-180' : ''}`}>▼</span>
+        </div>
+
+        {isOpen && (
+          <div className="multi-select-dropdown open">
+            <input
+              type="text"
+              className="w-full border-b border-border bg-background px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground"
+              placeholder="Buscar..."
+              value={search}
+              onChange={event => setSearch(event.target.value)}
+              onClick={event => event.stopPropagation()}
+              autoFocus
+            />
+            {selected.length > 0 && (
+              <button
+                type="button"
+                className="w-full border-b border-border px-3 py-2 text-left text-xs text-muted-foreground hover:bg-muted"
+                onClick={() => onChange([])}
+              >
+                Limpar seleção
+              </button>
+            )}
+            {filteredOptions.map(option => (
+              <button
+                type="button"
+                key={option.value}
+                className="multi-select-option w-full text-left"
+                onClick={() => toggleOption(option.value)}
+              >
+                <span className={`multi-select-checkbox ${selected.includes(option.value) ? 'checked' : ''}`} />
+                <span>{option.label}</span>
+              </button>
+            ))}
+            {filteredOptions.length === 0 && (
+              <div className="px-3 py-2 text-sm text-muted-foreground">Nenhum resultado</div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 interface DreContaDetalhe {
   conta_codigo: string;
   conta_descricao: string;
@@ -80,6 +187,22 @@ interface DreDisplayRow {
 const PAGE_SIZE = 50;
 const PDF_MARGIN = 12;
 const PDF_HEADER_BOTTOM = 30;
+
+const formatDateInput = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getCurrentMonthPeriod = () => {
+  const today = new Date();
+
+  return {
+    dataInicio: formatDateInput(new Date(today.getFullYear(), today.getMonth(), 1)),
+    dataFim: formatDateInput(new Date(today.getFullYear(), today.getMonth() + 1, 0)),
+  };
+};
 
 const fmtBRL = (value: number) =>
   (value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -196,11 +319,11 @@ const addDrePdfHeader = (
 const fetchMovimentosDre = async (
   dataInicio: string,
   dataFim: string,
-  unidadeCodigo: string,
-  setorCodigo: string,
-  grupoCodigo: string,
-  subgrupoCodigo: string,
-  contaCodigo: string,
+  unidadeCodigos: string[],
+  setorCodigos: string[],
+  grupoCodigos: string[],
+  subgrupoCodigos: string[],
+  contaCodigos: string[],
 ) => {
   const allRows: DreMovimento[] = [];
   let page = 0;
@@ -214,11 +337,11 @@ const fetchMovimentosDre = async (
 
     if (dataInicio) query = query.gte('data_movimento', dataInicio);
     if (dataFim) query = query.lte('data_movimento', dataFim);
-    if (unidadeCodigo) query = query.eq('unidade_codigo', unidadeCodigo);
-    if (setorCodigo) query = query.eq('setor_codigo', setorCodigo);
-    if (grupoCodigo) query = query.eq('grupo_codigo', grupoCodigo);
-    if (subgrupoCodigo) query = query.eq('subgrupo_codigo', subgrupoCodigo);
-    if (contaCodigo) query = query.eq('conta_codigo', contaCodigo);
+    if (unidadeCodigos.length) query = query.in('unidade_codigo', unidadeCodigos);
+    if (setorCodigos.length) query = query.in('setor_codigo', setorCodigos);
+    if (grupoCodigos.length) query = query.in('grupo_codigo', grupoCodigos);
+    if (subgrupoCodigos.length) query = query.in('subgrupo_codigo', subgrupoCodigos);
+    if (contaCodigos.length) query = query.in('conta_codigo', contaCodigos);
 
     const { data, error } = await query;
     if (error) throw error;
@@ -238,13 +361,13 @@ const DREConsolidado: React.FC = () => {
   const [opcoesUnidades, setOpcoesUnidades] = useState<OpcaoCodigoNome[]>([]);
   const [opcoesSetores, setOpcoesSetores] = useState<OpcaoCodigoNome[]>([]);
   const [opcoesPlanoContas, setOpcoesPlanoContas] = useState<PlanoContaOpcao[]>([]);
-  const [dataInicio, setDataInicio] = useState('');
-  const [dataFim, setDataFim] = useState('');
-  const [unidadeCodigo, setUnidadeCodigo] = useState('');
-  const [setorCodigo, setSetorCodigo] = useState('');
-  const [grupoCodigo, setGrupoCodigo] = useState('');
-  const [subgrupoCodigo, setSubgrupoCodigo] = useState('');
-  const [contaCodigo, setContaCodigo] = useState('');
+  const [dataInicio, setDataInicio] = useState(() => getCurrentMonthPeriod().dataInicio);
+  const [dataFim, setDataFim] = useState(() => getCurrentMonthPeriod().dataFim);
+  const [unidadeCodigos, setUnidadeCodigos] = useState<string[]>([]);
+  const [setorCodigos, setSetorCodigos] = useState<string[]>([]);
+  const [grupoCodigos, setGrupoCodigos] = useState<string[]>([]);
+  const [subgrupoCodigos, setSubgrupoCodigos] = useState<string[]>([]);
+  const [contaCodigos, setContaCodigos] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [exportingPdf, setExportingPdf] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -295,8 +418,8 @@ const DREConsolidado: React.FC = () => {
       const params = {
         p_data_inicio: dataInicio || null,
         p_data_fim: dataFim || null,
-        p_unidade_codigo: unidadeCodigo || null,
-        p_setor_codigo: setorCodigo || null,
+        p_unidade_codigo: unidadeCodigos.length === 1 ? unidadeCodigos[0] : null,
+        p_setor_codigo: setorCodigos.length === 1 ? setorCodigos[0] : null,
       };
 
       const [dreResult, movimentosRows] = await Promise.all([
@@ -304,11 +427,11 @@ const DREConsolidado: React.FC = () => {
         fetchMovimentosDre(
           dataInicio,
           dataFim,
-          unidadeCodigo,
-          setorCodigo,
-          grupoCodigo,
-          subgrupoCodigo,
-          contaCodigo,
+          unidadeCodigos,
+          setorCodigos,
+          grupoCodigos,
+          subgrupoCodigos,
+          contaCodigos,
         ),
       ]);
 
@@ -323,7 +446,7 @@ const DREConsolidado: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [contaCodigo, dataFim, dataInicio, grupoCodigo, setorCodigo, subgrupoCodigo, unidadeCodigo]);
+  }, [contaCodigos, dataFim, dataInicio, grupoCodigos, setorCodigos, subgrupoCodigos, unidadeCodigos]);
 
   useEffect(() => {
     fetchOpcoes().catch((err: any) => {
@@ -343,18 +466,28 @@ const DREConsolidado: React.FC = () => {
 
   const opcoesSubgrupos = useMemo(
     () => opcoesPlanoContas.filter(opcao =>
-      opcao.nivel === 2 && (!grupoCodigo || opcao.codigo.slice(0, 2) === grupoCodigo.slice(0, 2))
+      opcao.nivel === 2
+      && (
+        grupoCodigos.length === 0
+        || grupoCodigos.some(codigo => opcao.codigo.slice(0, 2) === codigo.slice(0, 2))
+      )
     ),
-    [grupoCodigo, opcoesPlanoContas],
+    [grupoCodigos, opcoesPlanoContas],
   );
 
   const opcoesContasAnaliticas = useMemo(
     () => opcoesPlanoContas.filter(opcao =>
       opcao.e_analitica
-      && (!grupoCodigo || opcao.codigo.slice(0, 2) === grupoCodigo.slice(0, 2))
-      && (!subgrupoCodigo || opcao.codigo.slice(0, 5) === subgrupoCodigo.slice(0, 5))
+      && (
+        grupoCodigos.length === 0
+        || grupoCodigos.some(codigo => opcao.codigo.slice(0, 2) === codigo.slice(0, 2))
+      )
+      && (
+        subgrupoCodigos.length === 0
+        || subgrupoCodigos.some(codigo => opcao.codigo.slice(0, 5) === codigo.slice(0, 5))
+      )
     ),
-    [grupoCodigo, opcoesPlanoContas, subgrupoCodigo],
+    [grupoCodigos, opcoesPlanoContas, subgrupoCodigos],
   );
 
   const linhasComTotaisFiltrados = useMemo(() => {
@@ -485,31 +618,52 @@ const DREConsolidado: React.FC = () => {
     ? `${dataInicio ? fmtDate(dataInicio) : 'início'} até ${dataFim ? fmtDate(dataFim) : 'fim'}`
     : 'Todos os períodos';
 
-  const unidadeLabel = opcoesUnidades.find(opcao => opcao.codigo === unidadeCodigo)?.nome || 'Todas as unidades';
-  const setorLabel = opcoesSetores.find(opcao => opcao.codigo === setorCodigo)?.nome || 'Todos os setores';
-  const contaGeralLabel = planoContaLabel(opcoesContasGerais.find(opcao => opcao.codigo === grupoCodigo)) || 'Todas as contas gerais';
-  const subgrupoLabel = planoContaLabel(opcoesSubgrupos.find(opcao => opcao.codigo === subgrupoCodigo)) || 'Todos os subgrupos';
-  const contaAnaliticaLabel = planoContaLabel(opcoesContasAnaliticas.find(opcao => opcao.codigo === contaCodigo)) || 'Todas as contas analíticas';
+  const unidadeLabel = unidadeCodigos.length
+    ? unidadeCodigos
+      .map(codigo => opcoesUnidades.find(opcao => opcao.codigo === codigo)?.nome || codigo)
+      .join(', ')
+    : 'Todas as unidades';
+  const setorLabel = setorCodigos.length
+    ? setorCodigos
+      .map(codigo => opcoesSetores.find(opcao => opcao.codigo === codigo)?.nome || codigo)
+      .join(', ')
+    : 'Todos os setores';
+  const contaGeralLabel = grupoCodigos.length
+    ? grupoCodigos
+      .map(codigo => planoContaLabel(opcoesContasGerais.find(opcao => opcao.codigo === codigo)) || codigo)
+      .join(', ')
+    : 'Todas as contas gerais';
+  const subgrupoLabel = subgrupoCodigos.length
+    ? subgrupoCodigos
+      .map(codigo => planoContaLabel(opcoesSubgrupos.find(opcao => opcao.codigo === codigo)) || codigo)
+      .join(', ')
+    : 'Todos os subgrupos';
+  const contaAnaliticaLabel = contaCodigos.length
+    ? contaCodigos
+      .map(codigo => planoContaLabel(opcoesContasAnaliticas.find(opcao => opcao.codigo === codigo)) || codigo)
+      .join(', ')
+    : 'Todas as contas analíticas';
 
-  const handleGrupoChange = (value: string) => {
-    setGrupoCodigo(value);
-    setSubgrupoCodigo('');
-    setContaCodigo('');
+  const handleGrupoChange = (values: string[]) => {
+    setGrupoCodigos(values);
+    setSubgrupoCodigos([]);
+    setContaCodigos([]);
   };
 
-  const handleSubgrupoChange = (value: string) => {
-    setSubgrupoCodigo(value);
-    setContaCodigo('');
+  const handleSubgrupoChange = (values: string[]) => {
+    setSubgrupoCodigos(values);
+    setContaCodigos([]);
   };
 
   const limpar = () => {
-    setDataInicio('');
-    setDataFim('');
-    setUnidadeCodigo('');
-    setSetorCodigo('');
-    setGrupoCodigo('');
-    setSubgrupoCodigo('');
-    setContaCodigo('');
+    const currentMonth = getCurrentMonthPeriod();
+    setDataInicio(currentMonth.dataInicio);
+    setDataFim(currentMonth.dataFim);
+    setUnidadeCodigos([]);
+    setSetorCodigos([]);
+    setGrupoCodigos([]);
+    setSubgrupoCodigos([]);
+    setContaCodigos([]);
   };
 
   const handleExportPdf = async () => {
@@ -785,71 +939,50 @@ const DREConsolidado: React.FC = () => {
                 onChange={event => setDataFim(event.target.value)}
               />
             </div>
-            <div className="form-group">
-              <Label className="form-label">Unidade</Label>
-              <select
-                className="form-control bg-card border border-border rounded-lg px-3 py-2 text-foreground w-full"
-                value={unidadeCodigo}
-                onChange={event => setUnidadeCodigo(event.target.value)}
-              >
-                <option value="">Todas</option>
-                {opcoesUnidades.map(opcao => (
-                  <option key={opcao.codigo} value={opcao.codigo}>{opcao.nome}</option>
-                ))}
-              </select>
-            </div>
-            <div className="form-group">
-              <Label className="form-label">Setor</Label>
-              <select
-                className="form-control bg-card border border-border rounded-lg px-3 py-2 text-foreground w-full"
-                value={setorCodigo}
-                onChange={event => setSetorCodigo(event.target.value)}
-              >
-                <option value="">Todos</option>
-                {opcoesSetores.map(opcao => (
-                  <option key={opcao.codigo} value={opcao.codigo}>{opcao.nome}</option>
-                ))}
-              </select>
-            </div>
-            <div className="form-group">
-              <Label className="form-label">Conta Geral</Label>
-              <select
-                className="form-control bg-card border border-border rounded-lg px-3 py-2 text-foreground w-full"
-                value={grupoCodigo}
-                onChange={event => handleGrupoChange(event.target.value)}
-              >
-                <option value="">Todas</option>
-                {opcoesContasGerais.map(opcao => (
-                  <option key={opcao.codigo} value={opcao.codigo}>{planoContaLabel(opcao)}</option>
-                ))}
-              </select>
-            </div>
-            <div className="form-group">
-              <Label className="form-label">Subgrupo</Label>
-              <select
-                className="form-control bg-card border border-border rounded-lg px-3 py-2 text-foreground w-full"
-                value={subgrupoCodigo}
-                onChange={event => handleSubgrupoChange(event.target.value)}
-              >
-                <option value="">Todos</option>
-                {opcoesSubgrupos.map(opcao => (
-                  <option key={opcao.codigo} value={opcao.codigo}>{planoContaLabel(opcao)}</option>
-                ))}
-              </select>
-            </div>
-            <div className="form-group">
-              <Label className="form-label">Conta Analítica</Label>
-              <select
-                className="form-control bg-card border border-border rounded-lg px-3 py-2 text-foreground w-full"
-                value={contaCodigo}
-                onChange={event => setContaCodigo(event.target.value)}
-              >
-                <option value="">Todas</option>
-                {opcoesContasAnaliticas.map(opcao => (
-                  <option key={opcao.codigo} value={opcao.codigo}>{planoContaLabel(opcao)}</option>
-                ))}
-              </select>
-            </div>
+            <DreMultiSelect
+              label="Unidade"
+              options={opcoesUnidades.map(opcao => ({ value: opcao.codigo, label: opcao.nome }))}
+              selected={unidadeCodigos}
+              onChange={setUnidadeCodigos}
+              allLabel="Todas"
+            />
+            <DreMultiSelect
+              label="Setor"
+              options={opcoesSetores.map(opcao => ({ value: opcao.codigo, label: opcao.nome }))}
+              selected={setorCodigos}
+              onChange={setSetorCodigos}
+              allLabel="Todos"
+            />
+            <DreMultiSelect
+              label="Conta Geral"
+              options={opcoesContasGerais.map(opcao => ({
+                value: opcao.codigo,
+                label: planoContaLabel(opcao),
+              }))}
+              selected={grupoCodigos}
+              onChange={handleGrupoChange}
+              allLabel="Todas"
+            />
+            <DreMultiSelect
+              label="Subgrupo"
+              options={opcoesSubgrupos.map(opcao => ({
+                value: opcao.codigo,
+                label: planoContaLabel(opcao),
+              }))}
+              selected={subgrupoCodigos}
+              onChange={handleSubgrupoChange}
+              allLabel="Todos"
+            />
+            <DreMultiSelect
+              label="Conta Analítica"
+              options={opcoesContasAnaliticas.map(opcao => ({
+                value: opcao.codigo,
+                label: planoContaLabel(opcao),
+              }))}
+              selected={contaCodigos}
+              onChange={setContaCodigos}
+              allLabel="Todas"
+            />
           </div>
         </div>
 
