@@ -825,7 +825,7 @@ export const ComissionamentoTable: React.FC<Props> = ({
                     );
                   }
 
-                  const isSortable = col.key !== 'actions' && col.key !== 'receipt';
+                  const isSortable = col.key !== 'actions';
                   const sortIndicator = sortField === col.key ? (sortAsc ? '▲' : '▼') : '';
 
                   return (
