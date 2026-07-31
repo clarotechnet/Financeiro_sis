@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { LancamentoPix, OpcaoSelect } from '@/types/comissionamento';
-import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Eye, FileText, ListChecks, Pencil } from 'lucide-react';
+import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Eye, FileText, ListChecks, Loader2, Paperclip, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { useToast } from '@/hooks/use-toast';
+import { createPaymentReceiptUrl } from '@/lib/paymentReceipt';
 import {
   Dialog,
   DialogContent,
@@ -309,6 +311,8 @@ export const ComissionamentoTable: React.FC<Props> = ({
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [bulkUpdating, setBulkUpdating] = useState(false);
+  const [openingReceiptKey, setOpeningReceiptKey] = useState<string | null>(null);
+  const { toast } = useToast();
   const wrappedCellClass = 'whitespace-normal break-words leading-snug';
 
   const editRateioRecords = useMemo(() => {
@@ -469,9 +473,70 @@ export const ComissionamentoTable: React.FC<Props> = ({
     }
   };
 
-  const columns: { key: keyof LancamentoPix | 'actions' | 'selection'; label: string }[] = [
+  const openPaymentReceipt = async (
+    event: React.MouseEvent,
+    record: LancamentoPix,
+    receiptKey: string,
+  ) => {
+    event.stopPropagation();
+    if (!record.comprovante_path || openingReceiptKey) return;
+
+    const previewWindow = window.open('', '_blank');
+    if (previewWindow) {
+      previewWindow.opener = null;
+      previewWindow.document.write('<p style="font-family: sans-serif">Abrindo comprovante...</p>');
+    }
+
+    setOpeningReceiptKey(receiptKey);
+    try {
+      const signedUrl = await createPaymentReceiptUrl(record.comprovante_path);
+      if (previewWindow) {
+        previewWindow.location.replace(signedUrl);
+      } else {
+        window.open(signedUrl, '_blank', 'noopener,noreferrer');
+      }
+    } catch (openError) {
+      previewWindow?.close();
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao abrir comprovante',
+        description: openError instanceof Error
+          ? openError.message
+          : 'Não foi possível abrir o comprovante de pagamento.',
+      });
+    } finally {
+      setOpeningReceiptKey(null);
+    }
+  };
+
+  const renderReceiptButton = (record: LancamentoPix, receiptKey: string) => {
+    if (!record.comprovante_path) return null;
+
+    const isOpening = openingReceiptKey === receiptKey;
+    const receiptName = record.comprovante_nome || 'comprovante.pdf';
+
+    return (
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="h-7 w-7 p-0 text-red-500 hover:bg-red-500/10 hover:text-red-400"
+        onClick={event => void openPaymentReceipt(event, record, receiptKey)}
+        disabled={openingReceiptKey !== null}
+        title={`Abrir comprovante: ${receiptName}`}
+        aria-label={`Abrir comprovante de pagamento ${receiptName}`}
+      >
+        {isOpening
+          ? <Loader2 className="h-4 w-4 animate-spin" />
+          : <Paperclip className="h-4 w-4" />}
+      </Button>
+    );
+  };
+
+  const columns: { key: keyof LancamentoPix | 'actions' | 'selection' | 'receipt'; label: string }[] = [
     ...(canManage && selectionMode ? [{ key: 'selection' as const, label: '' }] : []),
     ...(canManage ? [{ key: 'actions' as const, label: '' }] : []),
+    { key: 'receipt', label: '' },
     { key: 'data_lancamento', label: 'Data' },
     { key: 'unidade', label: 'Cidade/Unidade' },
     { key: 'favorecido', label: 'Favorecido' },
@@ -720,10 +785,11 @@ export const ComissionamentoTable: React.FC<Props> = ({
 
       <div className="card overflow-hidden">
         <div className="max-h-[600px] w-full overflow-auto [scrollbar-gutter:stable]">
-          <table className="data-table min-w-[1160px] w-full table-fixed text-[11px] [&_th]:px-2.5 [&_th]:py-3 [&_td]:px-2.5 [&_td]:py-3 [&_td]:align-top">
+          <table className="data-table min-w-[1200px] w-full table-fixed text-[11px] [&_th]:px-2.5 [&_th]:py-3 [&_td]:px-2.5 [&_td]:py-3 [&_td]:align-top">
             <colgroup>
               {canManage && selectionMode && <col style={{ width: '38px' }} />}
               {canManage && <col style={{ width: '30px' }} />}
+              <col style={{ width: '40px' }} />
               <col style={{ width: '88px' }} />
               <col style={{ width: '92px' }} />
               <col style={{ width: '150px' }} />
@@ -751,7 +817,15 @@ export const ComissionamentoTable: React.FC<Props> = ({
                     );
                   }
 
-                  const isSortable = col.key !== 'actions';
+                  if (col.key === 'receipt') {
+                    return (
+                      <th key="receipt" className="text-center" title="Comprovante de pagamento">
+                        <Paperclip className="mx-auto h-3.5 w-3.5 text-muted-foreground" />
+                      </th>
+                    );
+                  }
+
+                  const isSortable = col.key !== 'actions' && col.key !== 'receipt';
                   const sortIndicator = sortField === col.key ? (sortAsc ? '▲' : '▼') : '';
 
                   return (
@@ -776,6 +850,7 @@ export const ComissionamentoTable: React.FC<Props> = ({
                   const selectableIds = getSelectableIds(tableRow);
                   const allSelected = selectableIds.length > 0 && selectableIds.every(id => selectedIds.has(id));
                   const someSelected = selectableIds.some(id => selectedIds.has(id));
+                  const receiptRecord = tableRow.items.find(item => item.comprovante_path) || row;
 
                   return (
                     <tr
@@ -824,6 +899,9 @@ export const ComissionamentoTable: React.FC<Props> = ({
                           </div>
                         </td>
                       )}
+                      <td className="text-center" onClick={event => event.stopPropagation()}>
+                        {renderReceiptButton(receiptRecord, `${tableRow.key}-receipt`)}
+                      </td>
                       <td className="whitespace-nowrap font-semibold">
                         <div>{formatDate(row.data_lancamento)}</div>
                         {getInstallmentLabel(row) && (
@@ -881,6 +959,9 @@ export const ComissionamentoTable: React.FC<Props> = ({
                         </Button>
                       </td>
                     )}
+                    <td className="text-center">
+                      {renderReceiptButton(row, `${tableRow.key}-receipt`)}
+                    </td>
                     <td className="whitespace-nowrap">
                       <div>{formatDate(row.data_lancamento)}</div>
                       {getInstallmentLabel(row) && (
