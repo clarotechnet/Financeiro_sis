@@ -569,7 +569,7 @@ export const ComissionamentoTable: React.FC<Props> = ({
       const selectedColumns = PDF_COLUMNS.filter(column => selectedPdfColumns.includes(column.key));
       const pdfRows = groupRateiosInFilteredPdf ? buildRateioGroupedRows(sorted) : sorted;
       const pdfTotalValor = pdfRows.reduce((sum, row) => sum + (row.valor || 0), 0);
-      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
       const tableStartY = addTotalToPdfTop(doc, pdfTotalValor);
       const columnStyles = selectedColumns.reduce<Record<number, any>>((styles, column, index) => {
         if (column.key === 'valor') styles[index] = { halign: 'right', cellWidth: 22 };
@@ -613,7 +613,7 @@ export const ComissionamentoTable: React.FC<Props> = ({
     try {
       const generatedAt = new Date().toLocaleString('pt-BR');
       const logoDataUrl = await loadLogoDataUrl();
-      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
       const tableStartY = addTotalToPdfTop(doc, totalValor);
 
       autoTable(doc, {
