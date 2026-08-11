@@ -230,6 +230,7 @@ const Comissionamento: React.FC = () => {
           totalFiltered={hook.data.length}
           onManualSubmit={hook.submitManualEntry}
           filteredData={hook.data}
+          allData={hook.allData}
           opcoes={hook.opcoes}
           onImportExcel={hook.importExcel}
           onImportReports={hook.importOperationalReport}
@@ -237,6 +238,7 @@ const Comissionamento: React.FC = () => {
           showActions={!isDashboard}
           showNewEntry={activeTab === 'kpis'}
           showGeneralSearch={activeTab === 'table'}
+          showPeriodNavigator={activeTab === 'table'}
           canExportExcel={!isRh}
           actionsOnly={isRhPaymentInclusion}
         />

@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight, Download, FileBarChart, FileSpreadsheet, Fil
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { LoadingSpinner } from '@/components/comissionamento/LoadingSpinner';
+import { MonthPeriodNavigator } from '@/components/MonthPeriodNavigator';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
 
 type DreLinhaTipo = 'grupo' | 'contas' | 'subtotal' | 'resultado';
@@ -259,6 +260,19 @@ const computeDreTotals = (rows: DreLinha[]): DreLinha[] => {
 };
 
 const hasValue = (value: number) => Math.abs(value) >= 0.005;
+
+const fmtPercentDre = (value: number, receitaBruta: number) => {
+  if (!hasValue(receitaBruta)) return '-';
+
+  const percentual = (value / receitaBruta) * 100;
+  const percentualFormatado = Math.abs(percentual).toLocaleString('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+    useGrouping: false,
+  });
+
+  return percentual < 0 ? `(${percentualFormatado}%)` : `${percentualFormatado}%`;
+};
 
 const loadLogoDataUrl = async () => {
   try {
@@ -545,6 +559,7 @@ const DREConsolidado: React.FC = () => {
     () => new Map(linhasCalculadas.map(row => [row.codigo, Number(row.total) || 0])),
     [linhasCalculadas],
   );
+  const receitaBrutaDre = totalByCodigo.get('01.01') || 0;
 
   const detalhesPorLinha = useMemo(() => {
     const grouped = new Map<string, Map<string, DreContaDetalhe>>();
@@ -754,10 +769,11 @@ const DREConsolidado: React.FC = () => {
 
       autoTable(doc, {
         startY: tableStartY,
-        head: [['Descricao', 'Valor']],
+        head: [['Descricao', 'Valor', '% Receita Bruta']],
         body: dreDisplayRows.map(row => [
           row.descricao,
           row.kind === 'linha' && row.tipo === 'grupo' ? '' : fmtBRLDre(row.total),
+          row.kind === 'linha' && row.tipo === 'grupo' ? '' : fmtPercentDre(row.total, receitaBrutaDre),
         ]),
         margin: { top: PDF_HEADER_BOTTOM, right: PDF_MARGIN, bottom: 14, left: PDF_MARGIN },
         styles: {
@@ -771,8 +787,9 @@ const DREConsolidado: React.FC = () => {
         headStyles: { fillColor: [31, 58, 95], textColor: 255 },
         alternateRowStyles: { fillColor: [248, 250, 252] },
         columnStyles: {
-          0: { cellWidth: pageWidth - PDF_MARGIN * 2 - 42 },
-          1: { cellWidth: 42, halign: 'right' },
+          0: { cellWidth: pageWidth - PDF_MARGIN * 2 - 78 },
+          1: { cellWidth: 50, halign: 'right' },
+          2: { cellWidth: 28, halign: 'right' },
         },
         didParseCell: data => {
           if (data.section !== 'body') return;
@@ -807,7 +824,7 @@ const DREConsolidado: React.FC = () => {
             };
           }
 
-          if (data.column.index === 1 && row.total < 0) {
+          if ((data.column.index === 1 || data.column.index === 2) && row.total < 0) {
             data.cell.styles.textColor = [220, 38, 38];
             data.cell.styles.fontStyle = 'bold';
           }
@@ -839,6 +856,9 @@ const DREConsolidado: React.FC = () => {
       Descrição: row.descricao,
       Tipo: row.kind === 'detalhe' ? 'conta_analitica' : row.tipo || row.kind,
       Total: row.kind === 'linha' && row.tipo === 'grupo' ? null : Number(row.total) || 0,
+      '% Receita Bruta': row.kind === 'linha' && row.tipo === 'grupo'
+        ? null
+        : fmtPercentDre(Number(row.total) || 0, receitaBrutaDre),
     }));
 
     const detalheRows = movimentos.map(row => ({
@@ -855,7 +875,7 @@ const DREConsolidado: React.FC = () => {
 
     const wb = XLSX.utils.book_new();
     const wsDre = XLSX.utils.json_to_sheet(dreRows);
-    wsDre['!cols'] = [{ wch: 12 }, { wch: 42 }, { wch: 14 }, { wch: 18 }];
+    wsDre['!cols'] = [{ wch: 12 }, { wch: 42 }, { wch: 14 }, { wch: 18 }, { wch: 20 }];
     XLSX.utils.book_append_sheet(wb, wsDre, 'DRE');
 
     const wsDetalhe = XLSX.utils.json_to_sheet(detalheRows);
@@ -972,6 +992,14 @@ const DREConsolidado: React.FC = () => {
           </div>
 
           <div className="filter-section">
+            <MonthPeriodNavigator
+              startDate={dataInicio}
+              endDate={dataFim}
+              onChange={period => {
+                setDataInicio(period.startDate);
+                setDataFim(period.endDate);
+              }}
+            />
             <div className="form-group">
               <Label className="form-label">Data Inicial</Label>
               <input
@@ -1043,8 +1071,8 @@ const DREConsolidado: React.FC = () => {
           <>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 dre-no-print">
               <div className="card">
-                <div className="text-xs text-muted-foreground">Receita Líquida</div>
-                <div className="text-xl font-extrabold text-emerald-500 mt-1">{fmtBRLDre(totalByCodigo.get('01.99') || 0)}</div>
+                <div className="text-xs text-muted-foreground">Receita Bruta</div>
+                <div className="text-xl font-extrabold text-emerald-500 mt-1">{fmtBRLDre(totalByCodigo.get('01.01') || 0)}</div>
               </div>
               <div className="card">
                 <div className="text-xs text-muted-foreground">Lucro Bruto</div>
@@ -1086,11 +1114,12 @@ const DREConsolidado: React.FC = () => {
               )}
 
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[640px] text-sm dre-print-table">
+                <table className="w-full min-w-[760px] text-sm dre-print-table">
                   <thead>
                     <tr className="border-b border-border text-left text-muted-foreground">
                       <th className="py-2 px-2">Descrição</th>
-                      <th className="py-2 px-2 text-right w-48">Valor</th>
+                      <th className="py-2 pl-2 pr-8 text-right w-64">Valor</th>
+                      <th className="py-2 px-2 text-right w-36 whitespace-nowrap">% Receita Bruta</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1117,15 +1146,18 @@ const DREConsolidado: React.FC = () => {
                           >
                             <span className={isDetail ? 'text-foreground/90' : ''}>{row.descricao}</span>
                           </td>
-                          <td className={`${isDetail ? 'py-1.5' : 'py-2'} px-2 text-right font-semibold ${total < 0 ? 'text-red-400' : 'text-foreground'}`}>
+                          <td className={`${isDetail ? 'py-1.5' : 'py-2'} pl-2 pr-8 text-right font-semibold whitespace-nowrap ${total < 0 ? 'text-red-400' : 'text-foreground'}`}>
                             {isGrupo ? '' : fmtBRLDre(total)}
+                          </td>
+                          <td className={`${isDetail ? 'py-1.5' : 'py-2'} px-2 text-right font-semibold whitespace-nowrap ${total < 0 ? 'text-red-400' : 'text-foreground'}`}>
+                            {isGrupo ? '' : fmtPercentDre(total, receitaBrutaDre)}
                           </td>
                         </tr>
                       );
                     })}
                     {dreDisplayRows.length === 0 && (
                       <tr>
-                        <td colSpan={2} className="py-6 text-center text-muted-foreground">
+                        <td colSpan={3} className="py-6 text-center text-muted-foreground">
                           Nenhuma linha de DRE encontrada. Rode a migration da estrutura da DRE.
                         </td>
                       </tr>

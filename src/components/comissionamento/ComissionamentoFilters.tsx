@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Label } from '@/components/ui/label';
+import { MonthPeriodNavigator } from '@/components/MonthPeriodNavigator';
 import { ComissionamentoFilters as FiltersType, LancamentoPix, OperationalReportImportResult, OperationalReportImportRow, OpcaoSelect } from '@/types/comissionamento';
 import { X, FileEdit, Download, FileText, UserPlus, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -100,6 +101,7 @@ interface Props {
   totalFiltered: number;
   onManualSubmit: (data: Record<string, any>) => Promise<void>;
   filteredData: LancamentoPix[];
+  allData?: LancamentoPix[];
   opcoes: OpcoesData;
   onImportExcel?: (rows: Record<string, any>[]) => Promise<{ inserted: number; skipped: number; errors: string[] }>;
   onImportReports?: (rows: OperationalReportImportRow[], planoContaId: string, fileName: string) => Promise<OperationalReportImportResult>;
@@ -107,15 +109,16 @@ interface Props {
   showNewEntry?: boolean;
   showImportReports?: boolean;
   showGeneralSearch?: boolean;
+  showPeriodNavigator?: boolean;
   canExportExcel?: boolean;
   actionsOnly?: boolean;
 }
 
 export const ComissionamentoFilters: React.FC<Props> = ({
   filters, setFilters, clearFilters, uniqueCidades, uniqueNomes, totalFiltered,
-  onManualSubmit, filteredData, opcoes, onImportExcel, onImportReports, showActions = true,
+  onManualSubmit, filteredData, allData, opcoes, onImportExcel, onImportReports, showActions = true,
   showNewEntry = true, showImportReports = false, showGeneralSearch = false,
-  canExportExcel = true, actionsOnly = false
+  showPeriodNavigator = false, canExportExcel = true, actionsOnly = false
 }) => {
   const { isAdmin, profile } = useAuth();
   const canRegisterFornecedor = isAdmin || profile?.role === ROLE_RH;
@@ -145,8 +148,11 @@ export const ComissionamentoFilters: React.FC<Props> = ({
   );
 
   const uniqueContasAnaliticas = React.useMemo(
-    () => [...new Set(filteredData.map(r => r.conta_analitica).filter(Boolean))].sort() as string[],
-    [filteredData]
+    () => [...new Set([
+      ...opcoes.plano_contas.map(option => option.nome),
+      ...(allData || filteredData).map(record => record.conta_analitica).filter(Boolean) as string[],
+    ])].filter(Boolean).sort(),
+    [allData, filteredData, opcoes.plano_contas]
   );
 
   const handleExportExcel = () => {
@@ -357,6 +363,17 @@ export const ComissionamentoFilters: React.FC<Props> = ({
                 />
               </div>
             </div>
+          )}
+
+          {showPeriodNavigator && (
+            <MonthPeriodNavigator
+              startDate={filters.dataInicio}
+              endDate={filters.dataFim}
+              onChange={period => setFilters({
+                dataInicio: period.startDate,
+                dataFim: period.endDate,
+              })}
+            />
           )}
 
           <MultiSelect
