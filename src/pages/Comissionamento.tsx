@@ -238,7 +238,7 @@ const Comissionamento: React.FC = () => {
           showActions={!isDashboard}
           showNewEntry={activeTab === 'kpis'}
           showGeneralSearch={activeTab === 'table'}
-          showPeriodNavigator={activeTab === 'table'}
+          showPeriodNavigator={['frentes', 'kpis', 'table'].includes(activeTab)}
           canExportExcel={!isRh}
           actionsOnly={isRhPaymentInclusion}
         />

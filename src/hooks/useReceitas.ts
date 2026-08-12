@@ -11,10 +11,21 @@ import {
   ReceitaUnidadeOpcao,
 } from '@/types/receitas';
 
-const EMPTY_FILTERS: ReceitaFilters = {
-  dataInicio: '',
-  dataFim: '',
-  contaAnalitica: [],
+const formatDateInput = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const createDefaultFilters = (): ReceitaFilters => {
+  const today = new Date();
+
+  return {
+    dataInicio: formatDateInput(new Date(today.getFullYear(), today.getMonth(), 1)),
+    dataFim: formatDateInput(new Date(today.getFullYear(), today.getMonth() + 1, 0)),
+    contaAnalitica: [],
+  };
 };
 
 const buildDeducaoRows = (
@@ -39,7 +50,7 @@ export function useReceitas() {
   const [opcoesContas, setOpcoesContas] = useState<ReceitaContaOpcao[]>([]);
   const [opcoesUnidades, setOpcoesUnidades] = useState<ReceitaUnidadeOpcao[]>([]);
   const [opcoesSetores, setOpcoesSetores] = useState<ReceitaSetorOpcao[]>([]);
-  const [filters, setFiltersState] = useState<ReceitaFilters>(EMPTY_FILTERS);
+  const [filters, setFiltersState] = useState<ReceitaFilters>(createDefaultFilters);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -234,7 +245,7 @@ export function useReceitas() {
     setFiltersState(prev => ({ ...prev, ...next }));
   };
 
-  const clearFilters = () => setFiltersState(EMPTY_FILTERS);
+  const clearFilters = () => setFiltersState(createDefaultFilters());
 
   return {
     data: filteredData,

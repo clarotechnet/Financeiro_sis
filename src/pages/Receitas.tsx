@@ -18,6 +18,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { LoadingSpinner } from '@/components/comissionamento/LoadingSpinner';
+import { MonthPeriodNavigator } from '@/components/MonthPeriodNavigator';
 import { useAuth } from '@/contexts/useAuth';
 import { useReceitas } from '@/hooks/useReceitas';
 import { Receita, ReceitaContaOpcao, ReceitaFormPayload, ReceitaSetorOpcao, ReceitaUnidadeOpcao } from '@/types/receitas';
@@ -800,6 +801,14 @@ const Receitas: React.FC = () => {
           />
 
           <div className="filter-section">
+            <MonthPeriodNavigator
+              startDate={hook.filters.dataInicio}
+              endDate={hook.filters.dataFim}
+              onChange={period => hook.setFilters({
+                dataInicio: period.startDate,
+                dataFim: period.endDate,
+              })}
+            />
             <div className="form-group">
               <Label className="form-label">Data Inicial</Label>
               <input

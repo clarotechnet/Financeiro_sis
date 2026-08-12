@@ -6,6 +6,7 @@ import { Wallet, Download, FileSpreadsheet, RefreshCw } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 import { LoadingSpinner } from '@/components/comissionamento/LoadingSpinner';
+import { MonthPeriodNavigator } from '@/components/MonthPeriodNavigator';
 import { useFolhaPagamento, VERBA_FIELDS } from '@/hooks/useFolhaPagamento';
 import type { DadoFinanceiro } from '@/hooks/useFolhaPagamento';
 import { FolhaImportExcel } from '@/components/folha/FolhaImportExcel';
@@ -222,6 +223,14 @@ const FolhaPagamento: React.FC = () => {
           </div>
 
           <div className="filter-section">
+            <MonthPeriodNavigator
+              startDate={filters.dataInicio}
+              endDate={filters.dataFim}
+              onChange={period => setFilters({
+                dataInicio: period.startDate,
+                dataFim: period.endDate,
+              })}
+            />
             <MultiSelect label="Unidade" options={opcoesUnidades} selected={filters.unidade} onChange={v => setFilters({ unidade: v })} />
             <div className="form-group">
               <Label className="form-label">Data Inicial</Label>
