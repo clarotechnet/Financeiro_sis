@@ -259,7 +259,7 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({
       data_lancamento: '',
       nome: userName || '',
       chave_pix: initialRecord.chave_pix || '',
-      favorecido: initialRecord.favorecido || '',
+      favorecido: initialRecord.rateio_favorecido_geral || initialRecord.favorecido || '',
       descricao: initialRecord.descricao || '',
       plano_conta_id: cloningRateio ? '' : initialRecord.plano_conta_id || '',
       valor: valueDigits,
@@ -284,7 +284,7 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({
         unidade_id: item.unidade_codigo || findIdByName(opcoes.unidade, item.unidade),
         centro_de_custo_id: item.setor_codigo || findIdByName(opcoes.centro_de_custo, item.centro_de_custo),
         plano_conta_id: item.plano_conta_id || '',
-        favorecido: item.favorecido || initialRecord.favorecido || '',
+        favorecido: item.favorecido || '',
         status_pag: item.status_pag || initialRecord.status_pag || 'A PAGAR',
         valor: digitsFromNumber(item.valor),
       }))
@@ -491,7 +491,7 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({
         unidade_id: form.unidade_id,
         centro_de_custo_id: form.centro_de_custo_id,
         plano_conta_id: form.plano_conta_id,
-        favorecido: form.favorecido,
+        favorecido: '',
         status_pag: form.status_pag || 'A PAGAR',
         valor: form.valor,
       });
@@ -531,7 +531,6 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({
   };
 
   const addRateio = () => setRateios(current => [...current, createRateio({
-    favorecido: form.favorecido,
     status_pag: form.status_pag || 'A PAGAR',
   })]);
 
@@ -777,7 +776,11 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({
               </div>
 
               {renderAutocomplete('chave_pix', 'Chave PIX', 'CPF/CNPJ/E-mail/Telefone/Aleatória', false)}
-              {renderAutocomplete('favorecido', 'Favorecido', 'Nome do favorecido')}
+              {renderAutocomplete(
+                'favorecido',
+                usarRateio ? 'Favorecido Geral' : 'Favorecido',
+                usarRateio ? 'Ex.: Ferias DMV' : 'Nome do favorecido',
+              )}
 
               <div className="space-y-1">
                 <Label className="text-sm font-medium">Valor *</Label>
@@ -919,7 +922,7 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({
                   <span>
                     Múltiplos Rateios
                     <span className="block text-xs font-normal text-muted-foreground">
-                      Ao ativar, Unidade, Centro de Custo, Conta Analítica, Favorecido, Status e Valor serão definidos nas linhas abaixo.
+                      O Favorecido Geral identifica o lote; cada linha define seu próprio Favorecido, Status, Unidade, Centro de Custo, Conta Analítica e Valor.
                     </span>
                   </span>
                 </label>

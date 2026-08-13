@@ -251,6 +251,11 @@ const getRateioSummaryStatus = (items: LancamentoPix[]): string | null => {
 };
 
 const getRateioSummaryFavorecido = (items: LancamentoPix[]): string => {
+  const favorecidoGeral = items
+    .map(item => item.rateio_favorecido_geral?.trim())
+    .find((favorecido): favorecido is string => Boolean(favorecido));
+  if (favorecidoGeral) return favorecidoGeral;
+
   const favorecidos = [...new Set(
     items
       .map(item => item.favorecido?.trim())

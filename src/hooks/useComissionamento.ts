@@ -127,6 +127,7 @@ const matchesGeneralSearch = (row: LancamentoPix, query: string) => {
     formatDateBR(row.data_lancamento),
     row.nome,
     row.favorecido,
+    row.rateio_favorecido_geral,
     row.chave_pix,
     row.cnpj,
     row.unidade,
@@ -330,7 +331,11 @@ export function useComissionamento() {
     }
     if (filters.nome.length > 0) {
       result = result.filter(r =>
-        filters.nome.some(n => (r.favorecido || '').toLowerCase().includes(n.toLowerCase()))
+        filters.nome.some(n => {
+          const query = n.toLowerCase();
+          return (r.favorecido || '').toLowerCase().includes(query)
+            || (r.rateio_favorecido_geral || '').toLowerCase().includes(query);
+        })
       );
     }
     if (filters.frente.length > 0) {
@@ -362,7 +367,7 @@ export function useComissionamento() {
     [data]
   );
   const uniqueNomes = useMemo(
-    () => [...new Set(data.map(r => r.favorecido).filter(Boolean))].sort() as string[],
+    () => [...new Set(data.flatMap(r => [r.favorecido, r.rateio_favorecido_geral]).filter(Boolean))].sort() as string[],
     [data]
   );
   const uniqueFrente = useMemo(
@@ -486,6 +491,7 @@ export function useComissionamento() {
       banco: formData.banco || null,
       status_pag: rateio?.status_pag || formData.status_pag || 'A PAGAR',
       rateio_lote_id: rateioLoteId,
+      rateio_favorecido_geral: rateioLoteId ? formData.favorecido : null,
       rateio_item_ordem: rateioLoteId ? (index ?? 0) + 1 : null,
       parcela_numero: parcelaNumero,
       parcela_total: parcelaNumero ? quantidadeDespesas : null,

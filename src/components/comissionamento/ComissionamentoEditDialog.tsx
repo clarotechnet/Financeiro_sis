@@ -143,6 +143,9 @@ export const ComissionamentoEditDialog: React.FC<Props> = ({
     const centralStatus = editingRateio && loteStatuses.size > 1
       ? ''
       : ([...loteStatuses][0] || record.status_pag || 'A PAGAR');
+    const favorecidoGeral = loteItems
+      .map(item => item.rateio_favorecido_geral?.trim())
+      .find(Boolean) || record.favorecido || '';
     const totalValue = editingRateio
       ? loteItems.reduce((sum, item) => sum + (Number(item.valor) || 0), 0)
       : Number(record.valor) || 0;
@@ -151,7 +154,7 @@ export const ComissionamentoEditDialog: React.FC<Props> = ({
       data_lancamento: formatDateForInput(record.data_lancamento),
       nome: record.nome || '',
       chave_pix: record.chave_pix || '',
-      favorecido: record.favorecido || '',
+      favorecido: favorecidoGeral,
       descricao: record.descricao || '',
       banco: record.banco || '',
       banco_codigo: record.banco_codigo || findIdByName(opcoes.bancos, record.banco),
@@ -240,7 +243,6 @@ export const ComissionamentoEditDialog: React.FC<Props> = ({
   };
 
   const addRateio = () => setRateios(current => [...current, createRateio({
-    favorecido: form.favorecido,
     status_pag: form.status_pag || 'A PAGAR',
   })]);
 
@@ -396,7 +398,7 @@ export const ComissionamentoEditDialog: React.FC<Props> = ({
                 <Input value={form.chave_pix || ''} onChange={event => set('chave_pix', event.target.value)} />
               </div>
               <div className="space-y-1">
-                <Label className="text-sm font-medium">Favorecido *</Label>
+                <Label className="text-sm font-medium">{usarRateio ? 'Favorecido Geral *' : 'Favorecido *'}</Label>
                 <Input value={form.favorecido || ''} onChange={event => set('favorecido', event.target.value)} />
               </div>
               <div className="space-y-1">
@@ -532,8 +534,8 @@ export const ComissionamentoEditDialog: React.FC<Props> = ({
                     Múltiplos Rateios
                     <span className="block text-xs font-normal text-muted-foreground">
                       {existingRateio
-                        ? 'Este lançamento já é um lote. O Status central altera todos; Favorecido e Status de cada linha podem ser ajustados individualmente.'
-                        : 'Ao ativar, Unidade, Centro de Custo, Conta Analítica, Favorecido, Status e Valor serão definidos nas linhas abaixo.'}
+                        ? 'O Favorecido Geral identifica o lote. O Status central altera todos; Favorecido e Status de cada linha podem ser ajustados individualmente.'
+                        : 'O Favorecido Geral identifica o lote; cada linha define seu próprio Favorecido, Status, Unidade, Centro de Custo, Conta Analítica e Valor.'}
                     </span>
                   </span>
                 </label>
