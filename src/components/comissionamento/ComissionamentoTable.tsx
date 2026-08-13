@@ -239,6 +239,28 @@ const compareRateioItemOrder = (a: LancamentoPix, b: LancamentoPix) => {
   return compareLaunchOrder(a, b);
 };
 
+const getRateioSummaryStatus = (items: LancamentoPix[]): string | null => {
+  const statuses = new Set(
+    items
+      .map(item => item.status_pag?.trim().toUpperCase())
+      .filter((status): status is string => Boolean(status)),
+  );
+  if (statuses.size === 0) return null;
+  if (statuses.size === 1) return [...statuses][0];
+  return 'PARCIAL';
+};
+
+const getRateioSummaryFavorecido = (items: LancamentoPix[]): string => {
+  const favorecidos = [...new Set(
+    items
+      .map(item => item.favorecido?.trim())
+      .filter((favorecido): favorecido is string => Boolean(favorecido)),
+  )];
+  if (favorecidos.length === 0) return '-';
+  if (favorecidos.length === 1) return favorecidos[0];
+  return `${favorecidos.length} favorecido(s)`;
+};
+
 const buildRateioGroupedRows = (rows: LancamentoPix[]): LancamentoPix[] => {
   const byLote = new Map<string, LancamentoPix[]>();
   rows.forEach(row => {
@@ -270,6 +292,8 @@ const buildRateioGroupedRows = (rows: LancamentoPix[]): LancamentoPix[] => {
       unidade: `${items.length} rateio(s)`,
       centro_de_custo: 'Rateio geral',
       conta_analitica: 'Múltiplos Rateios',
+      favorecido: getRateioSummaryFavorecido(items),
+      status_pag: getRateioSummaryStatus(items),
       valor: total,
     });
   });
@@ -851,6 +875,8 @@ export const ComissionamentoTable: React.FC<Props> = ({
                   const allSelected = selectableIds.length > 0 && selectableIds.every(id => selectedIds.has(id));
                   const someSelected = selectableIds.some(id => selectedIds.has(id));
                   const receiptRecord = tableRow.items.find(item => item.comprovante_path) || row;
+                  const summaryStatus = getRateioSummaryStatus(tableRow.items);
+                  const summaryFavorecido = getRateioSummaryFavorecido(tableRow.items);
 
                   return (
                     <tr
@@ -911,18 +937,20 @@ export const ComissionamentoTable: React.FC<Props> = ({
                         )}
                       </td>
                       <td className={wrappedCellClass}>{unidadeLabel}</td>
-                      <td className={`font-semibold ${wrappedCellClass}`}>{row.favorecido || '-'}</td>
+                      <td className={`font-semibold ${wrappedCellClass}`}>{summaryFavorecido}</td>
                       <td className="text-xs text-muted-foreground truncate" title={row.chave_pix || ''}>{row.chave_pix || '-'}</td>
                       <td className="font-semibold text-primary">Múltiplos Rateios</td>
                       <td className={wrappedCellClass}>Clique para ver detalhes</td>
                       <td className={wrappedCellClass}>{row.descricao || '-'}</td>
                       <td className={wrappedCellClass}>{row.banco || '-'}</td>
                       <td>
-                        {row.status_pag ? (
-                          <span className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${(row.status_pag || '').toUpperCase() === 'PAGO'
+                        {summaryStatus ? (
+                          <span className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${summaryStatus === 'PAGO'
                             ? 'bg-green-500/15 text-green-600 dark:text-green-400'
+                            : summaryStatus === 'PARCIAL'
+                              ? 'bg-blue-500/15 text-blue-600 dark:text-blue-400'
                             : 'bg-yellow-500/15 text-yellow-600 dark:text-yellow-400'
-                            }`}>{row.status_pag}</span>
+                            }`}>{summaryStatus}</span>
                         ) : '-'}
                       </td>
                       <td className="font-black whitespace-nowrap text-right">{fmtBRL(tableRow.total)}</td>

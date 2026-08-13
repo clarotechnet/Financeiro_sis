@@ -82,6 +82,8 @@ interface Props {
       unidade_id: string;
       centro_de_custo_id: string;
       plano_conta_id: string;
+      favorecido: string;
+      status_pag: string;
       valor: number;
     }[];
   }) => Promise<void>;
@@ -119,6 +121,8 @@ type RateioState = {
   unidade_id: string;
   centro_de_custo_id: string;
   plano_conta_id: string;
+  favorecido: string;
+  status_pag: string;
   valor: string;
 };
 
@@ -179,6 +183,8 @@ const createRateio = (base?: Partial<RateioState>): RateioState => ({
   unidade_id: base?.unidade_id || '',
   centro_de_custo_id: base?.centro_de_custo_id || '',
   plano_conta_id: base?.plano_conta_id || '',
+  favorecido: base?.favorecido || '',
+  status_pag: base?.status_pag || 'A PAGAR',
   valor: base?.valor || '',
 });
 
@@ -278,6 +284,8 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({
         unidade_id: item.unidade_codigo || findIdByName(opcoes.unidade, item.unidade),
         centro_de_custo_id: item.setor_codigo || findIdByName(opcoes.centro_de_custo, item.centro_de_custo),
         plano_conta_id: item.plano_conta_id || '',
+        favorecido: item.favorecido || initialRecord.favorecido || '',
+        status_pag: item.status_pag || initialRecord.status_pag || 'A PAGAR',
         valor: digitsFromNumber(item.valor),
       }))
       : []);
@@ -483,6 +491,8 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({
         unidade_id: form.unidade_id,
         centro_de_custo_id: form.centro_de_custo_id,
         plano_conta_id: form.plano_conta_id,
+        favorecido: form.favorecido,
+        status_pag: form.status_pag || 'A PAGAR',
         valor: form.valor,
       });
 
@@ -492,6 +502,7 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({
           rateio.unidade_id
           || rateio.centro_de_custo_id
           || rateio.plano_conta_id
+          || rateio.favorecido
           || rateio.valor
         ),
       ]);
@@ -512,7 +523,17 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({
     )));
   };
 
-  const addRateio = () => setRateios(current => [...current, createRateio()]);
+  const handleCentralStatusChange = (value: string) => {
+    set('status_pag', value);
+    if (usarRateio) {
+      setRateios(current => current.map(rateio => ({ ...rateio, status_pag: value })));
+    }
+  };
+
+  const addRateio = () => setRateios(current => [...current, createRateio({
+    favorecido: form.favorecido,
+    status_pag: form.status_pag || 'A PAGAR',
+  })]);
 
   const removeRateio = (id: string) => {
     setRateios(current => current.length > 1 ? current.filter(rateio => rateio.id !== id) : current);
@@ -525,6 +546,8 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({
     rateio.unidade_id
     && rateio.centro_de_custo_id
     && rateio.plano_conta_id
+    && rateio.favorecido.trim()
+    && rateio.status_pag
     && centsFromDigits(rateio.valor) > 0
   );
   const camposPrincipaisValidos = requiredFields.every(f => form[f as keyof FormState]?.toString().trim());
@@ -574,6 +597,8 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({
             unidade_id: rateio.unidade_id,
             centro_de_custo_id: rateio.centro_de_custo_id,
             plano_conta_id: rateio.plano_conta_id,
+            favorecido: rateio.favorecido.trim(),
+            status_pag: rateio.status_pag || 'A PAGAR',
             valor: centsFromDigits(rateio.valor) / 100,
           }))
           : undefined,
@@ -803,7 +828,7 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({
               <SearchableSelect
                 label="Status Pagamento"
                 value={form.status_pag}
-                onChange={value => set('status_pag', value)}
+                onChange={handleCentralStatusChange}
                 options={STATUS_OPTIONS}
               />
 
@@ -894,7 +919,7 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({
                   <span>
                     Múltiplos Rateios
                     <span className="block text-xs font-normal text-muted-foreground">
-                      Ao ativar, Unidade, Centro de Custo, Conta Analítica e Valor serão definidos nas linhas abaixo.
+                      Ao ativar, Unidade, Centro de Custo, Conta Analítica, Favorecido, Status e Valor serão definidos nas linhas abaixo.
                     </span>
                   </span>
                 </label>
@@ -922,7 +947,7 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({
                       {rateios.map((rateio, index) => (
                         <div
                           key={rateio.id}
-                          className="grid grid-cols-1 gap-3 rounded-lg border border-border bg-card p-3 md:grid-cols-2 xl:grid-cols-[minmax(140px,0.9fr)_minmax(210px,1.25fr)_minmax(210px,1.2fr)_minmax(130px,0.75fr)_40px]"
+                          className="grid grid-cols-1 gap-3 rounded-lg border border-border bg-card p-3 md:grid-cols-2 xl:grid-cols-4"
                         >
                           <SearchableSelect
                             label={`Unidade ${index + 1}`}
@@ -943,6 +968,22 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({
                             options={opcoes.plano_contas}
                           />
                           <div className="space-y-1">
+                            <Label className="text-sm font-medium">Favorecido *</Label>
+                            <Input
+                              className="min-w-0"
+                              placeholder="Nome do favorecido"
+                              value={rateio.favorecido}
+                              onChange={event => updateRateio(rateio.id, 'favorecido', event.target.value)}
+                            />
+                          </div>
+                          <SearchableSelect
+                            label="Status Pagamento"
+                            value={rateio.status_pag}
+                            onChange={value => updateRateio(rateio.id, 'status_pag', value)}
+                            options={STATUS_OPTIONS}
+                            required
+                          />
+                          <div className="space-y-1">
                             <Label className="text-sm font-medium">Valor *</Label>
                             <Input
                               className="min-w-0"
@@ -952,7 +993,7 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({
                               onChange={event => updateRateio(rateio.id, 'valor', extractDigits(event.target.value))}
                             />
                           </div>
-                          <div className="flex items-end justify-end md:col-span-2 xl:col-span-1 xl:justify-center">
+                          <div className="flex items-end justify-end xl:justify-center">
                             <Button
                               type="button"
                               variant="ghost"
