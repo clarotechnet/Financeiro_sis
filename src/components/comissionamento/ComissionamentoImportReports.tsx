@@ -81,6 +81,7 @@ export const ComissionamentoImportReports: React.FC<Props> = ({ contas, onImport
   const [result, setResult] = useState<OperationalReportImportResult | null>(null);
 
   const total = useMemo(() => rows.reduce((sum, row) => sum + row.valor, 0), [rows]);
+  const isPayrollReport = rows[0]?.source.trim().toLowerCase() === 'folha_pagamento';
 
   const reset = () => {
     setFile(null);
@@ -93,6 +94,7 @@ export const ComissionamentoImportReports: React.FC<Props> = ({ contas, onImport
   const handleFile = async (nextFile: File | null) => {
     setFile(nextFile);
     setRows([]);
+    setPlanoContaId('');
     setResult(null);
     setError('');
     if (!nextFile) return;
@@ -131,11 +133,10 @@ export const ComissionamentoImportReports: React.FC<Props> = ({ contas, onImport
       setError('Selecione um relatorio gerado pela Folha ou por Beneficios.');
       return;
     }
-    if (!planoContaId) {
+    if (!isPayrollReport && !planoContaId) {
       setError('Selecione a Conta Analitica que recebera as linhas do relatorio.');
       return;
     }
-
     setLoading(true);
     setError('');
     try {
@@ -150,7 +151,7 @@ export const ComissionamentoImportReports: React.FC<Props> = ({ contas, onImport
   return (
     <>
       <Button variant="outline" size="sm" onClick={() => setOpen(true)} className="gap-1 border-primary/40 text-primary hover:bg-primary/10">
-        <FileSpreadsheet className="w-4 h-4" /> Importar Relatorios
+        <FileSpreadsheet className="w-4 h-4" /> Importar Relatorio Folha
       </Button>
 
       <Dialog open={open} onOpenChange={next => {
@@ -163,16 +164,20 @@ export const ComissionamentoImportReports: React.FC<Props> = ({ contas, onImport
               <Upload className="w-5 h-5 text-primary" /> Importar Relatorio Operacional
             </DialogTitle>
             <DialogDescription>
-              Selecione o Excel gerado na Folha ou em Beneficios e informe a Conta Analitica para entrada na DRE.
+              {isPayrollReport
+                ? 'Na Folha, a Conta Analitica sera definida automaticamente pelo Centro de Custo de cada linha.'
+                : 'Selecione o relatorio. Para Beneficios, informe tambem a Conta Analitica para entrada na DRE.'}
             </DialogDescription>
           </DialogHeader>
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className={`grid grid-cols-1 gap-4 ${rows.length > 0 && !isPayrollReport ? 'md:grid-cols-2' : ''}`}>
             <div className="space-y-1">
               <Label>Arquivo do relatorio *</Label>
               <Input type="file" accept=".xlsx,.xls" onChange={event => handleFile(event.target.files?.[0] || null)} />
             </div>
-            <SearchableSelect label="Conta Analitica *" value={planoContaId} onChange={setPlanoContaId} options={contas} />
+            {rows.length > 0 && !isPayrollReport && (
+              <SearchableSelect label="Conta Analitica *" value={planoContaId} onChange={setPlanoContaId} options={contas} />
+            )}
           </div>
 
           {rows.length > 0 && (
@@ -190,15 +195,24 @@ export const ComissionamentoImportReports: React.FC<Props> = ({ contas, onImport
           )}
 
           {result && (
-            <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-500">
-              {result.inserted} linha(s) importadas e {result.skipped} ignorada(s).
-              {result.errors.length > 0 ? ` ${result.errors[0]}` : ''}
+            <div className={`rounded-lg border px-3 py-2 text-sm ${result.errors.length > 0
+              ? 'border-amber-500/40 bg-amber-500/10 text-amber-500'
+              : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-500'
+              }`}>
+              <div>{result.inserted} linha(s) importadas e {result.skipped} ignorada(s).</div>
+              {result.errors.map((resultError, index) => (
+                <div key={`${resultError}-${index}`} className="mt-1">{resultError}</div>
+              ))}
             </div>
           )}
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>Fechar</Button>
-            <Button onClick={handleSubmit} disabled={loading || rows.length === 0 || !planoContaId} className="gap-2">
+            <Button
+              onClick={handleSubmit}
+              disabled={loading || rows.length === 0 || (!isPayrollReport && !planoContaId)}
+              className="gap-2"
+            >
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
               Importar para Lancamentos
             </Button>

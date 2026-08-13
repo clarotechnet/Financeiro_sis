@@ -841,7 +841,90 @@ export function useComissionamento() {
       costCenterByLookup.set(normalize(option.nome), option.id);
     });
 
-    const keys = rows.map(row => `${row.report_id}:${row.row_number}`);
+    if (rows.length === 0) {
+      return { inserted, skipped, errors: ['O relatorio nao possui linhas validas.'] };
+    }
+
+    const sources = Array.from(new Set(rows.map(row => normalize(row.source))));
+    if (sources.length !== 1 || !sources[0]) {
+      return {
+        inserted,
+        skipped: rows.length,
+        errors: ['O arquivo deve conter uma unica origem de relatorio valida.'],
+      };
+    }
+
+    const resolvedRows = rows.map(row => ({
+      row,
+      importKey: `${row.report_id}:${row.row_number}`,
+      unidadeCodigo: unitByLookup.get(normalize(row.unidade_codigo))
+        || unitByLookup.get(normalize(row.unidade_nome)),
+      setorCodigo: costCenterByLookup.get(normalize(row.setor_codigo))
+        || costCenterByLookup.get(normalize(row.setor_nome)),
+    }));
+
+    const invalidRows = resolvedRows.filter(item => (
+      !item.unidadeCodigo
+      || !item.setorCodigo
+      || !item.row.data_lancamento
+      || item.row.valor <= 0
+    ));
+
+    if (invalidRows.length > 0) {
+      return {
+        inserted,
+        skipped: rows.length,
+        errors: invalidRows.slice(0, 8).map(item => (
+          `Linha ${item.row.row_number}: unidade, centro de custo, data ou valor invalido.`
+        )),
+      };
+    }
+
+    const costCenterCodes = Array.from(new Set(
+      resolvedRows.map(item => item.setorCodigo as string),
+    ));
+    const mappingByCostCenter = new Map<string, string>();
+
+    if (sources[0] === 'folha_pagamento') {
+      for (const codeChunk of chunkArray(costCenterCodes, 500)) {
+        const { data: mappings, error: mappingsError } = await externalSupabase
+          .from('folha_centro_custo_conta_mapeamentos')
+          .select('setor_codigo, plano_conta_id')
+          .eq('ativo', true)
+          .in('setor_codigo', codeChunk);
+
+        if (mappingsError) throw mappingsError;
+        (mappings || []).forEach((mapping: any) => {
+          mappingByCostCenter.set(mapping.setor_codigo, mapping.plano_conta_id);
+        });
+      }
+
+      const missingMappings = costCenterCodes.filter(code => !mappingByCostCenter.has(code));
+      if (missingMappings.length > 0) {
+        const costCenterNameByCode = new Map(
+          opcoes.centro_de_custo.map(option => [option.id, option.nome]),
+        );
+
+        return {
+          inserted,
+          skipped: rows.length,
+          errors: missingMappings.slice(0, 8).map(code => (
+            `Sem mapeamento da Folha: ${code} - ${costCenterNameByCode.get(code) || code}.`
+          )),
+        };
+      }
+    } else {
+      if (!planoContaId) {
+        return {
+          inserted,
+          skipped: rows.length,
+          errors: ['Selecione a Conta Analitica para importar este relatorio de Beneficios.'],
+        };
+      }
+      costCenterCodes.forEach(code => mappingByCostCenter.set(code, planoContaId));
+    }
+
+    const keys = resolvedRows.map(item => item.importKey);
     const existingKeys = new Set<string>();
 
     for (const keyChunk of chunkArray(keys, 500)) {
@@ -856,23 +939,9 @@ export function useComissionamento() {
       });
     }
 
-    const records = rows.flatMap(row => {
-      const importKey = `${row.report_id}:${row.row_number}`;
+    const records = resolvedRows.flatMap(({ row, importKey, unidadeCodigo, setorCodigo }) => {
       if (existingKeys.has(importKey)) {
         skipped++;
-        return [];
-      }
-
-      const unidadeCodigo = unitByLookup.get(normalize(row.unidade_codigo))
-        || unitByLookup.get(normalize(row.unidade_nome));
-      const setorCodigo = costCenterByLookup.get(normalize(row.setor_codigo))
-        || costCenterByLookup.get(normalize(row.setor_nome));
-
-      if (!unidadeCodigo || !setorCodigo || !row.data_lancamento || row.valor <= 0) {
-        skipped++;
-        if (errors.length < 8) {
-          errors.push(`Linha ${row.row_number}: unidade, centro de custo, data ou valor invalido.`);
-        }
         return [];
       }
 
@@ -882,7 +951,7 @@ export function useComissionamento() {
         chave_pix: null,
         favorecido: row.source_label || 'Relatorio Operacional',
         descricao: row.descricao || `${row.source_label} - ${row.setor_nome} - ${row.unidade_nome}`,
-        plano_conta_id: planoContaId,
+        plano_conta_id: mappingByCostCenter.get(setorCodigo as string),
         valor: row.valor,
         cnpj_id: null,
         unidade_id: null,
