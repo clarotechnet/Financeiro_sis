@@ -173,7 +173,7 @@ interface DreContaDetalhe {
   total: number;
 }
 
-type DreDisplayRowKind = 'linha' | 'detalhe' | 'resultado_financeiro_zero';
+type DreDisplayRowKind = 'linha' | 'detalhe' | 'resultado_financeiro_zero' | 'comparativo_matriz_filial';
 
 interface DreDisplayRow {
   key: string;
@@ -183,6 +183,7 @@ interface DreDisplayRow {
   total: number;
   nivel: number;
   tipo?: DreLinhaTipo;
+  percentualReceitaBruta?: number | null;
 }
 
 const PAGE_SIZE = 50;
@@ -280,6 +281,21 @@ const fmtPercentDre = (value: number, receitaBruta: number) => {
 
   return percentual < 0 ? `(${percentualFormatado}%)` : `${percentualFormatado}%`;
 };
+
+const fmtPercentualAbsoluto = (value: number | null | undefined) => {
+  if (value == null || !Number.isFinite(value)) return '-';
+
+  return `${Math.abs(value).toLocaleString('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+    useGrouping: false,
+  })}%`;
+};
+
+const fmtDisplayRowPercent = (row: DreDisplayRow, receitaBruta: number) =>
+  row.kind === 'comparativo_matriz_filial'
+    ? fmtPercentualAbsoluto(row.percentualReceitaBruta)
+    : fmtPercentDre(row.total, receitaBruta);
 
 const loadLogoDataUrl = async () => {
   try {
@@ -415,11 +431,13 @@ const DREConsolidado: React.FC = () => {
     () => opcoesUnidades.find(opcao => normalizeComparisonLabel(opcao.nome) === 'MATRIZ - SEDE ADMINISTRATIVA'),
     [opcoesUnidades],
   );
-  const filialSelecionada = useMemo(() => {
-    if (unidadeCodigos.length !== 1) return null;
+  const filiaisSelecionadas = useMemo(() => {
+    const unidadesSelecionadas = new Set(unidadeCodigos);
 
-    const unidade = opcoesUnidades.find(opcao => opcao.codigo === unidadeCodigos[0]);
-    return unidade && normalizeComparisonLabel(unidade.nome).startsWith('FILIAL ') ? unidade : null;
+    return opcoesUnidades.filter(opcao =>
+      unidadesSelecionadas.has(opcao.codigo)
+      && normalizeComparisonLabel(opcao.nome).startsWith('FILIAL '),
+    );
   }, [opcoesUnidades, unidadeCodigos]);
 
   const fetchOpcoes = useCallback(async () => {
@@ -471,7 +489,7 @@ const DREConsolidado: React.FC = () => {
         p_setor_codigo: setorCodigos.length === 1 ? setorCodigos[0] : null,
       };
 
-      const matrizMovimentosPromise = filialSelecionada && matrizUnidade
+      const matrizMovimentosPromise = filiaisSelecionadas.length > 0 && matrizUnidade
         ? fetchMovimentosDre(
           dataInicio,
           dataFim,
@@ -520,7 +538,7 @@ const DREConsolidado: React.FC = () => {
     dataFim,
     dataInicio,
     grupoCodigos,
-    filialSelecionada,
+    filiaisSelecionadas,
     matrizUnidade,
     setorCodigos,
     subgrupoCodigos,
@@ -614,10 +632,38 @@ const DREConsolidado: React.FC = () => {
     return new Map(computeDreTotals(linhasMatriz).map(row => [row.codigo, Number(row.total) || 0]));
   }, [linhas, movimentosMatriz]);
   const resultadoLiquidoMatriz = totalMatrizByCodigo.get('04.100') || 0;
-  const receitaBrutaFilial = totalByCodigo.get('01.01') || 0;
-  const percentualMatrizSobreReceitaBruta = hasValue(receitaBrutaFilial)
-    ? (Math.abs(resultadoLiquidoMatriz) / Math.abs(receitaBrutaFilial)) * 100
-    : null;
+  const comparativosMatrizFiliais = useMemo(() => filiaisSelecionadas.map(filial => {
+    const totaisPorLinha = new Map<string, number>();
+    const filialNormalizada = normalizeComparisonLabel(filial.nome);
+
+    movimentos.forEach(movimento => {
+      if (!movimento.dre_linha_id) return;
+
+      const pertenceFilial = movimento.unidade_codigo === filial.codigo
+        || normalizeComparisonLabel(movimento.unidade_nome || '') === filialNormalizada;
+      if (!pertenceFilial) return;
+
+      totaisPorLinha.set(
+        movimento.dre_linha_id,
+        (totaisPorLinha.get(movimento.dre_linha_id) || 0) + (Number(movimento.valor) || 0),
+      );
+    });
+
+    const totaisFilial = new Map(computeDreTotals(linhas.map(row => ({
+      ...row,
+      total: totaisPorLinha.get(row.dre_linha_id) || 0,
+    }))).map(row => [row.codigo, Number(row.total) || 0]));
+    const receitaBrutaFilial = totaisFilial.get('01.01') || 0;
+
+    return {
+      filial,
+      receitaBrutaFilial,
+      resultadoLiquidoMatriz,
+      percentual: hasValue(receitaBrutaFilial)
+        ? (Math.abs(resultadoLiquidoMatriz) / Math.abs(receitaBrutaFilial)) * 100
+        : null,
+    };
+  }), [filiaisSelecionadas, linhas, movimentos, resultadoLiquidoMatriz]);
 
   const detalhesPorLinha = useMemo(() => {
     const grouped = new Map<string, Map<string, DreContaDetalhe>>();
@@ -675,6 +721,19 @@ const DREConsolidado: React.FC = () => {
     const rows: DreDisplayRow[] = [];
 
     linhasDreExibidas.forEach(row => {
+      if (row.codigo === '04.100') {
+        comparativosMatrizFiliais.forEach(comparativo => {
+          rows.push({
+            key: `comparativo-matriz-${comparativo.filial.codigo}`,
+            kind: 'comparativo_matriz_filial',
+            descricao: comparativo.filial.nome,
+            total: comparativo.resultadoLiquidoMatriz,
+            percentualReceitaBruta: comparativo.percentual,
+            nivel: 2,
+          });
+        });
+      }
+
       rows.push({
         key: row.dre_linha_id,
         kind: 'linha',
@@ -699,7 +758,7 @@ const DREConsolidado: React.FC = () => {
     });
 
     return rows;
-  }, [detalhesPorLinha, linhasDreExibidas, shouldShowResultadoFinanceiro]);
+  }, [comparativosMatrizFiliais, detalhesPorLinha, linhasDreExibidas, matrizUnidade]);
 
   const movimentosPendentes = useMemo(
     () => movimentos.filter(row => !row.dre_linha_id),
@@ -832,7 +891,7 @@ const DREConsolidado: React.FC = () => {
         body: dreDisplayRows.map(row => [
           row.descricao,
           row.kind === 'linha' && row.tipo === 'grupo' ? '' : fmtBRLDre(row.total),
-          row.kind === 'linha' && row.tipo === 'grupo' ? '' : fmtPercentDre(row.total, receitaBrutaDre),
+          row.kind === 'linha' && row.tipo === 'grupo' ? '' : fmtDisplayRowPercent(row, receitaBrutaDre),
         ]),
         margin: { top: PDF_HEADER_BOTTOM, right: PDF_MARGIN, bottom: 14, left: PDF_MARGIN },
         styles: {
@@ -856,6 +915,7 @@ const DREConsolidado: React.FC = () => {
           const row = dreDisplayRows[data.row.index];
           const isGrupo = row.kind === 'linha' && row.tipo === 'grupo';
           const isDetail = row.kind === 'detalhe';
+          const isComparativo = row.kind === 'comparativo_matriz_filial';
           const isResult = row.kind === 'resultado_financeiro_zero' || row.tipo === 'subtotal' || row.tipo === 'resultado';
 
           if (isGrupo) {
@@ -867,6 +927,11 @@ const DREConsolidado: React.FC = () => {
           if (isDetail) {
             data.cell.styles.fontSize = 7;
             data.cell.styles.textColor = [71, 85, 105];
+          }
+
+          if (isComparativo) {
+            data.cell.styles.fontStyle = 'bold';
+            data.cell.styles.fillColor = [248, 250, 252];
           }
 
           if (isResult) {
@@ -917,7 +982,7 @@ const DREConsolidado: React.FC = () => {
       Total: row.kind === 'linha' && row.tipo === 'grupo' ? null : Number(row.total) || 0,
       '% Receita Bruta': row.kind === 'linha' && row.tipo === 'grupo'
         ? null
-        : fmtPercentDre(Number(row.total) || 0, receitaBrutaDre),
+        : fmtDisplayRowPercent(row, receitaBrutaDre),
     }));
 
     const detalheRows = movimentos.map(row => ({
@@ -1147,43 +1212,40 @@ const DREConsolidado: React.FC = () => {
               </div>
             </div>
 
-            {filialSelecionada && matrizUnidade && (
+            {comparativosMatrizFiliais.length > 0 && matrizUnidade && (
               <div className="card dre-no-print border-primary/30">
-                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                  <div>
-                    <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      Resultado da Matriz sobre a Receita Bruta da filial
-                    </div>
-                    <div className="mt-1 text-sm font-semibold text-foreground">
-                      {matrizUnidade.nome} x {filialSelecionada.nome}
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:text-right">
-                    <div>
-                      <div className="text-xs text-muted-foreground">Resultado da Matriz</div>
-                      <div className={`text-lg font-extrabold ${resultadoLiquidoMatriz < 0 ? 'text-red-400' : 'text-emerald-500'}`}>
-                        {fmtBRLDre(resultadoLiquidoMatriz)}
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Resultado da Matriz sobre a Receita Bruta das filiais
+                </div>
+                <div className="mt-3 divide-y divide-border/50">
+                  {comparativosMatrizFiliais.map(comparativo => (
+                    <div
+                      key={comparativo.filial.codigo}
+                      className="grid grid-cols-1 gap-3 py-3 first:pt-0 last:pb-0 md:grid-cols-[minmax(220px,1fr)_repeat(3,minmax(150px,auto))] md:items-center md:text-right"
+                    >
+                      <div className="text-sm font-semibold text-foreground md:text-left">
+                        {matrizUnidade.nome} x {comparativo.filial.nome}
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground">Resultado da Matriz</div>
+                        <div className={`text-lg font-extrabold ${comparativo.resultadoLiquidoMatriz < 0 ? 'text-red-400' : 'text-emerald-500'}`}>
+                          {fmtBRLDre(comparativo.resultadoLiquidoMatriz)}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground">Receita Bruta da filial</div>
+                        <div className={`text-lg font-extrabold ${comparativo.receitaBrutaFilial < 0 ? 'text-red-400' : 'text-foreground'}`}>
+                          {fmtBRLDre(comparativo.receitaBrutaFilial)}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground">Representatividade</div>
+                        <div className="text-lg font-extrabold text-primary">
+                          {fmtPercentualAbsoluto(comparativo.percentual)}
+                        </div>
                       </div>
                     </div>
-                    <div>
-                      <div className="text-xs text-muted-foreground">Receita Bruta da filial</div>
-                      <div className={`text-lg font-extrabold ${receitaBrutaFilial < 0 ? 'text-red-400' : 'text-foreground'}`}>
-                        {fmtBRLDre(receitaBrutaFilial)}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-muted-foreground">Representatividade</div>
-                      <div className="text-lg font-extrabold text-primary">
-                        {percentualMatrizSobreReceitaBruta == null
-                          ? '-'
-                          : `${percentualMatrizSobreReceitaBruta.toLocaleString('pt-BR', {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                            useGrouping: false,
-                          })}%`}
-                      </div>
-                    </div>
-                  </div>
+                  ))}
                 </div>
               </div>
             )}
@@ -1227,6 +1289,7 @@ const DREConsolidado: React.FC = () => {
                       const total = Number(row.total) || 0;
                       const isGrupo = row.kind === 'linha' && row.tipo === 'grupo';
                       const isDetail = row.kind === 'detalhe';
+                      const isComparativo = row.kind === 'comparativo_matriz_filial';
                       const isTotal = row.kind === 'resultado_financeiro_zero' || row.tipo === 'subtotal' || row.tipo === 'resultado';
 
                       return (
@@ -1236,6 +1299,7 @@ const DREConsolidado: React.FC = () => {
                             'border-b border-border/40',
                             isGrupo ? 'bg-muted/35 uppercase font-extrabold text-foreground' : '',
                             isDetail ? 'text-xs text-muted-foreground' : '',
+                            isComparativo ? 'bg-muted/20 font-semibold' : '',
                             isTotal ? 'font-extrabold bg-primary/5' : '',
                             row.tipo === 'resultado' ? 'text-primary border-t-2 border-primary/50' : '',
                           ].join(' ')}
@@ -1250,7 +1314,7 @@ const DREConsolidado: React.FC = () => {
                             {isGrupo ? '' : fmtBRLDre(total)}
                           </td>
                           <td className={`${isDetail ? 'py-1.5' : 'py-2'} px-2 text-right font-semibold whitespace-nowrap ${total < 0 ? 'text-red-400' : 'text-foreground'}`}>
-                            {isGrupo ? '' : fmtPercentDre(total, receitaBrutaDre)}
+                            {isGrupo ? '' : fmtDisplayRowPercent(row, receitaBrutaDre)}
                           </td>
                         </tr>
                       );
