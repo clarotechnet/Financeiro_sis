@@ -68,6 +68,11 @@ export interface OperationalReportImportResult {
   inserted: number;
   skipped: number;
   errors: string[];
+  payrollSummary?: {
+    operational: { rows: number; value: number };
+    administrative: { rows: number; value: number };
+    totalNet: number;
+  };
 }
 
 export interface ComissionamentoFilters {

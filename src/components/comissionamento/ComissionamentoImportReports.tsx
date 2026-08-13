@@ -73,6 +73,7 @@ const parseReport = async (file: File): Promise<OperationalReportImportRow[]> =>
 
 export const ComissionamentoImportReports: React.FC<Props> = ({ contas, onImport }) => {
   const [open, setOpen] = useState(false);
+  const [summaryOpen, setSummaryOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [rows, setRows] = useState<OperationalReportImportRow[]>([]);
   const [planoContaId, setPlanoContaId] = useState('');
@@ -140,7 +141,12 @@ export const ComissionamentoImportReports: React.FC<Props> = ({ contas, onImport
     setLoading(true);
     setError('');
     try {
-      setResult(await onImport(rows, planoContaId, file.name));
+      const importResult = await onImport(rows, planoContaId, file.name);
+      setResult(importResult);
+      if (importResult.payrollSummary && importResult.errors.length === 0) {
+        setOpen(false);
+        setSummaryOpen(true);
+      }
     } catch (importError: any) {
       setError(importError.message || 'Nao foi possivel importar o relatorio.');
     } finally {
@@ -216,6 +222,63 @@ export const ComissionamentoImportReports: React.FC<Props> = ({ contas, onImport
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
               Importar para Lancamentos
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={summaryOpen} onOpenChange={next => {
+        setSummaryOpen(next);
+        if (!next) reset();
+      }}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Detalhes da Importacao da Folha</DialogTitle>
+            <DialogDescription>
+              Resumo do salario liquido efetivamente gravado em Pagamentos.
+            </DialogDescription>
+          </DialogHeader>
+
+          {result?.payrollSummary && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="rounded-lg border border-border bg-muted/20 p-4">
+                  <span className="text-xs font-medium uppercase text-muted-foreground">02 - Operacional</span>
+                  <strong className="mt-2 block text-xl text-foreground">
+                    {result.payrollSummary.operational.value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                  </strong>
+                  <span className="mt-1 block text-xs text-muted-foreground">
+                    {result.payrollSummary.operational.rows} linha(s) importada(s)
+                  </span>
+                </div>
+
+                <div className="rounded-lg border border-border bg-muted/20 p-4">
+                  <span className="text-xs font-medium uppercase text-muted-foreground">03 - Administrativo</span>
+                  <strong className="mt-2 block text-xl text-foreground">
+                    {result.payrollSummary.administrative.value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                  </strong>
+                  <span className="mt-1 block text-xs text-muted-foreground">
+                    {result.payrollSummary.administrative.rows} linha(s) importada(s)
+                  </span>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-primary/40 bg-primary/10 p-4">
+                <span className="text-xs font-medium uppercase text-muted-foreground">Total liquido importado</span>
+                <strong className="mt-2 block text-2xl text-primary">
+                  {result.payrollSummary.totalNet.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                </strong>
+                <span className="mt-1 block text-xs text-muted-foreground">
+                  {result.inserted} linha(s) gravada(s) e {result.skipped} ignorada(s)
+                </span>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button onClick={() => {
+              setSummaryOpen(false);
+              reset();
+            }}>Fechar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

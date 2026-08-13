@@ -883,19 +883,22 @@ export function useComissionamento() {
     const costCenterCodes = Array.from(new Set(
       resolvedRows.map(item => item.setorCodigo as string),
     ));
-    const mappingByCostCenter = new Map<string, string>();
+    const mappingByCostCenter = new Map<string, { planoContaId: string; contaCodigo: string }>();
 
     if (sources[0] === 'folha_pagamento') {
       for (const codeChunk of chunkArray(costCenterCodes, 500)) {
         const { data: mappings, error: mappingsError } = await externalSupabase
-          .from('folha_centro_custo_conta_mapeamentos')
-          .select('setor_codigo, plano_conta_id')
+          .from('vw_folha_centro_custo_conta_mapeamentos')
+          .select('setor_codigo, plano_conta_id, conta_codigo')
           .eq('ativo', true)
           .in('setor_codigo', codeChunk);
 
         if (mappingsError) throw mappingsError;
         (mappings || []).forEach((mapping: any) => {
-          mappingByCostCenter.set(mapping.setor_codigo, mapping.plano_conta_id);
+          mappingByCostCenter.set(mapping.setor_codigo, {
+            planoContaId: mapping.plano_conta_id,
+            contaCodigo: mapping.conta_codigo,
+          });
         });
       }
 
@@ -921,7 +924,10 @@ export function useComissionamento() {
           errors: ['Selecione a Conta Analitica para importar este relatorio de Beneficios.'],
         };
       }
-      costCenterCodes.forEach(code => mappingByCostCenter.set(code, planoContaId));
+      costCenterCodes.forEach(code => mappingByCostCenter.set(code, {
+        planoContaId,
+        contaCodigo: '',
+      }));
     }
 
     const keys = resolvedRows.map(item => item.importKey);
@@ -945,42 +951,69 @@ export function useComissionamento() {
         return [];
       }
 
+      const mapping = mappingByCostCenter.get(setorCodigo as string)!;
       return [{
-        data_lancamento: row.data_lancamento,
-        nome: `RELATORIO - ${row.source_label}`,
-        chave_pix: null,
-        favorecido: row.source_label || 'Relatorio Operacional',
-        descricao: row.descricao || `${row.source_label} - ${row.setor_nome} - ${row.unidade_nome}`,
-        plano_conta_id: mappingByCostCenter.get(setorCodigo as string),
-        valor: row.valor,
-        cnpj_id: null,
-        unidade_id: null,
-        unidade_codigo: unidadeCodigo,
-        centro_de_custo_id: null,
-        setor_codigo: setorCodigo,
-        categoria_id: null,
-        secao_custeio_id: null,
-        centro_custeio_id: null,
-        banco_codigo: null,
-        banco: null,
-        status_pag: 'PAGO',
-        relatorio_origem: row.source,
-        relatorio_arquivo_nome: fileName,
-        relatorio_importacao_chave: importKey,
+        accountCode: mapping.contaCodigo,
+        value: row.valor,
+        payload: {
+          data_lancamento: row.data_lancamento,
+          nome: `RELATORIO - ${row.source_label}`,
+          chave_pix: null,
+          favorecido: row.source_label || 'Relatorio Operacional',
+          descricao: row.descricao || `${row.source_label} - ${row.setor_nome} - ${row.unidade_nome}`,
+          plano_conta_id: mapping.planoContaId,
+          valor: row.valor,
+          cnpj_id: null,
+          unidade_id: null,
+          unidade_codigo: unidadeCodigo,
+          centro_de_custo_id: null,
+          setor_codigo: setorCodigo,
+          categoria_id: null,
+          secao_custeio_id: null,
+          centro_custeio_id: null,
+          banco_codigo: null,
+          banco: null,
+          status_pag: 'PAGO',
+          relatorio_origem: row.source,
+          relatorio_arquivo_nome: fileName,
+          relatorio_importacao_chave: importKey,
+        },
       }];
     });
+
+    const payrollSummary = sources[0] === 'folha_pagamento'
+      ? {
+        operational: { rows: 0, value: 0 },
+        administrative: { rows: 0, value: 0 },
+        totalNet: 0,
+      }
+      : undefined;
 
     for (const recordChunk of chunkArray(records, 200)) {
       const { error: insertError } = await externalSupabase
         .from('lancamentos_pix')
-        .insert(recordChunk);
+        .insert(recordChunk.map(item => item.payload));
 
       if (insertError) errors.push(insertError.message);
-      else inserted += recordChunk.length;
+      else {
+        inserted += recordChunk.length;
+        if (payrollSummary) {
+          recordChunk.forEach(item => {
+            payrollSummary.totalNet += item.value;
+            if (item.accountCode.startsWith('02-')) {
+              payrollSummary.operational.rows++;
+              payrollSummary.operational.value += item.value;
+            } else if (item.accountCode.startsWith('03-')) {
+              payrollSummary.administrative.rows++;
+              payrollSummary.administrative.value += item.value;
+            }
+          });
+        }
+      }
     }
 
     await fetchData();
-    return { inserted, skipped, errors };
+    return { inserted, skipped, errors, payrollSummary };
   }, [fetchData, opcoes.centro_de_custo, opcoes.unidade]);
 
 
