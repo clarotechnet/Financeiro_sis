@@ -550,9 +550,15 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({
     && centsFromDigits(rateio.valor) > 0
   );
   const camposPrincipaisValidos = requiredFields.every(f => form[f as keyof FormState]?.toString().trim());
+  const bancoValido = Boolean(
+    form.banco_codigo
+    && opcoes.bancos.some(option => option.id === form.banco_codigo),
+  );
   const classificacaoPrincipalValida = Boolean(form.unidade_id && form.centro_de_custo_id && form.plano_conta_id);
   const rateioBalanceado = !usarRateio || (valorTotalCents > 0 && rateiosValidos && diferencaRateioCents === 0);
-  const isValid = camposPrincipaisValidos && (usarRateio ? rateioBalanceado : classificacaoPrincipalValida);
+  const isValid = camposPrincipaisValidos
+    && bancoValido
+    && (usarRateio ? rateioBalanceado : classificacaoPrincipalValida);
   const quantidadeFinal = usarMultiplasDespesas ? clampMonthlyOccurrences(quantidadeDespesas) : 1;
   const ultimaDataDespesa = form.data_lancamento
     ? addMonthsPreservingDay(form.data_lancamento, quantidadeFinal - 1)
@@ -825,7 +831,7 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({
                 value={form.banco_codigo}
                 onChange={value => set('banco_codigo', value)}
                 options={opcoes.bancos}
-                required={false}
+                required
               />
 
               <SearchableSelect
