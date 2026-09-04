@@ -916,6 +916,23 @@ export function useComissionamento() {
           )),
         };
       }
+    } else if (sources[0] === 'beneficios_agregamento') {
+      const contaAgregamento = opcoes.plano_contas.find(option => (
+        normalize(option.nome).startsWith(normalize('02-02-031 -'))
+      ));
+
+      if (!contaAgregamento) {
+        return {
+          inserted,
+          skipped: rows.length,
+          errors: ['A Conta Analitica 02-02-031 - AGREGAMENTO nao foi encontrada ou nao esta ativa.'],
+        };
+      }
+
+      costCenterCodes.forEach(code => mappingByCostCenter.set(code, {
+        planoContaId: contaAgregamento.id,
+        contaCodigo: '02-02-031',
+      }));
     } else {
       if (!planoContaId) {
         return {
@@ -1014,7 +1031,7 @@ export function useComissionamento() {
 
     await fetchData();
     return { inserted, skipped, errors, payrollSummary };
-  }, [fetchData, opcoes.centro_de_custo, opcoes.unidade]);
+  }, [fetchData, opcoes.centro_de_custo, opcoes.plano_contas, opcoes.unidade]);
 
 
 

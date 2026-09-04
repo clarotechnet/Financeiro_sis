@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import * as XLSX from 'xlsx';
-import { AlertCircle, FileSpreadsheet, Loader2, Upload } from 'lucide-react';
+import { AlertCircle, FileSpreadsheet, Loader2, PackagePlus, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -73,6 +73,7 @@ const parseReport = async (file: File): Promise<OperationalReportImportRow[]> =>
 
 export const ComissionamentoImportReports: React.FC<Props> = ({ contas, onImport }) => {
   const [open, setOpen] = useState(false);
+  const [importMode, setImportMode] = useState<'general' | 'agregamento'>('general');
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [rows, setRows] = useState<OperationalReportImportRow[]>([]);
@@ -82,7 +83,9 @@ export const ComissionamentoImportReports: React.FC<Props> = ({ contas, onImport
   const [result, setResult] = useState<OperationalReportImportResult | null>(null);
 
   const total = useMemo(() => rows.reduce((sum, row) => sum + row.valor, 0), [rows]);
-  const isPayrollReport = rows[0]?.source.trim().toLowerCase() === 'folha_pagamento';
+  const reportSource = rows[0]?.source.trim().toLowerCase() || '';
+  const isPayrollReport = reportSource === 'folha_pagamento';
+  const isAgregamentoReport = reportSource === 'beneficios_agregamento';
 
   const reset = () => {
     setFile(null);
@@ -119,6 +122,9 @@ export const ComissionamentoImportReports: React.FC<Props> = ({ contas, onImport
       if (reportIds.size !== 1 || sources.size !== 1) {
         throw new Error('O arquivo mistura relatorios ou origens diferentes. Importe um relatorio gerado pelo sistema de cada vez.');
       }
+      if (importMode === 'agregamento' && parsed[0]?.source.trim().toLowerCase() !== 'beneficios_agregamento') {
+        throw new Error('Selecione um relatorio gerado em Beneficios > Agregamento.');
+      }
 
       const uniqueRows = Array.from(new Map(
         parsed.map(row => [`${row.report_id}:${row.row_number}`, row]),
@@ -134,7 +140,7 @@ export const ComissionamentoImportReports: React.FC<Props> = ({ contas, onImport
       setError('Selecione um relatorio gerado pela Folha ou por Beneficios.');
       return;
     }
-    if (!isPayrollReport && !planoContaId) {
+    if (!isPayrollReport && !isAgregamentoReport && !planoContaId) {
       setError('Selecione a Conta Analitica que recebera as linhas do relatorio.');
       return;
     }
@@ -156,8 +162,29 @@ export const ComissionamentoImportReports: React.FC<Props> = ({ contas, onImport
 
   return (
     <>
-      <Button variant="outline" size="sm" onClick={() => setOpen(true)} className="gap-1 border-primary/40 text-primary hover:bg-primary/10">
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => {
+          reset();
+          setImportMode('general');
+          setOpen(true);
+        }}
+        className="gap-1 border-primary/40 text-primary hover:bg-primary/10"
+      >
         <FileSpreadsheet className="w-4 h-4" /> Importar Relatorio Folha
+      </Button>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => {
+          reset();
+          setImportMode('agregamento');
+          setOpen(true);
+        }}
+        className="gap-1 border-primary/40 text-primary hover:bg-primary/10"
+      >
+        <PackagePlus className="w-4 h-4" /> Importar Agregamento
       </Button>
 
       <Dialog open={open} onOpenChange={next => {
@@ -167,10 +194,15 @@ export const ComissionamentoImportReports: React.FC<Props> = ({ contas, onImport
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Upload className="w-5 h-5 text-primary" /> Importar Relatorio Operacional
+              {importMode === 'agregamento'
+                ? <PackagePlus className="w-5 h-5 text-primary" />
+                : <Upload className="w-5 h-5 text-primary" />}
+              {importMode === 'agregamento' ? 'Importar Agregamento' : 'Importar Relatorio Operacional'}
             </DialogTitle>
             <DialogDescription>
-              {isPayrollReport
+              {importMode === 'agregamento' || isAgregamentoReport
+                ? 'A Conta Analitica sera definida automaticamente como 02-02-031 - AGREGAMENTO.'
+                : isPayrollReport
                 ? 'Na Folha, a Conta Analitica sera definida automaticamente pelo Centro de Custo de cada linha.'
                 : 'Selecione o relatorio. Para Beneficios, informe tambem a Conta Analitica para entrada na DRE.'}
             </DialogDescription>
@@ -181,7 +213,13 @@ export const ComissionamentoImportReports: React.FC<Props> = ({ contas, onImport
               <Label>Arquivo do relatorio *</Label>
               <Input type="file" accept=".xlsx,.xls" onChange={event => handleFile(event.target.files?.[0] || null)} />
             </div>
-            {rows.length > 0 && !isPayrollReport && (
+            {rows.length > 0 && isAgregamentoReport && (
+              <div className="space-y-1">
+                <Label>Conta Analitica</Label>
+                <Input value="02-02-031 - AGREGAMENTO" readOnly className="bg-muted/30 font-medium" />
+              </div>
+            )}
+            {rows.length > 0 && !isPayrollReport && !isAgregamentoReport && (
               <SearchableSelect label="Conta Analitica *" value={planoContaId} onChange={setPlanoContaId} options={contas} />
             )}
           </div>
@@ -216,7 +254,7 @@ export const ComissionamentoImportReports: React.FC<Props> = ({ contas, onImport
             <Button variant="outline" onClick={() => setOpen(false)}>Fechar</Button>
             <Button
               onClick={handleSubmit}
-              disabled={loading || rows.length === 0 || (!isPayrollReport && !planoContaId)}
+              disabled={loading || rows.length === 0 || (!isPayrollReport && !isAgregamentoReport && !planoContaId)}
               className="gap-2"
             >
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}

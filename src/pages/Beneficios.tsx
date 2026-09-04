@@ -18,6 +18,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { LoadingSpinner } from '@/components/comissionamento/LoadingSpinner';
+import { MonthPeriodNavigator } from '@/components/MonthPeriodNavigator';
 import { useBeneficios } from '@/hooks/useBeneficios';
 import { useToast } from '@/hooks/use-toast';
 import { BeneficioImportPayload, BeneficioImportRow, BeneficioTipo } from '@/types/beneficios';
@@ -583,7 +584,15 @@ const Beneficios: React.FC = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-6">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-[minmax(220px,1.6fr)_repeat(6,minmax(0,1fr))]">
+            <MonthPeriodNavigator
+              startDate={filters.dataInicio}
+              endDate={filters.dataFim}
+              onChange={period => setFilters({
+                dataInicio: period.startDate,
+                dataFim: period.endDate,
+              })}
+            />
             <div className="space-y-1">
               <Label className="form-label">Data Inicial</Label>
               <Input
