@@ -461,11 +461,6 @@ const DREConsolidado: React.FC = () => {
     const unidadesSelecionadas = new Set(unidadeCodigos);
     return filiais.filter(filial => unidadesSelecionadas.has(filial.codigo));
   }, [filiais, matrizEstaSelecionada, unidadeCodigos]);
-  const filialSelecionadaParaRateio = useMemo(() => {
-    if (unidadeCodigos.length !== 1) return null;
-    return filiaisSelecionadasParaResumo[0] || null;
-  }, [filiaisSelecionadasParaResumo, unidadeCodigos.length]);
-
   const fetchOpcoes = useCallback(async () => {
     const [unidadesResult, setoresResult, planoContasResult] = await Promise.all([
       externalSupabase
@@ -679,10 +674,13 @@ const DREConsolidado: React.FC = () => {
       };
     });
   }, [filiais, filiaisSelecionadasParaResumo, linhas, matrizUnidade, movimentosBaseRateio]);
-  const rateioMatrizFilial = filialSelecionadaParaRateio
-    ? rateiosMatrizFiliais.find(rateio => rateio.filial.codigo === filialSelecionadaParaRateio.codigo) || null
+  const rateioMatrizSelecionado = rateiosMatrizFiliais.length > 0
+    ? {
+      valorRateio: rateiosMatrizFiliais.reduce((total, rateio) => total + rateio.valorRateio, 0),
+      percentual: rateiosMatrizFiliais.reduce((total, rateio) => total + rateio.percentual, 0),
+    }
     : null;
-  const lucroLiquidoComRateio = (totalByCodigo.get('04.100') || 0) + (rateioMatrizFilial?.valorRateio || 0);
+  const lucroLiquidoComRateio = (totalByCodigo.get('04.100') || 0) + (rateioMatrizSelecionado?.valorRateio || 0);
 
   const detalhesPorLinha = useMemo(() => {
     const grouped = new Map<string, Map<string, DreContaDetalhe>>();
@@ -740,13 +738,13 @@ const DREConsolidado: React.FC = () => {
     const rows: DreDisplayRow[] = [];
 
     linhasDreExibidas.forEach(row => {
-      if (row.codigo === '04.100' && rateioMatrizFilial) {
+      if (row.codigo === '04.100' && rateioMatrizSelecionado) {
         rows.push({
-          key: `rateio-sede-administrativa-${rateioMatrizFilial.filial.codigo}`,
+          key: `rateio-sede-administrativa-${filiaisSelecionadasParaResumo.map(filial => filial.codigo).join('-')}`,
           kind: 'rateio_sede_administrativa',
           descricao: 'Rateio - Sede Administrativa',
-          total: rateioMatrizFilial.valorRateio,
-          percentualRateio: rateioMatrizFilial.percentual,
+          total: rateioMatrizSelecionado.valorRateio,
+          percentualRateio: rateioMatrizSelecionado.percentual,
           nivel: 2,
         });
       }
@@ -775,7 +773,7 @@ const DREConsolidado: React.FC = () => {
     });
 
     return rows;
-  }, [detalhesPorLinha, linhasDreExibidas, lucroLiquidoComRateio, rateioMatrizFilial]);
+  }, [detalhesPorLinha, filiaisSelecionadasParaResumo, linhasDreExibidas, lucroLiquidoComRateio, rateioMatrizSelecionado]);
 
   const movimentosPendentes = useMemo(
     () => movimentos.filter(row => !row.dre_linha_id),
