@@ -36,7 +36,13 @@ export interface Receita {
 export interface ReceitaFilters {
   dataInicio: string;
   dataFim: string;
+  buscaGeral: string;
+  unidade: string[];
+  centroCusto: string[];
   contaAnalitica: string[];
+  banco: string[];
+  clienteOrigem: string[];
+  forma: string[];
 }
 
 export interface ReceitaContaOpcao {

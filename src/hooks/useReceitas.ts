@@ -24,9 +24,21 @@ const createDefaultFilters = (): ReceitaFilters => {
   return {
     dataInicio: formatDateInput(new Date(today.getFullYear(), today.getMonth(), 1)),
     dataFim: formatDateInput(new Date(today.getFullYear(), today.getMonth() + 1, 0)),
+    buscaGeral: '',
+    unidade: [],
+    centroCusto: [],
     contaAnalitica: [],
+    banco: [],
+    clienteOrigem: [],
+    forma: [],
   };
 };
+
+const normalizeSearch = (value: string | number | null | undefined) =>
+  String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('pt-BR');
 
 const buildDeducaoRows = (
   receitaPayload: Omit<ReceitaFormPayload, 'deducoes'>,
@@ -153,7 +165,35 @@ export function useReceitas() {
     return data.filter(row => {
       if (filters.dataInicio && row.data_recebimento < filters.dataInicio) return false;
       if (filters.dataFim && row.data_recebimento > filters.dataFim) return false;
+      if (filters.unidade.length > 0 && !filters.unidade.includes(row.unidade_nome || '')) return false;
+      if (filters.centroCusto.length > 0 && !filters.centroCusto.includes(row.setor_nome || '')) return false;
       if (filters.contaAnalitica.length > 0 && !filters.contaAnalitica.includes(row.conta_analitica)) return false;
+      if (filters.banco.length > 0 && !filters.banco.includes(row.banco || '')) return false;
+      if (filters.clienteOrigem.length > 0 && !filters.clienteOrigem.includes(row.cliente || '')) return false;
+      if (filters.forma.length > 0 && !filters.forma.includes(row.forma_recebimento || '')) return false;
+
+      const busca = normalizeSearch(filters.buscaGeral.trim());
+      if (busca) {
+        const conteudoPesquisavel = [
+          row.data_recebimento,
+          row.nome,
+          row.cliente,
+          row.unidade_codigo,
+          row.unidade_nome,
+          row.setor_codigo,
+          row.setor_nome,
+          row.conta_analitica,
+          row.conta_natureza,
+          row.banco,
+          row.forma_recebimento,
+          row.documento,
+          row.descricao,
+          row.valor,
+        ].map(normalizeSearch).join(' ');
+
+        if (!conteudoPesquisavel.includes(busca)) return false;
+      }
+
       return true;
     });
   }, [data, filters]);

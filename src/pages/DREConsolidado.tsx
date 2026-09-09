@@ -73,6 +73,61 @@ interface DreMultiSelectProps {
   allLabel: string;
 }
 
+const SETOR_GROUPS = [
+  {
+    id: 'administrativo',
+    label: 'Administrativo',
+    nomes: [
+      'Administrativo',
+      'Manutenção / Suporte / Garantia',
+      'Limpeza',
+      'DP / RH',
+      'Financeiro',
+      'Estoque',
+      'Segurança do Trabalho - SST',
+      'Diretoria / Sócios',
+    ],
+  },
+  {
+    id: 'comercial',
+    label: 'Comercial',
+    nomes: [
+      'Comercial PPAP',
+      'Comercial TELEMARKETING',
+      'Comercial Gestão',
+      'Comercial MDU',
+      'Comercial BKO',
+      'Comercial P1',
+      'Comercial P2',
+      'Comercial Bônus FPD',
+      'Comercial Bônus VPC',
+      'Afastamento Comercial',
+    ],
+  },
+  {
+    id: 'tecnica',
+    label: 'Técnica',
+    nomes: [
+      'Técnico de Campo — ADS & SERVIÇOS',
+      'Técnico de Campo — Desconexão',
+      'Técnico de Campo — VT por equipe',
+      'Técnico de Campo — MDU - Manutenção',
+      'Técnico de Campo — MDU - Construção',
+      'Técnica — Consultivo',
+      'Técnica — Gestão',
+      'Suporte de Campo — ADS & SERVIÇOS',
+      'Suporte de Campo — Desconexão',
+      'Suporte de Campo — VT por equipe',
+      'Suporte de Campo — MDU - Manutenção',
+      'Suporte de Campo — MDU - Construção',
+      'Suporte Sistema',
+      'Afastamento Técnica',
+    ],
+  },
+] as const;
+
+type SetorGroupId = typeof SETOR_GROUPS[number]['id'];
+
 const DreMultiSelect: React.FC<DreMultiSelectProps> = ({
   label,
   options,
@@ -286,6 +341,12 @@ const normalizeComparisonLabel = (value: string) =>
     .trim()
     .toUpperCase();
 
+const normalizeSetorLabel = (value: string) =>
+  normalizeComparisonLabel(value)
+    .replace(/[—–]/g, '-')
+    .replace(/\s+/g, ' ')
+    .replace(/\s*-\s*/g, ' - ');
+
 const fmtPercentDre = (value: number, receitaBruta: number) => {
   if (!hasValue(receitaBruta)) return '-';
 
@@ -443,6 +504,30 @@ const DREConsolidado: React.FC = () => {
     }),
     [contaCodigos, dataFim, dataInicio, grupoCodigos, setorCodigos, subgrupoCodigos, unidadeCodigos],
   );
+
+  const setorCodigosPorGrupo = useMemo(() => {
+    const codigosPorGrupo = {} as Record<SetorGroupId, string[]>;
+
+    SETOR_GROUPS.forEach(grupo => {
+      const nomesDoGrupo = new Set(grupo.nomes.map(normalizeSetorLabel));
+      codigosPorGrupo[grupo.id] = opcoesSetores
+        .filter(opcao => nomesDoGrupo.has(normalizeSetorLabel(opcao.nome)))
+        .map(opcao => opcao.codigo);
+    });
+
+    return codigosPorGrupo;
+  }, [opcoesSetores]);
+
+  const setorGrupoAtivo = useMemo(() => {
+    const codigosSelecionados = new Set(setorCodigos);
+
+    return SETOR_GROUPS.find(grupo => {
+      const codigosDoGrupo = setorCodigosPorGrupo[grupo.id];
+      return codigosDoGrupo.length > 0
+        && codigosSelecionados.size === codigosDoGrupo.length
+        && codigosDoGrupo.every(codigo => codigosSelecionados.has(codigo));
+    })?.id ?? null;
+  }, [setorCodigos, setorCodigosPorGrupo]);
 
   const matrizUnidade = useMemo(
     () => opcoesUnidades.find(opcao => normalizeComparisonLabel(opcao.nome) === 'MATRIZ - SEDE ADMINISTRATIVA'),
@@ -838,6 +923,12 @@ const DREConsolidado: React.FC = () => {
     setContaCodigos([]);
   };
 
+  const handleSetorGroupChange = (grupoId: SetorGroupId) => {
+    setSetorCodigos(
+      setorGrupoAtivo === grupoId ? [] : setorCodigosPorGrupo[grupoId],
+    );
+  };
+
   const limpar = () => {
     const currentMonth = getCurrentMonthPeriod();
     setDataInicio(currentMonth.dataInicio);
@@ -1202,6 +1293,29 @@ const DREConsolidado: React.FC = () => {
               allLabel="Todas"
             />
           </div>
+          <div className="mt-4 flex flex-col gap-2 border-t border-border pt-4 sm:flex-row sm:items-center sm:gap-3">
+            <Label className="text-sm font-semibold text-foreground">Filtro geral de Setor</Label>
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Filtro geral de Setor">
+              {SETOR_GROUPS.map(grupo => {
+                const isActive = setorGrupoAtivo === grupo.id;
+
+                return (
+                  <Button
+                    key={grupo.id}
+                    type="button"
+                    variant={isActive ? 'default' : 'outline'}
+                    size="sm"
+                    aria-pressed={isActive}
+                    disabled={setorCodigosPorGrupo[grupo.id].length === 0}
+                    onClick={() => handleSetorGroupChange(grupo.id)}
+                    className="min-w-[118px]"
+                  >
+                    {grupo.label}
+                  </Button>
+                );
+              })}
+            </div>
+          </div>
         </div>
 
         {isLoading ? (
@@ -1223,7 +1337,15 @@ const DREConsolidado: React.FC = () => {
               </div>
               <div className="card">
                 <div className="text-xs text-muted-foreground">Lucro Líquido</div>
-                <div className="text-xl font-extrabold text-primary mt-1">{fmtBRLDre(lucroLiquidoComRateio)}</div>
+                <div className={`text-xl font-extrabold mt-1 ${
+                  lucroLiquidoComRateio > 0
+                    ? 'text-emerald-500'
+                    : lucroLiquidoComRateio < 0
+                      ? 'text-red-400'
+                      : 'text-foreground'
+                }`}>
+                  {fmtBRLDre(lucroLiquidoComRateio)}
+                </div>
               </div>
             </div>
 

@@ -9,6 +9,7 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  Search,
   Trash2,
   TrendingUp,
   X,
@@ -56,6 +57,10 @@ const normalizeNatureza = (value: string | null | undefined) =>
     .replace(/[\u0300-\u036f]/g, '')
     .trim()
     .toLowerCase();
+
+const uniqueOptions = (values: Array<string | null | undefined>) =>
+  [...new Set(values.map(value => value?.trim()).filter((value): value is string => Boolean(value)))]
+    .sort((a, b) => a.localeCompare(b, 'pt-BR'));
 
 interface MultiSelectProps {
   label: string;
@@ -690,10 +695,41 @@ const Receitas: React.FC = () => {
     [hook.opcoesContas]
   );
 
+  const opcoesUnidades = useMemo(
+    () => uniqueOptions(hook.opcoesUnidades.map(opcao => opcao.unidade)),
+    [hook.opcoesUnidades]
+  );
+
+  const opcoesCentrosCusto = useMemo(
+    () => uniqueOptions(hook.opcoesSetores.map(opcao => opcao.setor)),
+    [hook.opcoesSetores]
+  );
+
+  const opcoesBancos = useMemo(
+    () => uniqueOptions(hook.allData.map(row => row.banco)),
+    [hook.allData]
+  );
+
+  const opcoesClientesOrigens = useMemo(
+    () => uniqueOptions(hook.allData.map(row => row.cliente)),
+    [hook.allData]
+  );
+
+  const opcoesFormas = useMemo(
+    () => uniqueOptions(hook.allData.map(row => row.forma_recebimento)),
+    [hook.allData]
+  );
+
   const hasFilters = Boolean(
     hook.filters.dataInicio ||
     hook.filters.dataFim ||
-    hook.filters.contaAnalitica.length > 0
+    hook.filters.buscaGeral.trim() ||
+    hook.filters.unidade.length > 0 ||
+    hook.filters.centroCusto.length > 0 ||
+    hook.filters.contaAnalitica.length > 0 ||
+    hook.filters.banco.length > 0 ||
+    hook.filters.clienteOrigem.length > 0 ||
+    hook.filters.forma.length > 0
   );
 
   const sortedData = useMemo(() => {
@@ -709,7 +745,7 @@ const Receitas: React.FC = () => {
 
   useEffect(() => {
     setPage(0);
-  }, [hook.filters.dataFim, hook.filters.dataInicio, hook.filters.contaAnalitica]);
+  }, [hook.filters]);
 
   useEffect(() => {
     setPage(currentPage => Math.min(currentPage, totalPages - 1));
@@ -801,6 +837,20 @@ const Receitas: React.FC = () => {
           />
 
           <div className="filter-section">
+            <div className="form-group md:col-span-2">
+              <Label className="form-label">Buscar Geral</Label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  type="text"
+                  className="form-control w-full pl-9"
+                  placeholder="Pesquisar cliente, unidade, centro de custo, banco, documento ou observação"
+                  value={hook.filters.buscaGeral}
+                  onChange={event => hook.setFilters({ buscaGeral: event.target.value })}
+                />
+              </div>
+            </div>
+
             <MonthPeriodNavigator
               startDate={hook.filters.dataInicio}
               endDate={hook.filters.dataFim}
@@ -809,6 +859,14 @@ const Receitas: React.FC = () => {
                 dataFim: period.endDate,
               })}
             />
+
+            <MultiSelect
+              label="Unidade"
+              options={opcoesUnidades}
+              selected={hook.filters.unidade}
+              onChange={selected => hook.setFilters({ unidade: selected })}
+            />
+
             <div className="form-group">
               <Label className="form-label">Data Inicial</Label>
               <input
@@ -830,10 +888,38 @@ const Receitas: React.FC = () => {
             </div>
 
             <MultiSelect
+              label="Cliente / Origem"
+              options={opcoesClientesOrigens}
+              selected={hook.filters.clienteOrigem}
+              onChange={selected => hook.setFilters({ clienteOrigem: selected })}
+            />
+
+            <MultiSelect
+              label="Centro de Custo"
+              options={opcoesCentrosCusto}
+              selected={hook.filters.centroCusto}
+              onChange={selected => hook.setFilters({ centroCusto: selected })}
+            />
+
+            <MultiSelect
               label="Conta Analítica"
               options={opcoesContaAnalitica}
               selected={hook.filters.contaAnalitica}
               onChange={(selected) => hook.setFilters({ contaAnalitica: selected })}
+            />
+
+            <MultiSelect
+              label="Banco"
+              options={opcoesBancos}
+              selected={hook.filters.banco}
+              onChange={selected => hook.setFilters({ banco: selected })}
+            />
+
+            <MultiSelect
+              label="Forma"
+              options={opcoesFormas}
+              selected={hook.filters.forma}
+              onChange={selected => hook.setFilters({ forma: selected })}
             />
           </div>
         </div>
@@ -868,7 +954,21 @@ const Receitas: React.FC = () => {
               </div>
 
               <div className="max-h-[620px] w-full overflow-auto [scrollbar-gutter:stable]">
-                <table className="data-table min-w-[1240px] w-full text-xs">
+                <table className="data-table w-full min-w-[1260px] table-fixed [&_th]:px-2 [&_th]:py-3 [&_th]:text-[11px] [&_td]:break-words [&_td]:px-2 [&_td]:py-3 [&_td]:text-[11px] [&_td]:align-top">
+                  <colgroup>
+                    {canManageReceitas && <col className="w-12" />}
+                    <col className="w-[88px]" />
+                    <col className="w-[132px]" />
+                    <col className="w-[108px]" />
+                    <col className="w-[132px]" />
+                    <col className="w-[160px]" />
+                    <col className="w-20" />
+                    <col className="w-[88px]" />
+                    <col className="w-[72px]" />
+                    <col className="w-[105px]" />
+                    <col className="w-[140px]" />
+                    <col className="w-[112px]" />
+                  </colgroup>
                   <thead>
                     <tr>
                       {canManageReceitas && <th>Ação</th>}
@@ -881,13 +981,13 @@ const Receitas: React.FC = () => {
                       <th>Banco</th>
                       <th>Forma</th>
                       <th>Documento</th>
-                      <th>Observação</th>
-                      <th className="text-right">Valor</th>
+                      <th className="sticky right-[112px] z-20 border-l border-border bg-muted">Observação</th>
+                      <th className="sticky right-0 z-20 bg-muted text-right">Valor</th>
                     </tr>
                   </thead>
                   <tbody>
                     {pageData.map(row => (
-                      <tr key={row.id}>
+                      <tr key={row.id} className="group">
                         {canManageReceitas && (
                           <td>
                             <Button
@@ -917,9 +1017,13 @@ const Receitas: React.FC = () => {
                         <td>{renderNatureza(row)}</td>
                         <td>{row.banco || '-'}</td>
                         <td>{row.forma_recebimento || '-'}</td>
-                        <td>{row.documento || '-'}</td>
-                        <td>{row.descricao || '-'}</td>
-                        <td className="text-right font-semibold whitespace-nowrap">{fmtBRL(row.valor)}</td>
+                        <td className="break-words">{row.documento || '-'}</td>
+                        <td className="sticky right-[112px] z-[5] break-words border-l border-border bg-card group-hover:bg-muted">
+                          {row.descricao || '-'}
+                        </td>
+                        <td className="sticky right-0 z-[5] whitespace-nowrap bg-card text-right font-semibold group-hover:bg-muted">
+                          {fmtBRL(row.valor)}
+                        </td>
                       </tr>
                     ))}
                     {pageData.length === 0 && (
