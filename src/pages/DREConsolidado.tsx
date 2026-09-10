@@ -720,6 +720,7 @@ const DREConsolidado: React.FC = () => {
     [linhasCalculadas],
   );
   const receitaBrutaDre = totalByCodigo.get('01.01') || 0;
+  const possuiFiltroSetor = setorCodigos.length > 0;
   const rateiosMatrizFiliais = useMemo(() => {
     if (filiaisSelecionadasParaResumo.length === 0 || !matrizUnidade) return [];
 
@@ -746,8 +747,23 @@ const DREConsolidado: React.FC = () => {
     if (!hasValue(receitaLiquidaTotal)) return [];
 
     return filiaisSelecionadasParaResumo.map(filial => {
+      const movimentosFilial = movimentosDaUnidade(filial);
+      const totaisFilial = computeDreTotalsByMovements(linhas, movimentosFilial);
       const receitaLiquidaFilial = receitasLiquidasPorFilial.get(filial.codigo) || 0;
       const percentual = (receitaLiquidaFilial / receitaLiquidaTotal) * 100;
+      const valorRateioFilial = resultadoLiquidoMatriz * (percentual / 100);
+      const receitaBrutaFilial = totaisFilial.get('01.01') || 0;
+      const receitaBrutaSetores = possuiFiltroSetor
+        ? computeDreTotalsByMovements(
+          linhas,
+          movimentosFilial.filter(movimento => setorCodigos.includes(movimento.setor_codigo || '')),
+        ).get('01.01') || 0
+        : receitaBrutaFilial;
+      const percentualSetores = !possuiFiltroSetor
+        ? 100
+        : hasValue(receitaBrutaFilial)
+          ? (receitaBrutaSetores / receitaBrutaFilial) * 100
+          : 0;
 
       return {
         filial,
@@ -755,16 +771,35 @@ const DREConsolidado: React.FC = () => {
         receitaLiquidaFilial,
         receitaLiquidaTotal,
         percentual,
-        valorRateio: resultadoLiquidoMatriz * (percentual / 100),
+        receitaBrutaFilial,
+        receitaBrutaSetores,
+        percentualSetores,
+        valorRateioFilial,
+        valorRateio: valorRateioFilial * (percentualSetores / 100),
       };
     });
-  }, [filiais, filiaisSelecionadasParaResumo, linhas, matrizUnidade, movimentosBaseRateio]);
-  const rateioMatrizSelecionado = rateiosMatrizFiliais.length > 0
-    ? {
-      valorRateio: rateiosMatrizFiliais.reduce((total, rateio) => total + rateio.valorRateio, 0),
-      percentual: rateiosMatrizFiliais.reduce((total, rateio) => total + rateio.percentual, 0),
-    }
-    : null;
+  }, [
+    filiais,
+    filiaisSelecionadasParaResumo,
+    linhas,
+    matrizUnidade,
+    movimentosBaseRateio,
+    possuiFiltroSetor,
+    setorCodigos,
+  ]);
+  const rateioMatrizSelecionado = useMemo(() => {
+    if (rateiosMatrizFiliais.length === 0) return null;
+
+    const valorRateio = rateiosMatrizFiliais.reduce((total, rateio) => total + rateio.valorRateio, 0);
+    const valorRateioFilial = rateiosMatrizFiliais.reduce((total, rateio) => total + rateio.valorRateioFilial, 0);
+
+    return {
+      valorRateio,
+      percentual: possuiFiltroSetor && hasValue(valorRateioFilial)
+        ? (valorRateio / valorRateioFilial) * 100
+        : rateiosMatrizFiliais.reduce((total, rateio) => total + rateio.percentual, 0),
+    };
+  }, [possuiFiltroSetor, rateiosMatrizFiliais]);
   const lucroLiquidoComRateio = (totalByCodigo.get('04.100') || 0) + (rateioMatrizSelecionado?.valorRateio || 0);
 
   const detalhesPorLinha = useMemo(() => {
@@ -1352,7 +1387,9 @@ const DREConsolidado: React.FC = () => {
             {rateiosMatrizFiliais.length > 0 && (
               <div className="card dre-no-print border-primary/30">
                 <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Rateio da Sede Administrativa pela Receita Líquida das filiais
+                  {possuiFiltroSetor
+                    ? 'Rateio da Sede Administrativa pela participação dos setores na Receita Bruta da filial'
+                    : 'Rateio da Sede Administrativa pela Receita Líquida das filiais'}
                 </div>
                 <div className="mt-3 divide-y divide-border/50">
                   {rateiosMatrizFiliais.map(rateio => (
@@ -1363,36 +1400,73 @@ const DREConsolidado: React.FC = () => {
                       <div className="text-sm font-semibold text-foreground xl:text-left">
                         {rateio.filial.nome}
                       </div>
-                      <div>
-                        <div className="text-xs text-muted-foreground">Resultado da Matriz</div>
-                        <div className={`text-lg font-extrabold ${rateio.resultadoLiquidoMatriz < 0 ? 'text-red-400' : 'text-emerald-500'}`}>
-                          {fmtBRLDre(rateio.resultadoLiquidoMatriz)}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-muted-foreground">Receita Líquida da filial</div>
-                        <div className={`text-lg font-extrabold ${rateio.receitaLiquidaFilial < 0 ? 'text-red-400' : 'text-foreground'}`}>
-                          {fmtBRLDre(rateio.receitaLiquidaFilial)}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-muted-foreground">Receita Líquida total</div>
-                        <div className={`text-lg font-extrabold ${rateio.receitaLiquidaTotal < 0 ? 'text-red-400' : 'text-foreground'}`}>
-                          {fmtBRLDre(rateio.receitaLiquidaTotal)}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-muted-foreground">Representatividade</div>
-                        <div className="text-lg font-extrabold text-primary">
-                          {fmtPercentualAbsoluto(rateio.percentual)}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-muted-foreground">Rateio da Sede</div>
-                        <div className={`text-lg font-extrabold ${rateio.valorRateio < 0 ? 'text-red-400' : 'text-emerald-500'}`}>
-                          {fmtBRLDre(rateio.valorRateio)}
-                        </div>
-                      </div>
+                      {possuiFiltroSetor ? (
+                        <>
+                          <div>
+                            <div className="text-xs text-muted-foreground">Rateio total da unidade</div>
+                            <div className={`text-lg font-extrabold ${rateio.valorRateioFilial < 0 ? 'text-red-400' : 'text-emerald-500'}`}>
+                              {fmtBRLDre(rateio.valorRateioFilial)}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-xs text-muted-foreground">Receita Bruta da filial</div>
+                            <div className={`text-lg font-extrabold ${rateio.receitaBrutaFilial < 0 ? 'text-red-400' : 'text-foreground'}`}>
+                              {fmtBRLDre(rateio.receitaBrutaFilial)}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-xs text-muted-foreground">Receita Bruta dos setores</div>
+                            <div className={`text-lg font-extrabold ${rateio.receitaBrutaSetores < 0 ? 'text-red-400' : 'text-foreground'}`}>
+                              {fmtBRLDre(rateio.receitaBrutaSetores)}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-xs text-muted-foreground">Participação na unidade</div>
+                            <div className="text-lg font-extrabold text-primary">
+                              {fmtPercentualAbsoluto(rateio.percentualSetores)}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-xs text-muted-foreground">Rateio aplicado</div>
+                            <div className={`text-lg font-extrabold ${rateio.valorRateio < 0 ? 'text-red-400' : 'text-emerald-500'}`}>
+                              {fmtBRLDre(rateio.valorRateio)}
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div>
+                            <div className="text-xs text-muted-foreground">Resultado da Matriz</div>
+                            <div className={`text-lg font-extrabold ${rateio.resultadoLiquidoMatriz < 0 ? 'text-red-400' : 'text-emerald-500'}`}>
+                              {fmtBRLDre(rateio.resultadoLiquidoMatriz)}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-xs text-muted-foreground">Receita Líquida da filial</div>
+                            <div className={`text-lg font-extrabold ${rateio.receitaLiquidaFilial < 0 ? 'text-red-400' : 'text-foreground'}`}>
+                              {fmtBRLDre(rateio.receitaLiquidaFilial)}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-xs text-muted-foreground">Receita Líquida total</div>
+                            <div className={`text-lg font-extrabold ${rateio.receitaLiquidaTotal < 0 ? 'text-red-400' : 'text-foreground'}`}>
+                              {fmtBRLDre(rateio.receitaLiquidaTotal)}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-xs text-muted-foreground">Representatividade</div>
+                            <div className="text-lg font-extrabold text-primary">
+                              {fmtPercentualAbsoluto(rateio.percentual)}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-xs text-muted-foreground">Rateio da Sede</div>
+                            <div className={`text-lg font-extrabold ${rateio.valorRateio < 0 ? 'text-red-400' : 'text-emerald-500'}`}>
+                              {fmtBRLDre(rateio.valorRateio)}
+                            </div>
+                          </div>
+                        </>
+                      )}
                     </div>
                   ))}
                 </div>
