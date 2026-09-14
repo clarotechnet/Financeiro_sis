@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { LoadingSpinner } from '@/components/comissionamento/LoadingSpinner';
 import { MonthPeriodNavigator } from '@/components/MonthPeriodNavigator';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
+import { sortUnidadesParaFiltro } from '@/lib/unidades';
 
 type DreLinhaTipo = 'grupo' | 'contas' | 'subtotal' | 'resultado';
 
@@ -569,10 +570,14 @@ const DREConsolidado: React.FC = () => {
     if (setoresResult.error) throw setoresResult.error;
     if (planoContasResult.error) throw planoContasResult.error;
 
-    setOpcoesUnidades((unidadesResult.data || []).map((row: any) => ({
-      codigo: row.codigo,
-      nome: row.unidade,
-    })));
+    setOpcoesUnidades(sortUnidadesParaFiltro(
+      (unidadesResult.data || []).map((row: any) => ({
+        codigo: row.codigo,
+        nome: row.unidade,
+      })),
+      unidade => unidade.codigo,
+      unidade => unidade.nome,
+    ));
 
     setOpcoesSetores((setoresResult.data || []).map((row: any) => ({
       codigo: row.codigo,

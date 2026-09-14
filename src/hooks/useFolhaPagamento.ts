@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
+import { sortUnidadesParaFiltro } from '@/lib/unidades';
 
 export interface DadoFinanceiro {
     id: string;
@@ -377,11 +378,11 @@ export function useFolhaPagamento() {
             );
 
             setOpcoesUnidades(
-                (unidadesResult.data || [])
-                    .slice()
-                    .sort((a: any, b: any) =>
-                        String(a.codigo).localeCompare(String(b.codigo), 'pt-BR', { numeric: true })
-                    )
+                sortUnidadesParaFiltro(
+                    unidadesResult.data || [],
+                    (unidade: any) => String(unidade.codigo),
+                    (unidade: any) => String(unidade.unidade),
+                )
                     .map((row: any) => String(row.unidade || '').trim())
                     .filter(Boolean),
             );

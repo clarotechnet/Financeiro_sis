@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
+import { sortUnidadesParaFiltro } from '@/lib/unidades';
 import {
   BeneficioFilters,
   BeneficioImportPayload,
@@ -127,13 +128,16 @@ export function useBeneficios(tipo: BeneficioTipo) {
       if (setoresResult.error) throw setoresResult.error;
 
       setOpcoes({
-        unidades: ((unidadesResult.data || []) as { codigo: string; unidade: string }[])
+        unidades: sortUnidadesParaFiltro(
+          ((unidadesResult.data || []) as { codigo: string; unidade: string }[])
           .map(row => ({
             id: row.codigo,
             nome: row.unidade,
             ordem: Number(row.codigo.replace(/\D/g, '')) || null,
-          }))
-          .sort((a, b) => a.id.localeCompare(b.id, 'pt-BR', { numeric: true })),
+          })),
+          unidade => unidade.id,
+          unidade => unidade.nome,
+        ),
         setores: ((setoresResult.data || []) as { codigo: string; setor: string }[])
           .map(row => ({
             id: row.codigo,
