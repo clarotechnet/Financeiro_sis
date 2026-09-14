@@ -519,15 +519,18 @@ const DREConsolidado: React.FC = () => {
     return codigosPorGrupo;
   }, [opcoesSetores]);
 
-  const setorGrupoAtivo = useMemo(() => {
+  const setorGruposAtivos = useMemo(() => {
     const codigosSelecionados = new Set(setorCodigos);
 
-    return SETOR_GROUPS.find(grupo => {
-      const codigosDoGrupo = setorCodigosPorGrupo[grupo.id];
-      return codigosDoGrupo.length > 0
-        && codigosSelecionados.size === codigosDoGrupo.length
-        && codigosDoGrupo.every(codigo => codigosSelecionados.has(codigo));
-    })?.id ?? null;
+    return new Set(
+      SETOR_GROUPS
+        .filter(grupo => {
+          const codigosDoGrupo = setorCodigosPorGrupo[grupo.id];
+          return codigosDoGrupo.length > 0
+            && codigosDoGrupo.every(codigo => codigosSelecionados.has(codigo));
+        })
+        .map(grupo => grupo.id),
+    );
   }, [setorCodigos, setorCodigosPorGrupo]);
 
   const matrizUnidade = useMemo(
@@ -964,9 +967,24 @@ const DREConsolidado: React.FC = () => {
   };
 
   const handleSetorGroupChange = (grupoId: SetorGroupId) => {
-    setSetorCodigos(
-      setorGrupoAtivo === grupoId ? [] : setorCodigosPorGrupo[grupoId],
-    );
+    const codigosDoGrupo = setorCodigosPorGrupo[grupoId];
+
+    setSetorCodigos(codigosAtuais => {
+      const proximosCodigos = new Set(codigosAtuais);
+      const grupoEstaAtivo = codigosDoGrupo.every(codigo => proximosCodigos.has(codigo));
+
+      codigosDoGrupo.forEach(codigo => {
+        if (grupoEstaAtivo) {
+          proximosCodigos.delete(codigo);
+        } else {
+          proximosCodigos.add(codigo);
+        }
+      });
+
+      return opcoesSetores
+        .map(opcao => opcao.codigo)
+        .filter(codigo => proximosCodigos.has(codigo));
+    });
   };
 
   const limpar = () => {
@@ -1337,7 +1355,7 @@ const DREConsolidado: React.FC = () => {
             <Label className="text-sm font-semibold text-foreground">Filtro geral de Setor</Label>
             <div className="flex flex-wrap gap-2" role="group" aria-label="Filtro geral de Setor">
               {SETOR_GROUPS.map(grupo => {
-                const isActive = setorGrupoAtivo === grupo.id;
+                const isActive = setorGruposAtivos.has(grupo.id);
 
                 return (
                   <Button
