@@ -198,7 +198,7 @@ export const AppSidebar: React.FC = () => {
                                 <SidebarMenuItem>
                                     <SidebarMenuButton
                                         asChild
-                                        isActive={pathname === '/configuracoes'}
+                                        isActive={pathname.startsWith('/configuracoes')}
                                         className="data-[active=true]:bg-primary data-[active=true]:text-primary-foreground"
                                     >
                                         <NavLink to="/configuracoes">

@@ -18,6 +18,7 @@ import Beneficios from "./pages/Beneficios";
 import ResetPassword from "./pages/ResetPassword";
 import DREConsolidado from "./pages/DREConsolidado";
 import FluxoCaixa from "./pages/FluxoCaixa";
+import MonitoramentoColaboradores from "./pages/MonitoramentoColaboradores";
 import { ROLE_ADMIN, ROLE_FINANCE_ASSISTANT, ROLE_RH } from "@/lib/profileRoles";
 import { useAuth } from "@/contexts/useAuth";
 
@@ -116,6 +117,14 @@ const App = () => (
                   element={
                     <ProtectedRoute allowedRoles={[ROLE_ADMIN, ROLE_RH, ROLE_FINANCE_ASSISTANT]}>
                       <Admin />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/configuracoes/monitoramento"
+                  element={
+                    <ProtectedRoute allowedRoles={[ROLE_ADMIN, ROLE_RH, ROLE_FINANCE_ASSISTANT]}>
+                      <MonitoramentoColaboradores />
                     </ProtectedRoute>
                   }
                 />

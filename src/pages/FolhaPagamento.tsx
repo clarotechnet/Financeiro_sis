@@ -17,7 +17,7 @@ import { FolhaTable } from '@/components/folha/FolhaTable';
 import { useAuth } from '@/contexts/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { downloadOperationalReport } from '@/lib/operationalReports';
-import { ROLE_RH } from '@/lib/profileRoles';
+import { canManageExistingFinancialData, ROLE_RH } from '@/lib/profileRoles';
 
 interface MultiSelectProps {
   label: string;
@@ -114,10 +114,11 @@ const FolhaPagamento: React.FC = () => {
   const activeTab = params.get('tab') || 'kpis';
   const { isAdmin, profile } = useAuth();
   const canImport = isAdmin || profile?.role === ROLE_RH;
+  const canDelete = canManageExistingFinancialData(profile?.role);
   const { toast } = useToast();
   const {
-    data, isLoading, error, filters, setFilters, clearFilters,
-    fetchData, importExcel, opcoesCentrosCusto, opcoesNomes, opcoesUnidades,
+    data, isLoading, isDeleting, error, filters, setFilters, clearFilters,
+    fetchData, importExcel, deleteSelected, opcoesCentrosCusto, opcoesNomes, opcoesUnidades,
     kpis, centrosCusto, composicaoDespesas, unidadesDetalhe,
   } = useFolhaPagamento();
 
@@ -273,7 +274,14 @@ const FolhaPagamento: React.FC = () => {
             {activeTab === 'kpis' && <FolhaKPIs kpis={kpis} />}
             {activeTab === 'charts' && <FolhaCharts centrosCusto={centrosCusto} composicaoDespesas={composicaoDespesas} />}
             {activeTab === 'frentes' && <FolhaFrentes unidades={unidadesDetalhe} />}
-            {activeTab === 'table' && <FolhaTable data={data} />}
+            {activeTab === 'table' && (
+              <FolhaTable
+                data={data}
+                canDelete={canDelete}
+                isDeleting={isDeleting}
+                onDeleteSelected={deleteSelected}
+              />
+            )}
           </div>
         )}
       </div>

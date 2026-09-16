@@ -326,6 +326,7 @@ export function useFolhaPagamento() {
     const [opcoesUnidades, setOpcoesUnidades] = useState<string[]>([]);
     const [opcoesCentrosCusto, setOpcoesCentrosCusto] = useState<string[]>([]);
     const [isLoading, setIsLoading] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [filters, setFilters] = useState<FolhaFilters>(createDefaultFilters);
 
@@ -341,18 +342,52 @@ export function useFolhaPagamento() {
                     .from('vw_dados_financeiro_operacional')
                     .select('*')
                     .range(page * size, (page + 1) * size - 1)
-                    .order('data', { ascending: false });
+                    .order('data', { ascending: false })
+                    .order('id', { ascending: true });
                 if (err) throw err;
                 if (!rows || rows.length === 0) break;
                 all = all.concat(rows as DadoFinanceiro[]);
                 if (rows.length < size) break;
                 page++;
             }
-            const [pagamentosRows, receitasRows, registros] = await Promise.all([
+
+            // A tabela detalhada depende apenas desta view. Publique os registros antes
+            // dos dados auxiliares para que uma falha em KPIs nao esconda a folha.
+            setData(all);
+
+            const [pagamentosResult, receitasResult, registrosResult, unidadesResult, setoresResult] = await Promise.allSettled([
                 fetchAllRows<FolhaPagamentoFonte>('vw_lancamentos_pix_com_conta_analitica', 'data_lancamento'),
                 fetchAllRows<FolhaReceitaFonte>('vw_receitas_plano_contas', 'data_recebimento'),
                 fetchAllRows<FolhaColaboradorFonte>('registros_dados', 'nome'),
+                externalSupabase.from('unidades').select('codigo, unidade'),
+                externalSupabase.from('setor').select('codigo, setor'),
             ]);
+
+            const auxiliaryErrors: unknown[] = [];
+            const unwrapRows = <T,>(result: PromiseSettledResult<T[]>) => {
+                if (result.status === 'fulfilled') return result.value;
+                auxiliaryErrors.push(result.reason);
+                return [] as T[];
+            };
+            const unwrapSupabaseRows = <T,>(
+                result: PromiseSettledResult<{ data: T[] | null; error: any }>,
+            ) => {
+                if (result.status === 'rejected') {
+                    auxiliaryErrors.push(result.reason);
+                    return [] as T[];
+                }
+                if (result.value.error) {
+                    auxiliaryErrors.push(result.value.error);
+                    return [] as T[];
+                }
+                return result.value.data || [];
+            };
+
+            const pagamentosRows = unwrapRows(pagamentosResult);
+            const receitasRows = unwrapRows(receitasResult);
+            const registros = unwrapRows(registrosResult);
+            const unidadesRows = unwrapSupabaseRows<any>(unidadesResult as PromiseSettledResult<{ data: any[] | null; error: any }>);
+            const setoresRows = unwrapSupabaseRows<any>(setoresResult as PromiseSettledResult<{ data: any[] | null; error: any }>);
             const registrosByCpf = new Map<string, { unidade_codigo: string | null; setor_codigo: string | null }>();
 
             registros.forEach(registro => {
@@ -362,24 +397,16 @@ export function useFolhaPagamento() {
                 });
             });
 
-            const [unidadesResult, setoresResult] = await Promise.all([
-                externalSupabase.from('unidades').select('codigo, unidade'),
-                externalSupabase.from('setor').select('codigo, setor'),
-            ]);
-
-            if (unidadesResult.error) throw unidadesResult.error;
-            if (setoresResult.error) throw setoresResult.error;
-
             const unidadesByCodigo = new Map(
-                (unidadesResult.data || []).map((row: any) => [String(row.codigo), String(row.unidade)]),
+                unidadesRows.map((row: any) => [String(row.codigo), String(row.unidade)]),
             );
             const setoresByCodigo = new Map(
-                (setoresResult.data || []).map((row: any) => [String(row.codigo), String(row.setor)]),
+                setoresRows.map((row: any) => [String(row.codigo), String(row.setor)]),
             );
 
             setOpcoesUnidades(
                 sortUnidadesParaFiltro(
-                    unidadesResult.data || [],
+                    unidadesRows,
                     (unidade: any) => String(unidade.codigo),
                     (unidade: any) => String(unidade.unidade),
                 )
@@ -387,7 +414,7 @@ export function useFolhaPagamento() {
                     .filter(Boolean),
             );
             setOpcoesCentrosCusto(
-                (setoresResult.data || [])
+                setoresRows
                     .map((row: any) => String(row.setor || '').trim())
                     .filter(Boolean)
                     .sort((a: string, b: string) => a.localeCompare(b, 'pt-BR')),
@@ -417,6 +444,10 @@ export function useFolhaPagamento() {
                     ? setoresByCodigo.get(registro.setor_codigo) || registro.setor_codigo
                     : null,
             })));
+
+            if (auxiliaryErrors.length > 0) {
+                console.warn('Alguns dados auxiliares da Folha nao puderam ser carregados:', auxiliaryErrors);
+            }
         } catch (e: any) {
             console.error('Erro Folha:', e);
             setError(e.message || 'Erro ao carregar');
@@ -700,16 +731,48 @@ export function useFolhaPagamento() {
         return { inserted, skipped, errors };
     }, [fetchData]);
 
+    const deleteSelected = useCallback(async (ids: string[]) => {
+        const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
+        if (uniqueIds.length === 0) return 0;
+
+        setIsDeleting(true);
+        let deleted = 0;
+        try {
+            for (let index = 0; index < uniqueIds.length; index += 200) {
+                const chunk = uniqueIds.slice(index, index + 200);
+                const { data: deletedRows, error: deleteError } = await externalSupabase
+                    .from('dados_financeiro')
+                    .delete()
+                    .in('id', chunk)
+                    .select('id');
+
+                if (deleteError) throw deleteError;
+                deleted += deletedRows?.length || 0;
+            }
+
+            if (deleted !== uniqueIds.length) {
+                throw new Error('Alguns registros não puderam ser excluídos. Atualize a página e confira sua permissão.');
+            }
+
+            return deleted;
+        } finally {
+            await fetchData();
+            setIsDeleting(false);
+        }
+    }, [fetchData]);
+
     return {
         data: filtered,
         allData: data,
         isLoading,
+        isDeleting,
         error,
         filters,
         setFilters: (p: Partial<FolhaFilters>) => setFilters(prev => ({ ...prev, ...p })),
         clearFilters: () => setFilters(createDefaultFilters()),
         fetchData,
         importExcel,
+        deleteSelected,
         opcoesCentrosCusto,
         opcoesNomes,
         opcoesUnidades,

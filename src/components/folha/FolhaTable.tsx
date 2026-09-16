@@ -1,8 +1,25 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { ListChecks, Loader2, Trash2 } from 'lucide-react';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { useToast } from '@/hooks/use-toast';
 import type { DadoFinanceiro } from '@/hooks/useFolhaPagamento';
 
 interface Props {
     data: DadoFinanceiro[];
+    canDelete: boolean;
+    isDeleting: boolean;
+    onDeleteSelected: (ids: string[]) => Promise<number>;
 }
 
 const fmtMoney = (v: number) =>
@@ -31,9 +48,13 @@ const DETAIL_FIELDS: { label: string; field: keyof DadoFinanceiro }[] = [
     { label: 'Líquido', field: 'salario_liquido' },
 ];
 
-export const FolhaTable: React.FC<Props> = ({ data }) => {
+export const FolhaTable: React.FC<Props> = ({ data, canDelete, isDeleting, onDeleteSelected }) => {
+    const { toast } = useToast();
     const [search, setSearch] = useState('');
     const [page, setPage] = useState(0);
+    const [selectionMode, setSelectionMode] = useState(false);
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
     const filtered = useMemo(() => {
         const q = search.trim().toLowerCase();
@@ -52,6 +73,58 @@ export const FolhaTable: React.FC<Props> = ({ data }) => {
 
     const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
     const pageData = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+    const pageIds = pageData.map(row => row.id);
+    const allPageSelected = pageIds.length > 0 && pageIds.every(id => selectedIds.has(id));
+    const somePageSelected = pageIds.some(id => selectedIds.has(id));
+
+    useEffect(() => {
+        setPage(current => Math.min(current, totalPages - 1));
+    }, [totalPages]);
+
+    useEffect(() => {
+        const availableIds = new Set(filtered.map(row => row.id));
+        setSelectedIds(previous => new Set(Array.from(previous).filter(id => availableIds.has(id))));
+    }, [filtered]);
+
+    const togglePageSelection = (selected: boolean) => {
+        setSelectedIds(previous => {
+            const next = new Set(previous);
+            pageIds.forEach(id => {
+                if (selected) next.add(id);
+                else next.delete(id);
+            });
+            return next;
+        });
+    };
+
+    const toggleRowSelection = (id: string, selected: boolean) => {
+        setSelectedIds(previous => {
+            const next = new Set(previous);
+            if (selected) next.add(id);
+            else next.delete(id);
+            return next;
+        });
+    };
+
+    const handleDeleteSelected = async () => {
+        try {
+            const deleted = await onDeleteSelected(Array.from(selectedIds));
+            setSelectedIds(new Set());
+            setSelectionMode(false);
+            setDeleteConfirmOpen(false);
+            toast({
+                title: 'Registros excluídos',
+                description: `${deleted} registro(s) da folha foram excluídos.`,
+            });
+        } catch (deleteError: any) {
+            setDeleteConfirmOpen(false);
+            toast({
+                title: 'Não foi possível excluir',
+                description: deleteError.message || 'Confira sua permissão e tente novamente.',
+                variant: 'destructive',
+            });
+        }
+    };
 
     return (
         <div className="card" style={{ overflow: 'hidden' }}>
@@ -60,6 +133,37 @@ export const FolhaTable: React.FC<Props> = ({ data }) => {
                     Dados Detalhados <span className="text-sm text-muted-foreground font-normal">({filtered.length})</span>
                 </h3>
                 <div className="flex flex-wrap items-center justify-end gap-3">
+                    {canDelete && (
+                        <>
+                            <Button
+                                variant={selectionMode ? 'secondary' : 'outline'}
+                                size="sm"
+                                className="gap-1"
+                                disabled={isDeleting || filtered.length === 0}
+                                onClick={() => {
+                                    setSelectionMode(previous => !previous);
+                                    setSelectedIds(new Set());
+                                }}
+                            >
+                                <ListChecks className="w-4 h-4" />
+                                {selectionMode ? 'Cancelar seleção' : 'Selecionar'}
+                            </Button>
+                            {selectionMode && selectedIds.size > 0 && (
+                                <Button
+                                    variant="destructive"
+                                    size="sm"
+                                    className="gap-1"
+                                    disabled={isDeleting}
+                                    onClick={() => setDeleteConfirmOpen(true)}
+                                >
+                                    {isDeleting
+                                        ? <Loader2 className="w-4 h-4 animate-spin" />
+                                        : <Trash2 className="w-4 h-4" />}
+                                    Excluir selecionados ({selectedIds.size})
+                                </Button>
+                            )}
+                        </>
+                    )}
                     <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-right">
                         <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                             L&iacute;quido dos registros
@@ -80,6 +184,15 @@ export const FolhaTable: React.FC<Props> = ({ data }) => {
                 <table className="w-full text-xs">
                     <thead className="bg-muted/40 text-foreground">
                         <tr>
+                            {canDelete && selectionMode && (
+                                <th className="w-10 px-3 py-2 text-left">
+                                    <Checkbox
+                                        checked={allPageSelected ? true : somePageSelected ? 'indeterminate' : false}
+                                        onCheckedChange={checked => togglePageSelection(checked === true)}
+                                        aria-label="Selecionar registros desta página"
+                                    />
+                                </th>
+                            )}
                             <th className="px-3 py-2 text-left whitespace-nowrap">Data</th>
                             <th className="px-3 py-2 text-left whitespace-nowrap">Nome</th>
                             <th className="px-3 py-2 text-left whitespace-nowrap">CPF</th>
@@ -94,6 +207,15 @@ export const FolhaTable: React.FC<Props> = ({ data }) => {
                     <tbody>
                         {pageData.map(r => (
                             <tr key={r.id} className="border-t border-border hover:bg-muted/20">
+                                {canDelete && selectionMode && (
+                                    <td className="px-3 py-2">
+                                        <Checkbox
+                                            checked={selectedIds.has(r.id)}
+                                            onCheckedChange={checked => toggleRowSelection(r.id, checked === true)}
+                                            aria-label={`Selecionar registro de ${r.nome}`}
+                                        />
+                                    </td>
+                                )}
                                 <td className="px-3 py-2 whitespace-nowrap">{fmtDate(r.data)}</td>
                                 <td className="px-3 py-2 whitespace-nowrap">{r.nome}</td>
                                 <td className="px-3 py-2 whitespace-nowrap">{fmtCPF(r.cpf)}</td>
@@ -118,7 +240,7 @@ export const FolhaTable: React.FC<Props> = ({ data }) => {
                             </tr>
                         ))}
                         {pageData.length === 0 && (
-                            <tr><td colSpan={DETAIL_FIELDS.length + 4} className="px-3 py-8 text-center text-muted-foreground">
+                            <tr><td colSpan={DETAIL_FIELDS.length + 4 + (canDelete && selectionMode ? 1 : 0)} className="px-3 py-8 text-center text-muted-foreground">
                                 Nenhum registro encontrado.
                             </td></tr>
                         )}
@@ -145,6 +267,31 @@ export const FolhaTable: React.FC<Props> = ({ data }) => {
                     </div>
                 </div>
             )}
+
+            <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Excluir registros selecionados?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            {selectedIds.size} registro(s) serão removidos definitivamente da Folha de Pagamento.
+                            Os lançamentos já importados em Pagamentos não serão alterados.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction
+                            disabled={isDeleting}
+                            onClick={event => {
+                                event.preventDefault();
+                                handleDeleteSelected();
+                            }}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                            {isDeleting ? 'Excluindo...' : 'Excluir'}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 };

@@ -51,6 +51,7 @@ import {
   Shield,
   Upload,
   ListTree,
+  Activity,
 } from 'lucide-react';
 
 interface PendingUser {
@@ -731,6 +732,14 @@ export default function Admin() {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <Button
+              onClick={() => navigate('/configuracoes/monitoramento')}
+              variant="outline"
+              className="gap-2"
+            >
+              <Activity className="h-4 w-4" />
+              Monitoramento
+            </Button>
             <Button
               onClick={() => {
                 if (canViewUsers) fetchUsers();
