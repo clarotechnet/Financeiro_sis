@@ -61,6 +61,11 @@ interface PlanoContaOpcao {
   e_analitica: boolean;
 }
 
+interface ContagemColaboradoresSetor {
+  setor_codigo: string | null;
+  colaboradores: number | string;
+}
+
 interface DreMultiSelectOption {
   value: string;
   label: string;
@@ -128,6 +133,7 @@ const SETOR_GROUPS = [
 ] as const;
 
 type SetorGroupId = typeof SETOR_GROUPS[number]['id'];
+type RateioEbitdaGrupoId = Extract<SetorGroupId, 'comercial' | 'tecnica'>;
 
 const DreMultiSelect: React.FC<DreMultiSelectProps> = ({
   label,
@@ -229,7 +235,12 @@ interface DreContaDetalhe {
   total: number;
 }
 
-type DreDisplayRowKind = 'linha' | 'detalhe' | 'resultado_financeiro_zero' | 'rateio_sede_administrativa';
+type DreDisplayRowKind =
+  | 'linha'
+  | 'detalhe'
+  | 'resultado_financeiro_zero'
+  | 'rateio_sede_administrativa'
+  | 'rateio_ebitda_administrativo';
 
 interface DreDisplayRow {
   key: string;
@@ -372,7 +383,7 @@ const fmtPercentualAbsoluto = (value: number | null | undefined) => {
 };
 
 const fmtDisplayRowPercent = (row: DreDisplayRow, receitaBruta: number) =>
-  row.kind === 'rateio_sede_administrativa'
+  row.kind === 'rateio_sede_administrativa' || row.kind === 'rateio_ebitda_administrativo'
     ? fmtPercentualAbsoluto(row.percentualRateio)
     : fmtPercentDre(row.total, receitaBruta);
 
@@ -475,6 +486,9 @@ const DREConsolidado: React.FC = () => {
   const [linhas, setLinhas] = useState<DreLinha[]>([]);
   const [movimentos, setMovimentos] = useState<DreMovimento[]>([]);
   const [movimentosBaseRateio, setMovimentosBaseRateio] = useState<DreMovimento[]>([]);
+  const [movimentosBaseEbitdaAdministrativo, setMovimentosBaseEbitdaAdministrativo] = useState<DreMovimento[]>([]);
+  const [contagensColaboradores, setContagensColaboradores] = useState<ContagemColaboradoresSetor[]>([]);
+  const [colaboradoresError, setColaboradoresError] = useState<string | null>(null);
   const [opcoesUnidades, setOpcoesUnidades] = useState<OpcaoCodigoNome[]>([]);
   const [opcoesSetores, setOpcoesSetores] = useState<OpcaoCodigoNome[]>([]);
   const [opcoesPlanoContas, setOpcoesPlanoContas] = useState<PlanoContaOpcao[]>([]);
@@ -485,6 +499,7 @@ const DREConsolidado: React.FC = () => {
   const [grupoCodigos, setGrupoCodigos] = useState<string[]>([]);
   const [subgrupoCodigos, setSubgrupoCodigos] = useState<string[]>([]);
   const [contaCodigos, setContaCodigos] = useState<string[]>([]);
+  const [rateioEbitdaGrupo, setRateioEbitdaGrupo] = useState<RateioEbitdaGrupoId | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [exportingPdf, setExportingPdf] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -502,8 +517,9 @@ const DREConsolidado: React.FC = () => {
       grupos: [...grupoCodigos].sort(),
       subgrupos: [...subgrupoCodigos].sort(),
       contas: [...contaCodigos].sort(),
+      rateioEbitdaGrupo,
     }),
-    [contaCodigos, dataFim, dataInicio, grupoCodigos, setorCodigos, subgrupoCodigos, unidadeCodigos],
+    [contaCodigos, dataFim, dataInicio, grupoCodigos, rateioEbitdaGrupo, setorCodigos, subgrupoCodigos, unidadeCodigos],
   );
 
   const setorCodigosPorGrupo = useMemo(() => {
@@ -533,6 +549,27 @@ const DREConsolidado: React.FC = () => {
     );
   }, [setorCodigos, setorCodigosPorGrupo]);
 
+  const colaboradoresPorGrupo = useMemo(() => {
+    const setorComercial = new Set(setorCodigosPorGrupo.comercial);
+    const setorTecnica = new Set(setorCodigosPorGrupo.tecnica);
+
+    let comercial = 0;
+    let tecnica = 0;
+
+    contagensColaboradores.forEach(contagem => {
+      if (!contagem.setor_codigo) return;
+      const quantidade = Number(contagem.colaboradores) || 0;
+      if (setorComercial.has(contagem.setor_codigo)) comercial += quantidade;
+      if (setorTecnica.has(contagem.setor_codigo)) tecnica += quantidade;
+    });
+
+    return {
+      comercial,
+      tecnica,
+      totalBase: comercial + tecnica,
+    };
+  }, [contagensColaboradores, setorCodigosPorGrupo]);
+
   const matrizUnidade = useMemo(
     () => opcoesUnidades.find(opcao => normalizeComparisonLabel(opcao.nome) === 'MATRIZ - SEDE ADMINISTRATIVA'),
     [opcoesUnidades],
@@ -551,7 +588,7 @@ const DREConsolidado: React.FC = () => {
     return filiais.filter(filial => unidadesSelecionadas.has(filial.codigo));
   }, [filiais, matrizEstaSelecionada, unidadeCodigos]);
   const fetchOpcoes = useCallback(async () => {
-    const [unidadesResult, setoresResult, planoContasResult] = await Promise.all([
+    const [unidadesResult, setoresResult, planoContasResult, contagensResult] = await Promise.all([
       externalSupabase
         .from('unidades')
         .select('codigo, unidade')
@@ -567,6 +604,7 @@ const DREConsolidado: React.FC = () => {
         .select('id, codigo, descricao, nivel, e_analitica')
         .eq('ativo', true)
         .order('codigo', { ascending: true }),
+      externalSupabase.rpc('contar_colaboradores_por_setor'),
     ]);
 
     if (unidadesResult.error) throw unidadesResult.error;
@@ -588,6 +626,12 @@ const DREConsolidado: React.FC = () => {
     })));
 
     setOpcoesPlanoContas((planoContasResult.data || []) as PlanoContaOpcao[]);
+    setContagensColaboradores((contagensResult.data || []) as ContagemColaboradoresSetor[]);
+    setColaboradoresError(
+      contagensResult.error
+        ? 'Não foi possível calcular a proporção de colaboradores.'
+        : null,
+    );
   }, []);
 
   const fetchDre = useCallback(async () => {
@@ -615,7 +659,20 @@ const DREConsolidado: React.FC = () => {
         )
         : Promise.resolve([] as DreMovimento[]);
 
-      const [dreResult, movimentosRows, movimentosBaseRateioRows] = await Promise.all([
+      const movimentosBaseEbitdaAdministrativoPromise = rateioEbitdaGrupo
+        && setorCodigosPorGrupo.administrativo.length > 0
+        ? fetchMovimentosDre(
+          dataInicio,
+          dataFim,
+          unidadeCodigos,
+          setorCodigosPorGrupo.administrativo,
+          grupoCodigos,
+          subgrupoCodigos,
+          contaCodigos,
+        )
+        : Promise.resolve([] as DreMovimento[]);
+
+      const [dreResult, movimentosRows, movimentosBaseRateioRows, movimentosBaseEbitdaAdministrativoRows] = await Promise.all([
         externalSupabase.rpc('gerar_dre', params),
         fetchMovimentosDre(
           dataInicio,
@@ -627,6 +684,7 @@ const DREConsolidado: React.FC = () => {
           contaCodigos,
         ),
         movimentosBaseRateioPromise,
+        movimentosBaseEbitdaAdministrativoPromise,
       ]);
 
       if (dreResult.error) throw dreResult.error;
@@ -635,6 +693,7 @@ const DREConsolidado: React.FC = () => {
       setLinhas((dreResult.data || []) as DreLinha[]);
       setMovimentos(movimentosRows);
       setMovimentosBaseRateio(movimentosBaseRateioRows);
+      setMovimentosBaseEbitdaAdministrativo(movimentosBaseEbitdaAdministrativoRows);
       setGeneratedAt(new Date());
       setLoadedFilterSignature(currentFilterSignature);
     } catch (err: any) {
@@ -655,7 +714,9 @@ const DREConsolidado: React.FC = () => {
     filiaisSelecionadasParaResumo,
     grupoCodigos,
     matrizUnidade,
+    rateioEbitdaGrupo,
     setorCodigos,
+    setorCodigosPorGrupo,
     subgrupoCodigos,
     unidadeCodigos,
   ]);
@@ -808,7 +869,42 @@ const DREConsolidado: React.FC = () => {
         : rateiosMatrizFiliais.reduce((total, rateio) => total + rateio.percentual, 0),
     };
   }, [possuiFiltroSetor, rateiosMatrizFiliais]);
-  const lucroLiquidoComRateio = (totalByCodigo.get('04.100') || 0) + (rateioMatrizSelecionado?.valorRateio || 0);
+  const rateioEbitdaAdministrativo = useMemo(() => {
+    if (!rateioEbitdaGrupo || colaboradoresPorGrupo.totalBase === 0) return null;
+
+    const quantidadeDestino = colaboradoresPorGrupo[rateioEbitdaGrupo];
+    const percentual = (quantidadeDestino / colaboradoresPorGrupo.totalBase) * 100;
+    const ebitdaAdministrativo = computeDreTotalsByMovements(
+      linhas,
+      movimentosBaseEbitdaAdministrativo,
+    ).get('03.99') || 0;
+    const ebitdaDestinoAntesRateio = totalByCodigo.get('03.99') || 0;
+    const valorRateio = ebitdaAdministrativo * (percentual / 100);
+    const destinoLabel = SETOR_GROUPS.find(grupo => grupo.id === rateioEbitdaGrupo)?.label || rateioEbitdaGrupo;
+
+    return {
+      destino: rateioEbitdaGrupo,
+      destinoLabel,
+      quantidadeDestino,
+      quantidadeBase: colaboradoresPorGrupo.totalBase,
+      percentual,
+      ebitdaAdministrativo,
+      ebitdaDestinoAntesRateio,
+      valorRateio,
+      ebitdaDestinoComRateio: ebitdaDestinoAntesRateio + valorRateio,
+    };
+  }, [
+    colaboradoresPorGrupo,
+    linhas,
+    movimentosBaseEbitdaAdministrativo,
+    rateioEbitdaGrupo,
+    totalByCodigo,
+  ]);
+  const valorRateioEbitdaAdministrativo = rateioEbitdaAdministrativo?.valorRateio || 0;
+  const ebitdaComRateioAdministrativo = (totalByCodigo.get('03.99') || 0) + valorRateioEbitdaAdministrativo;
+  const lucroLiquidoComRateio = (totalByCodigo.get('04.100') || 0)
+    + valorRateioEbitdaAdministrativo
+    + (rateioMatrizSelecionado?.valorRateio || 0);
 
   const detalhesPorLinha = useMemo(() => {
     const grouped = new Map<string, Map<string, DreContaDetalhe>>();
@@ -866,6 +962,17 @@ const DREConsolidado: React.FC = () => {
     const rows: DreDisplayRow[] = [];
 
     linhasDreExibidas.forEach(row => {
+      if (row.codigo === '03.99' && rateioEbitdaAdministrativo) {
+        rows.push({
+          key: `rateio-ebitda-administrativo-${rateioEbitdaAdministrativo.destino}`,
+          kind: 'rateio_ebitda_administrativo',
+          descricao: `Rateio do EBITDA Administrativo - ${rateioEbitdaAdministrativo.destinoLabel}`,
+          total: rateioEbitdaAdministrativo.valorRateio,
+          percentualRateio: rateioEbitdaAdministrativo.percentual,
+          nivel: 2,
+        });
+      }
+
       if (row.codigo === '04.100' && rateioMatrizSelecionado) {
         rows.push({
           key: `rateio-sede-administrativa-${filiaisSelecionadasParaResumo.map(filial => filial.codigo).join('-')}`,
@@ -882,7 +989,11 @@ const DREConsolidado: React.FC = () => {
         kind: 'linha',
         codigo: row.codigo,
         descricao: `${row.tipo === 'subtotal' || row.tipo === 'resultado' ? '= ' : ''}${dreDescricaoLabel(row)}`,
-        total: row.codigo === '04.100' ? lucroLiquidoComRateio : Number(row.total) || 0,
+        total: row.codigo === '04.100'
+          ? lucroLiquidoComRateio
+          : ['03.99', '04.97'].includes(row.codigo)
+            ? (Number(row.total) || 0) + valorRateioEbitdaAdministrativo
+            : Number(row.total) || 0,
         nivel: row.nivel,
         tipo: row.tipo,
       });
@@ -901,7 +1012,15 @@ const DREConsolidado: React.FC = () => {
     });
 
     return rows;
-  }, [detalhesPorLinha, filiaisSelecionadasParaResumo, linhasDreExibidas, lucroLiquidoComRateio, rateioMatrizSelecionado]);
+  }, [
+    detalhesPorLinha,
+    filiaisSelecionadasParaResumo,
+    linhasDreExibidas,
+    lucroLiquidoComRateio,
+    rateioEbitdaAdministrativo,
+    rateioMatrizSelecionado,
+    valorRateioEbitdaAdministrativo,
+  ]);
 
   const movimentosPendentes = useMemo(
     () => movimentos.filter(row => !row.dre_linha_id),
@@ -966,8 +1085,14 @@ const DREConsolidado: React.FC = () => {
     setContaCodigos([]);
   };
 
+  const handleSetorChange = (values: string[]) => {
+    setRateioEbitdaGrupo(null);
+    setSetorCodigos(values);
+  };
+
   const handleSetorGroupChange = (grupoId: SetorGroupId) => {
     const codigosDoGrupo = setorCodigosPorGrupo[grupoId];
+    setRateioEbitdaGrupo(null);
 
     setSetorCodigos(codigosAtuais => {
       const proximosCodigos = new Set(codigosAtuais);
@@ -987,6 +1112,16 @@ const DREConsolidado: React.FC = () => {
     });
   };
 
+  const handleRateioEbitdaChange = (grupoId: RateioEbitdaGrupoId) => {
+    if (rateioEbitdaGrupo === grupoId) {
+      setRateioEbitdaGrupo(null);
+      return;
+    }
+
+    setRateioEbitdaGrupo(grupoId);
+    setSetorCodigos(setorCodigosPorGrupo[grupoId]);
+  };
+
   const limpar = () => {
     const currentMonth = getCurrentMonthPeriod();
     setDataInicio(currentMonth.dataInicio);
@@ -996,6 +1131,7 @@ const DREConsolidado: React.FC = () => {
     setGrupoCodigos([]);
     setSubgrupoCodigos([]);
     setContaCodigos([]);
+    setRateioEbitdaGrupo(null);
   };
 
   const handleExportPdf = async () => {
@@ -1033,6 +1169,9 @@ const DREConsolidado: React.FC = () => {
           `Periodo: ${periodoLabel}`,
           `Unidade: ${unidadeLabel}`,
           `Setor: ${setorLabel}`,
+          ...(rateioEbitdaAdministrativo
+            ? [`Rateio EBITDA: Administrativo para ${rateioEbitdaAdministrativo.destinoLabel} (${fmtPercentualAbsoluto(rateioEbitdaAdministrativo.percentual)})`]
+            : []),
           `Conta Geral: ${contaGeralLabel}`,
           `Subgrupo: ${subgrupoLabel}`,
           `Conta Analitica: ${contaAnaliticaLabel}`,
@@ -1079,7 +1218,8 @@ const DREConsolidado: React.FC = () => {
           const row = dreDisplayRows[data.row.index];
           const isGrupo = row.kind === 'linha' && row.tipo === 'grupo';
           const isDetail = row.kind === 'detalhe';
-          const isRateio = row.kind === 'rateio_sede_administrativa';
+          const isRateio = row.kind === 'rateio_sede_administrativa'
+            || row.kind === 'rateio_ebitda_administrativo';
           const isResult = row.kind === 'resultado_financeiro_zero' || row.tipo === 'subtotal' || row.tipo === 'resultado';
 
           if (isGrupo) {
@@ -1317,7 +1457,7 @@ const DREConsolidado: React.FC = () => {
               label="Setor"
               options={opcoesSetores.map(opcao => ({ value: opcao.codigo, label: opcao.nome }))}
               selected={setorCodigos}
-              onChange={setSetorCodigos}
+              onChange={handleSetorChange}
               allLabel="Todos"
             />
             <DreMultiSelect
@@ -1372,7 +1512,36 @@ const DREConsolidado: React.FC = () => {
                   </Button>
                 );
               })}
+              <span className="hidden h-8 w-px bg-border sm:block" aria-hidden="true" />
+              {([
+                { id: 'comercial', label: 'Adm/Comercial' },
+                { id: 'tecnica', label: 'Adm/Técnica' },
+              ] as const).map(opcao => {
+                const isActive = rateioEbitdaGrupo === opcao.id;
+
+                return (
+                  <Button
+                    key={opcao.id}
+                    type="button"
+                    variant={isActive ? 'default' : 'outline'}
+                    size="sm"
+                    aria-pressed={isActive}
+                    disabled={
+                      setorCodigosPorGrupo[opcao.id].length === 0
+                      || colaboradoresPorGrupo.totalBase === 0
+                    }
+                    onClick={() => handleRateioEbitdaChange(opcao.id)}
+                    className="min-w-[128px]"
+                    title={`Ratear o EBITDA Administrativo para ${opcao.id === 'comercial' ? 'Comercial' : 'Técnica'} pela quantidade de colaboradores`}
+                  >
+                    {opcao.label}
+                  </Button>
+                );
+              })}
             </div>
+            {colaboradoresError && (
+              <span className="text-xs font-medium text-amber-400">{colaboradoresError}</span>
+            )}
           </div>
         </div>
 
@@ -1391,7 +1560,15 @@ const DREConsolidado: React.FC = () => {
               </div>
               <div className="card">
                 <div className="text-xs text-muted-foreground">EBITDA</div>
-                <div className="text-xl font-extrabold text-primary mt-1">{fmtBRLDre(totalByCodigo.get('03.99') || 0)}</div>
+                <div className={`text-xl font-extrabold mt-1 ${
+                  ebitdaComRateioAdministrativo > 0
+                    ? 'text-emerald-500'
+                    : ebitdaComRateioAdministrativo < 0
+                      ? 'text-red-400'
+                      : 'text-foreground'
+                }`}>
+                  {fmtBRLDre(ebitdaComRateioAdministrativo)}
+                </div>
               </div>
               <div className="card">
                 <div className="text-xs text-muted-foreground">Lucro Líquido</div>
@@ -1406,6 +1583,52 @@ const DREConsolidado: React.FC = () => {
                 </div>
               </div>
             </div>
+
+            {rateioEbitdaAdministrativo && (
+              <div className="card dre-no-print border-primary/30">
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Rateio do EBITDA Administrativo pela quantidade de colaboradores
+                </div>
+                <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-6 xl:items-end xl:text-right">
+                  <div className="xl:text-left">
+                    <div className="text-xs text-muted-foreground">Destino</div>
+                    <div className="text-base font-extrabold text-foreground">
+                      {rateioEbitdaAdministrativo.destinoLabel}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground">EBITDA Administrativo</div>
+                    <div className={`text-lg font-extrabold ${rateioEbitdaAdministrativo.ebitdaAdministrativo < 0 ? 'text-red-400' : 'text-emerald-500'}`}>
+                      {fmtBRLDre(rateioEbitdaAdministrativo.ebitdaAdministrativo)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground">Colaboradores</div>
+                    <div className="text-lg font-extrabold text-foreground">
+                      {rateioEbitdaAdministrativo.quantidadeDestino} de {rateioEbitdaAdministrativo.quantidadeBase}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground">Participação</div>
+                    <div className="text-lg font-extrabold text-primary">
+                      {fmtPercentualAbsoluto(rateioEbitdaAdministrativo.percentual)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground">Rateio aplicado</div>
+                    <div className={`text-lg font-extrabold ${rateioEbitdaAdministrativo.valorRateio < 0 ? 'text-red-400' : 'text-emerald-500'}`}>
+                      {fmtBRLDre(rateioEbitdaAdministrativo.valorRateio)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground">EBITDA após rateio</div>
+                    <div className={`text-lg font-extrabold ${rateioEbitdaAdministrativo.ebitdaDestinoComRateio < 0 ? 'text-red-400' : 'text-emerald-500'}`}>
+                      {fmtBRLDre(rateioEbitdaAdministrativo.ebitdaDestinoComRateio)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {rateiosMatrizFiliais.length > 0 && (
               <div className="card dre-no-print border-primary/30">
@@ -1503,6 +1726,11 @@ const DREConsolidado: React.FC = () => {
                   <p className="text-sm text-muted-foreground">Período: {periodoLabel}</p>
                   <p className="text-sm text-muted-foreground">Unidade: {unidadeLabel}</p>
                   <p className="text-sm text-muted-foreground">Setor: {setorLabel}</p>
+                  {rateioEbitdaAdministrativo && (
+                    <p className="text-sm text-muted-foreground">
+                      Rateio EBITDA: Administrativo para {rateioEbitdaAdministrativo.destinoLabel} ({fmtPercentualAbsoluto(rateioEbitdaAdministrativo.percentual)})
+                    </p>
+                  )}
                   <p className="text-sm text-muted-foreground">Conta Geral: {contaGeralLabel}</p>
                   <p className="text-sm text-muted-foreground">Subgrupo: {subgrupoLabel}</p>
                   <p className="text-sm text-muted-foreground">Conta Analítica: {contaAnaliticaLabel}</p>
@@ -1535,7 +1763,8 @@ const DREConsolidado: React.FC = () => {
                       const total = Number(row.total) || 0;
                       const isGrupo = row.kind === 'linha' && row.tipo === 'grupo';
                       const isDetail = row.kind === 'detalhe';
-                      const isRateio = row.kind === 'rateio_sede_administrativa';
+                      const isRateio = row.kind === 'rateio_sede_administrativa'
+                        || row.kind === 'rateio_ebitda_administrativo';
                       const isTotal = row.kind === 'resultado_financeiro_zero' || row.tipo === 'subtotal' || row.tipo === 'resultado';
 
                       return (
