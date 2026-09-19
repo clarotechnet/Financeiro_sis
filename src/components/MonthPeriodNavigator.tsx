@@ -25,6 +25,40 @@ const parseDateInput = (value: string) => {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
+const MONTH_LABELS = [
+  'Jan',
+  'Fev',
+  'Mar',
+  'Abr',
+  'Mai',
+  'Jun',
+  'Jul',
+  'Ago',
+  'Set',
+  'Out',
+  'Nov',
+  'Dez',
+] as const;
+
+const formatMonthLabel = (date: Date) =>
+  `${MONTH_LABELS[date.getMonth()]} ${String(date.getFullYear()).slice(-2)}`;
+
+export const formatMonthPeriodShortLabel = (startDate: string, endDate: string) => {
+  const start = parseDateInput(startDate);
+  const end = parseDateInput(endDate);
+
+  if (start && end) {
+    const startLabel = formatMonthLabel(start);
+    return start.getFullYear() === end.getFullYear() && start.getMonth() === end.getMonth()
+      ? startLabel
+      : `${startLabel} - ${formatMonthLabel(end)}`;
+  }
+
+  if (start) return formatMonthLabel(start);
+  if (end) return formatMonthLabel(end);
+  return 'Período';
+};
+
 const getMonthPeriod = (date: Date) => ({
   startDate: formatDateInput(new Date(date.getFullYear(), date.getMonth(), 1)),
   endDate: formatDateInput(new Date(date.getFullYear(), date.getMonth() + 1, 0)),
@@ -36,6 +70,8 @@ export const MonthPeriodNavigator: React.FC<MonthPeriodNavigatorProps> = ({
   onChange,
   label = 'Período',
 }) => {
+  const periodLabel = formatMonthPeriodShortLabel(startDate, endDate);
+
   const selectRelativeMonth = (offset: number) => {
     const base = parseDateInput(startDate) || parseDateInput(endDate) || new Date();
     onChange(getMonthPeriod(new Date(base.getFullYear(), base.getMonth() + offset, 1)));
@@ -61,9 +97,11 @@ export const MonthPeriodNavigator: React.FC<MonthPeriodNavigatorProps> = ({
           variant="outline"
           size="sm"
           onClick={() => onChange(getMonthPeriod(new Date()))}
+          title="Ir para o mês atual"
+          aria-label={`Período selecionado: ${periodLabel}. Ir para o mês atual`}
           className="min-w-0 flex-1 gap-2 whitespace-nowrap"
         >
-          <CalendarDays className="h-4 w-4 shrink-0" /> Mês atual
+          <CalendarDays className="h-4 w-4 shrink-0" /> {periodLabel}
         </Button>
         <Button
           type="button"

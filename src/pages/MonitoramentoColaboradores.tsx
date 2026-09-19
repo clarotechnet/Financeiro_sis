@@ -1,5 +1,4 @@
 import React, { Fragment, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   Bar,
   BarChart,
@@ -13,7 +12,6 @@ import {
 import {
   Activity,
   AlertTriangle,
-  ArrowLeft,
   Banknote,
   Building2,
   ChevronDown,
@@ -301,7 +299,6 @@ const BreakdownDetail: React.FC<{
 };
 
 const MonitoramentoColaboradores: React.FC = () => {
-  const navigate = useNavigate();
   const { employees, months, isLoading, error, updatedAt, fetchData } = useMonitoramentoColaboradores();
   const [search, setSearch] = useState('');
   const [unitFilter, setUnitFilter] = useState<string[]>([]);
@@ -465,7 +462,6 @@ const MonitoramentoColaboradores: React.FC = () => {
               <Activity className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase text-muted-foreground">Configurações</p>
               <h1 className="text-xl font-extrabold text-foreground md:text-2xl">Monitoramento de Colaboradores</h1>
               <p className="mt-1 text-sm text-muted-foreground">
                 Recebimentos por CPF de {months[0].fullLabel} a {months[2].fullLabel}.
@@ -473,10 +469,6 @@ const MonitoramentoColaboradores: React.FC = () => {
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={() => navigate('/configuracoes')}>
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Configurações
-            </Button>
             <Button variant="outline" onClick={fetchData} disabled={isLoading}>
               {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
               Atualizar

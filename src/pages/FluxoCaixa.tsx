@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { LoadingSpinner } from '@/components/comissionamento/LoadingSpinner';
+import { formatMonthPeriodShortLabel } from '@/components/MonthPeriodNavigator';
 import { getCurrentMonthPeriod, useFluxoCaixa } from '@/hooks/useFluxoCaixa';
 import { FluxoCaixaDia } from '@/types/fluxoCaixa';
 
@@ -98,6 +99,10 @@ const FluxoCaixa = () => {
   const [exportingPdf, setExportingPdf] = useState(false);
   const periodoLabel = useMemo(
     () => getPeriodLabel(periodo.dataInicio, periodo.dataFim),
+    [periodo.dataFim, periodo.dataInicio],
+  );
+  const periodoCurtoLabel = useMemo(
+    () => formatMonthPeriodShortLabel(periodo.dataInicio, periodo.dataFim),
     [periodo.dataFim, periodo.dataInicio],
   );
 
@@ -335,8 +340,15 @@ const FluxoCaixa = () => {
               <Button variant="outline" size="icon" onClick={() => setMonth(-1)} title="Mês anterior" aria-label="Mês anterior">
                 <ArrowLeft className="h-4 w-4" />
               </Button>
-              <Button variant="outline" size="sm" onClick={resetCurrentMonth} className="gap-2">
-                <CalendarDays className="h-4 w-4" /> Mês atual
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={resetCurrentMonth}
+                title="Ir para o mês atual"
+                aria-label={`Período selecionado: ${periodoCurtoLabel}. Ir para o mês atual`}
+                className="gap-2"
+              >
+                <CalendarDays className="h-4 w-4" /> {periodoCurtoLabel}
               </Button>
               <Button variant="outline" size="icon" onClick={() => setMonth(1)} title="Mês seguinte" aria-label="Mês seguinte">
                 <ArrowRight className="h-4 w-4" />
@@ -495,4 +507,3 @@ const FluxoCaixa = () => {
 };
 
 export default FluxoCaixa;
-

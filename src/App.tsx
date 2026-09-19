@@ -121,10 +121,18 @@ const App = () => (
                   }
                 />
                 <Route
-                  path="/configuracoes/monitoramento"
+                  path="/monitoramento-colaboradores"
                   element={
                     <ProtectedRoute allowedRoles={[ROLE_ADMIN, ROLE_RH, ROLE_FINANCE_ASSISTANT]}>
                       <MonitoramentoColaboradores />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/configuracoes/monitoramento"
+                  element={
+                    <ProtectedRoute allowedRoles={[ROLE_ADMIN, ROLE_RH, ROLE_FINANCE_ASSISTANT]}>
+                      <Navigate to="/monitoramento-colaboradores" replace />
                     </ProtectedRoute>
                   }
                 />

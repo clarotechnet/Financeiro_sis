@@ -1,7 +1,7 @@
 import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
-    DollarSign, Wallet, BarChart3, PieChart, Layers, Table as TableIcon, Coins, ChevronDown, Settings, FileBarChart, TrendingUp, Gift, Fuel, PackagePlus, Zap, ArrowLeftRight,
+    Activity, DollarSign, Wallet, BarChart3, PieChart, Layers, Table as TableIcon, Coins, ChevronDown, Settings, FileBarChart, TrendingUp, Gift, Fuel, PackagePlus, Zap, ArrowLeftRight,
 } from 'lucide-react';
 import {
     Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
@@ -190,6 +190,24 @@ export const AppSidebar: React.FC = () => {
                                         <NavLink to="/fluxo-caixa">
                                             <ArrowLeftRight className="h-4 w-4 flex-shrink-0" />
                                             {!collapsed && <span className="text-[13px]">Fluxo de Caixa</span>}
+                                        </NavLink>
+                                    </SidebarMenuButton>
+                                </SidebarMenuItem>
+                            )}
+                            {canAccessSettings && (
+                                <SidebarMenuItem>
+                                    <SidebarMenuButton
+                                        asChild
+                                        isActive={pathname === '/monitoramento-colaboradores'}
+                                        className="data-[active=true]:bg-primary data-[active=true]:text-primary-foreground h-auto min-h-9 py-2"
+                                    >
+                                        <NavLink to="/monitoramento-colaboradores">
+                                            <Activity className="h-4 w-4 flex-shrink-0" />
+                                            {!collapsed && (
+                                                <span className="text-[13px] leading-tight whitespace-normal break-words">
+                                                    Monitoramento de Colaboradores
+                                                </span>
+                                            )}
                                         </NavLink>
                                     </SidebarMenuButton>
                                 </SidebarMenuItem>
