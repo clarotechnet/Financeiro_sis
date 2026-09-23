@@ -40,22 +40,6 @@ const normalizeSearch = (value: string | number | null | undefined) =>
     .replace(/[\u0300-\u036f]/g, '')
     .toLocaleLowerCase('pt-BR');
 
-const buildDeducaoRows = (
-  receitaPayload: Omit<ReceitaFormPayload, 'deducoes'>,
-  deducoes: ReceitaFormPayload['deducoes'],
-  receitaPaiId: string,
-  userId: string
-) => (deducoes || [])
-  .filter(deducao => deducao.plano_conta_id && Number(deducao.valor) > 0)
-  .map(deducao => ({
-    ...receitaPayload,
-    plano_conta_id: deducao.plano_conta_id,
-    valor: deducao.valor,
-    descricao: deducao.descricao || `Dedução vinculada a ${receitaPayload.cliente}`,
-    receita_pai_id: receitaPaiId,
-    created_by: userId,
-  }));
-
 export function useReceitas() {
   const { user } = useAuth();
   const [data, setData] = useState<Receita[]>([]);
@@ -81,7 +65,8 @@ export function useReceitas() {
           .select('*')
           .range(page * pageSize, (page + 1) * pageSize - 1)
           .order('data_recebimento', { ascending: false })
-          .order('created_at', { ascending: true });
+          .order('created_at', { ascending: true })
+          .order('id', { ascending: true });
 
         if (fetchError) throw fetchError;
         if (!rows || rows.length === 0) break;
@@ -169,7 +154,7 @@ export function useReceitas() {
       if (filters.centroCusto.length > 0 && !filters.centroCusto.includes(row.setor_nome || '')) return false;
       if (filters.contaAnalitica.length > 0 && !filters.contaAnalitica.includes(row.conta_analitica)) return false;
       if (filters.banco.length > 0 && !filters.banco.includes(row.banco || '')) return false;
-      if (filters.clienteOrigem.length > 0 && !filters.clienteOrigem.includes(row.cliente || '')) return false;
+      if (filters.clienteOrigem.length > 0 && !filters.clienteOrigem.some(value => value === row.cliente || value === row.rateio_cliente_geral)) return false;
       if (filters.forma.length > 0 && !filters.forma.includes(row.forma_recebimento || '')) return false;
 
       const busca = normalizeSearch(filters.buscaGeral.trim());
@@ -178,6 +163,7 @@ export function useReceitas() {
           row.data_recebimento,
           row.nome,
           row.cliente,
+          row.rateio_cliente_geral,
           row.unidade_codigo,
           row.unidade_nome,
           row.setor_codigo,
@@ -218,66 +204,21 @@ export function useReceitas() {
 
   const submitReceita = useCallback(async (payload: ReceitaFormPayload) => {
     if (!user?.id) throw new Error('Usuário não autenticado.');
-
-    const { deducoes = [], ...receitaPayload } = payload;
-
-    const { data: receitaCriada, error: insertError } = await externalSupabase
-      .from('receitas')
-      .insert([{
-        ...receitaPayload,
-        receita_pai_id: null,
-        created_by: user.id,
-      }])
-      .select('id')
-      .single();
-
-    if (insertError) throw insertError;
-
-    const deducoesValidas = buildDeducaoRows(receitaPayload, deducoes, receitaCriada?.id || '', user.id);
-
-    if (deducoesValidas.length > 0 && receitaCriada?.id) {
-      const { error: deducoesError } = await externalSupabase
-        .from('receitas')
-        .insert(deducoesValidas);
-
-      if (deducoesError) {
-        await externalSupabase.from('receitas').delete().eq('id', receitaCriada.id);
-        throw deducoesError;
-      }
-    }
-
+    const { editar_lote, ...dados } = payload;
+    const { error: saveError } = await externalSupabase.rpc('salvar_receita_com_rateios', {
+      p_dados: dados, p_receita_id: null, p_editar_lote: false,
+    });
+    if (saveError) throw new Error(saveError.message);
     await fetchData();
   }, [fetchData, user?.id]);
 
   const updateReceita = useCallback(async (id: string, payload: ReceitaFormPayload) => {
     if (!user?.id) throw new Error('Usuário não autenticado.');
-
-    const { deducoes = [], ...receitaPayload } = payload;
-
-    const { error: updateError } = await externalSupabase
-      .from('receitas')
-      .update(receitaPayload)
-      .eq('id', id);
-
-    if (updateError) throw updateError;
-
-    const { error: deleteDeducoesError } = await externalSupabase
-      .from('receitas')
-      .delete()
-      .eq('receita_pai_id', id);
-
-    if (deleteDeducoesError) throw deleteDeducoesError;
-
-    const deducoesValidas = buildDeducaoRows(receitaPayload, deducoes, id, user.id);
-
-    if (deducoesValidas.length > 0) {
-      const { error: insertDeducoesError } = await externalSupabase
-        .from('receitas')
-        .insert(deducoesValidas);
-
-      if (insertDeducoesError) throw insertDeducoesError;
-    }
-
+    const { editar_lote = false, ...dados } = payload;
+    const { error: saveError } = await externalSupabase.rpc('salvar_receita_com_rateios', {
+      p_dados: dados, p_receita_id: id, p_editar_lote: editar_lote,
+    });
+    if (saveError) throw new Error(saveError.message);
     await fetchData();
   }, [fetchData, user?.id]);
 

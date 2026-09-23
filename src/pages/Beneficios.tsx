@@ -520,7 +520,7 @@ const Beneficios: React.FC = () => {
 
   return (
     <div className="min-h-full">
-      <div className="max-w-[1500px] mx-auto p-6 md:p-8 space-y-6">
+      <div className="max-w-[1500px] mx-auto p-4 md:p-8 space-y-4 md:space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div
@@ -535,12 +535,12 @@ const Beneficios: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex rounded-lg border border-border bg-card p-1">
+          <div className="flex max-w-full overflow-x-auto rounded-lg border border-border bg-card p-1">
             {TABS.map(tab => (
               <button
                 key={tab.id}
                 type="button"
-                className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm font-semibold transition-colors ${tipo === tab.id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                className={`flex shrink-0 min-h-11 md:min-h-0 items-center gap-2 rounded-md px-3 py-2 text-sm font-semibold transition-colors ${tipo === tab.id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
                 onClick={() => setParams({ tab: tab.id })}
               >
                 <tab.icon className="w-4 h-4" />

@@ -78,7 +78,7 @@ export const MonthPeriodNavigator: React.FC<MonthPeriodNavigatorProps> = ({
   };
 
   return (
-    <div className="form-group">
+    <div className="form-group" data-period-navigator>
       <Label className="form-label">{label}</Label>
       <div className="flex w-full items-center gap-2">
         <Button

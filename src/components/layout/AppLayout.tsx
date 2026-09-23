@@ -6,11 +6,11 @@ import AppHeader from './AppHeader';
 
 export const AppLayout: React.FC = () => (
     <SidebarProvider>
-        <div className="min-h-screen flex w-full bg-background">
+        <div className="min-h-svh flex w-full min-w-0 bg-background">
             <AppSidebar />
-            <div className="flex-1 flex flex-col min-w-0">
+            <div className="flex min-w-0 max-w-full flex-1 flex-col overflow-hidden">
                 <AppHeader />
-                <main className="flex-1 overflow-x-hidden">
+                <main className="app-main min-w-0 max-w-full flex-1 overflow-x-hidden">
                     <Outlet />
                 </main>
             </div>

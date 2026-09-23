@@ -67,7 +67,7 @@ export const ComissionamentoFrentes: React.FC<Props> = ({ frentesData, selectedF
           >
             <h4 className="text-sm font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
               <Tags className="w-4 h-4 text-accent" />
-              <span className="truncate" title={f.frente}>{f.frente}</span>
+              <span className="min-w-0 break-words md:truncate" title={f.frente}>{f.frente}</span>
             </h4>
 
             <div className="space-y-2">

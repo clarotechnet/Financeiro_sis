@@ -356,7 +356,7 @@ const FluxoCaixa = () => {
             </div>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-[minmax(180px,1fr)_minmax(180px,1fr)_auto] md:items-end">
+          <div className="grid gap-3 xl:grid-cols-[minmax(180px,1fr)_minmax(180px,1fr)_auto] xl:items-end">
             <div className="space-y-1.5">
               <Label htmlFor="fluxo-data-inicio">Data inicial</Label>
               <Input
@@ -455,8 +455,8 @@ const FluxoCaixa = () => {
           {isLoading ? (
             <LoadingSpinner message="Calculando fluxo de caixa..." />
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[1180px] text-sm">
+            <div className="financial-report-container overflow-x-auto">
+              <table className="w-full min-w-[1180px] text-sm mobile-record-table">
                 <thead className="bg-muted/70 text-left text-xs uppercase text-muted-foreground">
                   <tr>
                     <th className="px-4 py-3">Dia</th>
@@ -472,14 +472,14 @@ const FluxoCaixa = () => {
                 <tbody>
                   {dias.map(dia => (
                     <tr key={dia.data} className="border-t border-border/70 hover:bg-muted/30">
-                      <td className="whitespace-nowrap px-4 py-3 font-semibold text-foreground">{fmtDay(dia.data)}</td>
-                      <td className="whitespace-nowrap px-4 py-3 text-right">{fmtBRL(dia.saldoInicial)}</td>
-                      <td className="whitespace-nowrap px-4 py-3 text-right font-semibold text-emerald-500">{fmtBRL(dia.receitas)}</td>
-                      <td className="whitespace-nowrap px-4 py-3 text-right font-semibold">{fmtBRL(dia.saldoComEntradas)}</td>
-                      <td className="whitespace-nowrap px-4 py-3 text-right text-red-500">{fmtPagamento(dia.pagamentosExatos)}</td>
-                      <td className="whitespace-nowrap px-4 py-3 text-right text-amber-500">{fmtPagamento(dia.pagamentosProjetados)}</td>
-                      <td className="whitespace-nowrap px-4 py-3 text-right font-semibold text-red-500">{fmtPagamento(dia.totalPagamentos)}</td>
-                      <td className={`whitespace-nowrap px-4 py-3 text-right font-extrabold ${dia.saldoTotalProjetado >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                      <td data-label="Dia" className="whitespace-nowrap px-4 py-3 font-semibold text-foreground">{fmtDay(dia.data)}</td>
+                      <td data-label="Saldo Inicial" className="whitespace-nowrap px-4 py-3 text-right">{fmtBRL(dia.saldoInicial)}</td>
+                      <td data-label="Receitas" className="whitespace-nowrap px-4 py-3 text-right font-semibold text-emerald-500">{fmtBRL(dia.receitas)}</td>
+                      <td data-label="Saldo com Entradas" className="whitespace-nowrap px-4 py-3 text-right font-semibold">{fmtBRL(dia.saldoComEntradas)}</td>
+                      <td data-label="Pagamentos Exatos" className="whitespace-nowrap px-4 py-3 text-right text-red-500">{fmtPagamento(dia.pagamentosExatos)}</td>
+                      <td data-label="Pagamentos Projetados" className="whitespace-nowrap px-4 py-3 text-right text-amber-500">{fmtPagamento(dia.pagamentosProjetados)}</td>
+                      <td data-label="Total Pagamentos" className="whitespace-nowrap px-4 py-3 text-right font-semibold text-red-500">{fmtPagamento(dia.totalPagamentos)}</td>
+                      <td data-label="Saldo Total Projetado" className={`whitespace-nowrap px-4 py-3 text-right font-extrabold ${dia.saldoTotalProjetado >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
                         {fmtBRL(dia.saldoTotalProjetado)}
                       </td>
                     </tr>
@@ -488,13 +488,13 @@ const FluxoCaixa = () => {
                 <tfoot className="border-t-2 border-primary/50 bg-muted/60 font-bold">
                   <tr>
                     <td className="px-4 py-3">TOTAL</td>
-                    <td className="whitespace-nowrap px-4 py-3 text-right">{fmtBRL(resumo.saldoAbertura)}</td>
-                    <td className="whitespace-nowrap px-4 py-3 text-right text-emerald-500">{fmtBRL(resumo.totalEntradas)}</td>
-                    <td className="whitespace-nowrap px-4 py-3 text-right">{fmtBRL(resumo.saldoAbertura + resumo.totalEntradas)}</td>
-                    <td className="whitespace-nowrap px-4 py-3 text-right text-red-500">{fmtPagamento(resumo.pagamentosExatos)}</td>
-                    <td className="whitespace-nowrap px-4 py-3 text-right text-amber-500">{fmtPagamento(resumo.pagamentosProjetados)}</td>
-                    <td className="whitespace-nowrap px-4 py-3 text-right text-red-500">{fmtPagamento(resumo.totalPagamentos)}</td>
-                    <td className={`whitespace-nowrap px-4 py-3 text-right ${saldoClass}`}>{fmtBRL(resumo.saldoFinalProjetado)}</td>
+                    <td data-label="Saldo Inicial" className="whitespace-nowrap px-4 py-3 text-right">{fmtBRL(resumo.saldoAbertura)}</td>
+                    <td data-label="Receitas" className="whitespace-nowrap px-4 py-3 text-right text-emerald-500">{fmtBRL(resumo.totalEntradas)}</td>
+                    <td data-label="Saldo com Entradas" className="whitespace-nowrap px-4 py-3 text-right">{fmtBRL(resumo.saldoAbertura + resumo.totalEntradas)}</td>
+                    <td data-label="Pagamentos Exatos" className="whitespace-nowrap px-4 py-3 text-right text-red-500">{fmtPagamento(resumo.pagamentosExatos)}</td>
+                    <td data-label="Pagamentos Projetados" className="whitespace-nowrap px-4 py-3 text-right text-amber-500">{fmtPagamento(resumo.pagamentosProjetados)}</td>
+                    <td data-label="Total Pagamentos" className="whitespace-nowrap px-4 py-3 text-right text-red-500">{fmtPagamento(resumo.totalPagamentos)}</td>
+                    <td data-label="Saldo Total Projetado" className={`whitespace-nowrap px-4 py-3 text-right ${saldoClass}`}>{fmtBRL(resumo.saldoFinalProjetado)}</td>
                   </tr>
                 </tfoot>
               </table>

@@ -1,14 +1,14 @@
 import * as React from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { VariantProps, cva } from "class-variance-authority";
-import { PanelLeft } from "lucide-react";
+import { Menu, PanelLeft } from "lucide-react";
 
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -152,19 +152,28 @@ const Sidebar = React.forwardRef<
 
   if (isMobile) {
     return (
-      <Sheet open={openMobile} onOpenChange={setOpenMobile} {...props}>
+      <Sheet open={openMobile} onOpenChange={setOpenMobile}>
         <SheetContent
+          id="mobile-navigation"
           data-sidebar="sidebar"
           data-mobile="true"
-          className="w-[--sidebar-width] bg-sidebar p-0 text-sidebar-foreground [&>button]:hidden"
+          className="mobile-sidebar w-[--sidebar-width] max-w-[calc(100vw-3rem)] bg-sidebar p-0 text-sidebar-foreground"
           style={
             {
               "--sidebar-width": SIDEBAR_WIDTH_MOBILE,
+              width: `min(${SIDEBAR_WIDTH_MOBILE}, calc(100vw - 2rem))`,
+              maxWidth: "calc(100vw - 2rem)",
             } as React.CSSProperties
           }
           side={side}
+          onCloseAutoFocus={event => {
+            event.preventDefault();
+            document.querySelector<HTMLButtonElement>('[data-sidebar="trigger"]')?.focus();
+          }}
         >
-          <div className="flex h-full w-full flex-col">{children}</div>
+          <SheetTitle className="sr-only">Menu principal</SheetTitle>
+          <SheetDescription className="sr-only">Navegação pelos módulos do sistema financeiro.</SheetDescription>
+          <div className="flex h-full w-full flex-col" {...props}>{children}</div>
         </SheetContent>
       </Sheet>
     );
@@ -218,7 +227,7 @@ Sidebar.displayName = "Sidebar";
 
 const SidebarTrigger = React.forwardRef<React.ElementRef<typeof Button>, React.ComponentProps<typeof Button>>(
   ({ className, onClick, ...props }, ref) => {
-    const { toggleSidebar } = useSidebar();
+    const { toggleSidebar, isMobile, openMobile, open } = useSidebar();
 
     return (
       <Button
@@ -226,15 +235,17 @@ const SidebarTrigger = React.forwardRef<React.ElementRef<typeof Button>, React.C
         data-sidebar="trigger"
         variant="ghost"
         size="icon"
-        className={cn("h-7 w-7", className)}
+        className={cn("h-11 w-11 md:h-7 md:w-7", className)}
+        aria-label={isMobile ? "Abrir menu principal" : "Alternar menu lateral"}
+        aria-expanded={isMobile ? openMobile : open}
+        aria-controls={isMobile ? "mobile-navigation" : undefined}
         onClick={(event) => {
           onClick?.(event);
           toggleSidebar();
         }}
         {...props}
       >
-        <PanelLeft />
-        <span className="sr-only">Toggle Sidebar</span>
+        {isMobile ? <Menu /> : <PanelLeft />}
       </Button>
     );
   },

@@ -17,6 +17,11 @@ export interface Receita {
   created_at: string;
   updated_at: string;
   receita_pai_id?: string | null;
+  rateio_lote_id?: string | null;
+  rateio_cliente_geral?: string | null;
+  rateio_item_ordem?: number | null;
+  parcela_numero?: number | null;
+  parcela_total?: number | null;
   conta_codigo: string;
   conta_descricao: string;
   conta_natureza: string | null;
@@ -90,4 +95,16 @@ export interface ReceitaFormPayload {
   forma_recebimento: string | null;
   documento: string | null;
   deducoes?: ReceitaDeducaoPayload[];
+  quantidade_receitas?: number;
+  rateios?: ReceitaRateioPayload[];
+  editar_lote?: boolean;
+}
+
+export interface ReceitaRateioPayload {
+  id?: string;
+  cliente: string;
+  unidade_codigo: string;
+  setor_codigo: string;
+  plano_conta_id: string;
+  valor: number;
 }

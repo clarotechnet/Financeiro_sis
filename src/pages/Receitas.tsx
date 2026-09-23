@@ -24,6 +24,9 @@ import { useAuth } from '@/contexts/useAuth';
 import { useReceitas } from '@/hooks/useReceitas';
 import { Receita, ReceitaContaOpcao, ReceitaFormPayload, ReceitaSetorOpcao, ReceitaUnidadeOpcao } from '@/types/receitas';
 import { canManageExistingFinancialData } from '@/lib/profileRoles';
+import { ReceitaBatchFields, ReceitaRateioForm, createReceitaRateio } from '@/components/receitas/ReceitaBatchFields';
+import { clampMonthlyOccurrences } from '@/utils/monthlyDates';
+import { getReceitaDeducoes, getReceitaLote, groupReceitas, receitaCents } from '@/utils/receitaRateios';
 
 const PAGE_SIZE = 50;
 
@@ -185,6 +188,7 @@ interface ReceitaFormDialogProps {
   open: boolean;
   onClose: () => void;
   receita: Receita | null;
+  editarLote: boolean;
   receitas: Receita[];
   opcoesContas: ReceitaContaOpcao[];
   opcoesUnidades: ReceitaUnidadeOpcao[];
@@ -195,7 +199,8 @@ interface ReceitaFormDialogProps {
 const ReceitaFormDialog: React.FC<ReceitaFormDialogProps> = ({
   open,
   onClose,
-  receita,
+  receita: receitaOriginal,
+  editarLote,
   receitas,
   opcoesContas,
   opcoesUnidades,
@@ -203,6 +208,11 @@ const ReceitaFormDialog: React.FC<ReceitaFormDialogProps> = ({
   onSubmit,
 }) => {
   const { profile, user } = useAuth();
+  const loteItems = useMemo(() => getReceitaLote(receitaOriginal, receitas, editarLote), [receitaOriginal, receitas, editarLote]);
+  const receita = useMemo(() => receitaOriginal && editarLote && receitaOriginal.rateio_lote_id
+    ? { ...receitaOriginal, cliente: receitaOriginal.rateio_cliente_geral || receitaOriginal.cliente,
+      valor: loteItems.reduce((total, item) => total + receitaCents(item.valor), 0) / 100 }
+    : receitaOriginal, [receitaOriginal, editarLote, loteItems]);
   const userName = profile?.display_name || user?.email || '';
   const isEditing = Boolean(receita);
   const isDeducaoRow = normalizeNatureza(receita?.conta_natureza) === 'deducao';
@@ -213,6 +223,22 @@ const ReceitaFormDialog: React.FC<ReceitaFormDialogProps> = ({
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
+  const [usarMultiplasReceitas, setUsarMultiplasReceitas] = useState(false);
+  const [quantidadeReceitas, setQuantidadeReceitas] = useState(2);
+  const [usarRateio, setUsarRateio] = useState(false);
+  const [rateios, setRateios] = useState<ReceitaRateioForm[]>([]);
+  const loteExistente = Boolean(editarLote && receitaOriginal?.rateio_lote_id);
+  const itemIndividual = Boolean(receitaOriginal?.rateio_lote_id && !editarLote);
+  const resetBatch = React.useCallback(() => {
+    setUsarMultiplasReceitas(false);
+    setQuantidadeReceitas(2);
+    setUsarRateio(loteExistente);
+    setRateios(loteExistente ? loteItems.map(item => createReceitaRateio({
+      id: item.id, cliente: item.cliente, unidade_codigo: item.unidade_codigo || '',
+      setor_codigo: item.setor_codigo || '', plano_conta_id: item.plano_conta_id,
+      valor: currencyDigitsFromValue(item.valor),
+    })) : []);
+  }, [loteExistente, loteItems]);
 
   const contasReceita = useMemo(
     () => opcoesContas.filter(opcao => normalizeNatureza(opcao.natureza) === 'receita'),
@@ -227,16 +253,14 @@ const ReceitaFormDialog: React.FC<ReceitaFormDialogProps> = ({
   const contasPrincipais = canManageDeducoes ? contasReceita : opcoesContas;
 
   const deducoesVinculadas = useMemo(() => {
-    if (!receita?.id) return [];
-    return receitas
-      .filter(item => item.receita_pai_id === receita.id)
-      .sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''));
-  }, [receita?.id, receitas]);
+    return getReceitaDeducoes(loteItems, receitas);
+  }, [loteItems, receitas]);
 
   useEffect(() => {
     if (!open) return;
     setError('');
     setSuccess(false);
+    resetBatch();
 
     if (receita) {
       const digits = currencyDigitsFromValue(receita.valor);
@@ -261,7 +285,7 @@ const ReceitaFormDialog: React.FC<ReceitaFormDialogProps> = ({
     setForm({ ...emptyForm, nome: userName });
     setValorDisplay('');
     setDeducoes([]);
-  }, [deducoesVinculadas, open, receita, userName]);
+  }, [deducoesVinculadas, open, receita, userName, resetBatch]);
 
   const set = (field: keyof ReceitaFormState, value: string) => {
     setForm(prev => ({ ...prev, [field]: value }));
@@ -303,6 +327,10 @@ const ReceitaFormDialog: React.FC<ReceitaFormDialogProps> = ({
   const receitaBruta = Number(form.valor || 0) / 100;
   const totalDeducoes = deducoes.reduce((sum, item) => sum + (Number(item.valor || 0) / 100), 0);
   const receitaLiquida = receitaBruta - totalDeducoes;
+  const rateiosValidos = !usarRateio || (rateios.length > 0 && rateios.every(item =>
+    item.cliente.trim() && item.unidade_codigo && item.setor_codigo &&
+    contasReceita.some(conta => conta.id === item.plano_conta_id) && Number(item.valor) > 0
+  ) && rateios.reduce((sum, item) => sum + Number(item.valor || 0), 0) === Number(form.valor || 0));
   const deducoesComDados = deducoes.filter(item =>
     item.plano_conta_id || item.valor || item.descricao.trim()
   );
@@ -314,15 +342,15 @@ const ReceitaFormDialog: React.FC<ReceitaFormDialogProps> = ({
     form.data_recebimento &&
     form.nome.trim() &&
     form.cliente.trim() &&
-    form.valor &&
-    form.unidade_codigo &&
-    form.setor_codigo &&
-    form.plano_conta_id &&
+    Number(form.valor) > 0 &&
+    (usarRateio || (form.unidade_codigo && form.setor_codigo && form.plano_conta_id)) &&
+    rateiosValidos &&
     deducoesValidas &&
     totalDeducoes <= receitaBruta
   );
 
   const handleClear = () => {
+    resetBatch();
     if (receita) {
       const digits = currencyDigitsFromValue(receita.valor);
       setForm({
@@ -351,8 +379,11 @@ const ReceitaFormDialog: React.FC<ReceitaFormDialogProps> = ({
   };
 
   const handleSubmit = async () => {
+    if (submitting) return;
     if (!isValid) {
-      if (!deducoesValidas) {
+      if (!rateiosValidos) {
+        setError('Preencha cada rateio e confira se a soma corresponde ao valor geral.');
+      } else if (!deducoesValidas) {
         setError('Preencha a conta e o valor de cada imposto/dedução adicionado.');
       } else if (totalDeducoes > receitaBruta) {
         setError('O total de impostos/deduções não pode ser maior que o valor da receita.');
@@ -378,6 +409,13 @@ const ReceitaFormDialog: React.FC<ReceitaFormDialogProps> = ({
         banco: form.banco.trim() || null,
         forma_recebimento: form.forma_recebimento.trim() || null,
         documento: form.documento.trim() || null,
+        quantidade_receitas: usarMultiplasReceitas ? quantidadeReceitas : 1,
+        editar_lote: editarLote,
+        rateios: usarRateio ? rateios.map(item => ({
+          ...(item.id ? { id: item.id } : {}), cliente: item.cliente.trim(),
+          unidade_codigo: item.unidade_codigo, setor_codigo: item.setor_codigo,
+          plano_conta_id: item.plano_conta_id, valor: Number(item.valor) / 100,
+        })) : [],
         deducoes: canManageDeducoes ? deducoesComDados.map(item => ({
           plano_conta_id: item.plano_conta_id,
           valor: parseFloat(item.valor.replace(/\D/g, '')) / 100,
@@ -386,11 +424,7 @@ const ReceitaFormDialog: React.FC<ReceitaFormDialogProps> = ({
       });
 
       setSuccess(true);
-      setTimeout(() => {
-        setSuccess(false);
-        handleClear();
-        onClose();
-      }, 1200);
+      onClose();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erro ao salvar receita.');
     } finally {
@@ -401,10 +435,12 @@ const ReceitaFormDialog: React.FC<ReceitaFormDialogProps> = ({
   const selectClass = "w-full bg-card border border-border rounded-lg px-3 py-2 text-foreground text-sm";
 
   return (
-    <Dialog open={open} onOpenChange={(value) => { if (!value) onClose(); }}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+    <Dialog open={open} onOpenChange={(value) => { if (!value && !submitting) onClose(); }}>
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto" onInteractOutside={event => { if (submitting) event.preventDefault(); }}>
         <DialogHeader>
           <DialogTitle>{isEditing ? 'Editar Lançamento de Receita' : 'Novo Lançamento de Receita'}</DialogTitle>
+          {loteExistente && <p className="text-sm text-muted-foreground">Edição do lote completo. Os campos gerais afetam todos os itens deste mês.</p>}
+          {itemIndividual && <p className="text-sm text-muted-foreground">Edição somente deste item. Os demais rateios não serão alterados.</p>}
         </DialogHeader>
 
         {success ? (
@@ -437,7 +473,7 @@ const ReceitaFormDialog: React.FC<ReceitaFormDialogProps> = ({
               </div>
 
               <div className="space-y-1">
-                <Label className="text-sm font-medium">Cliente / Origem *</Label>
+                <Label className="text-sm font-medium">{usarRateio ? 'Cliente / Origem Geral *' : 'Cliente / Origem *'}</Label>
                 <Input
                   placeholder="Ex: Cliente, contrato ou fonte da receita"
                   value={form.cliente}
@@ -460,6 +496,7 @@ const ReceitaFormDialog: React.FC<ReceitaFormDialogProps> = ({
                 <select
                   className={selectClass}
                   value={form.unidade_codigo}
+                  disabled={usarRateio}
                   onChange={event => set('unidade_codigo', event.target.value)}
                 >
                   <option value="">Selecione...</option>
@@ -476,6 +513,7 @@ const ReceitaFormDialog: React.FC<ReceitaFormDialogProps> = ({
                 <select
                   className={selectClass}
                   value={form.setor_codigo}
+                  disabled={usarRateio}
                   onChange={event => set('setor_codigo', event.target.value)}
                 >
                   <option value="">Selecione...</option>
@@ -492,6 +530,7 @@ const ReceitaFormDialog: React.FC<ReceitaFormDialogProps> = ({
                 <select
                   className={selectClass}
                   value={form.plano_conta_id}
+                  disabled={usarRateio}
                   onChange={event => set('plano_conta_id', event.target.value)}
                 >
                   <option value="">Selecione...</option>
@@ -546,13 +585,35 @@ const ReceitaFormDialog: React.FC<ReceitaFormDialogProps> = ({
                 />
               </div>
 
+              {canManageDeducoes && !itemIndividual && <ReceitaBatchFields
+                multiple={usarMultiplasReceitas}
+                onMultipleChange={setUsarMultiplasReceitas}
+                quantity={quantidadeReceitas}
+                onQuantityChange={value => setQuantidadeReceitas(Math.max(2, clampMonthlyOccurrences(value)))}
+                startDate={form.data_recebimento}
+                totalCents={Number(form.valor || 0)}
+                split={usarRateio}
+                lockedSplit={loteExistente}
+                onSplitChange={checked => {
+                  setUsarRateio(checked);
+                  if (checked && rateios.length === 0) setRateios([
+                    createReceitaRateio({ cliente: form.cliente, unidade_codigo: form.unidade_codigo, setor_codigo: form.setor_codigo, plano_conta_id: form.plano_conta_id, valor: form.valor }),
+                    createReceitaRateio({ cliente: form.cliente, unidade_codigo: form.unidade_codigo, setor_codigo: form.setor_codigo, plano_conta_id: form.plano_conta_id }),
+                  ]);
+                }}
+                items={rateios}
+                onItemsChange={setRateios}
+                seed={{ cliente: form.cliente, unidade_codigo: form.unidade_codigo, setor_codigo: form.setor_codigo, plano_conta_id: form.plano_conta_id }}
+                contas={contasReceita} unidades={opcoesUnidades} setores={opcoesSetores} editing={isEditing}
+              />}
+
               {canManageDeducoes && (
                 <div className="md:col-span-2 rounded-lg border border-border bg-muted/20 p-4 space-y-4">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <h4 className="text-sm font-bold text-foreground">Impostos / Deduções</h4>
                       <p className="text-xs text-muted-foreground">
-                        Lance ISS, ICMS, PIS/COFINS ou outras deduções vinculadas a esta receita.
+                        {usarRateio ? 'As deduções serão distribuídas proporcionalmente entre os rateios, com fechamento em centavos.' : 'Lance ISS, ICMS, PIS/COFINS ou outras deduções vinculadas a esta receita.'}
                       </p>
                     </div>
                     <Button type="button" variant="outline" size="sm" onClick={addDeducao} className="gap-1">
@@ -683,6 +744,8 @@ const Receitas: React.FC = () => {
   const canManageReceitas = canManageExistingFinancialData(profile?.role);
   const [formOpen, setFormOpen] = useState(false);
   const [editingReceita, setEditingReceita] = useState<Receita | null>(null);
+  const [editarLote, setEditarLote] = useState(false);
+  const [expandedLotes, setExpandedLotes] = useState<Set<string>>(new Set());
   const [page, setPage] = useState(0);
 
   useEffect(() => {
@@ -711,7 +774,7 @@ const Receitas: React.FC = () => {
   );
 
   const opcoesClientesOrigens = useMemo(
-    () => uniqueOptions(hook.allData.map(row => row.cliente)),
+    () => uniqueOptions(hook.allData.flatMap(row => [row.cliente, row.rateio_cliente_geral || ''])),
     [hook.allData]
   );
 
@@ -733,9 +796,9 @@ const Receitas: React.FC = () => {
   );
 
   const sortedData = useMemo(() => {
-    return [...hook.data].sort((a, b) =>
+    return groupReceitas([...hook.data].sort((a, b) =>
       (b.data_recebimento || '').localeCompare(a.data_recebimento || '')
-    );
+    ));
   }, [hook.data]);
 
   const totalPages = Math.max(1, Math.ceil(sortedData.length / PAGE_SIZE));
@@ -766,10 +829,12 @@ const Receitas: React.FC = () => {
   const handleCloseForm = () => {
     setFormOpen(false);
     setEditingReceita(null);
+    setEditarLote(false);
   };
 
   const handleOpenNew = () => {
     setEditingReceita(null);
+    setEditarLote(false);
     setFormOpen(true);
   };
 
@@ -784,7 +849,7 @@ const Receitas: React.FC = () => {
 
   return (
     <div className="min-h-full">
-      <div className="max-w-[1400px] mx-auto p-6 md:p-8 space-y-6">
+      <div className="max-w-[1400px] mx-auto p-4 md:p-8 space-y-4 md:space-y-6">
         <div className="flex items-center gap-3">
           <div
             className="w-11 h-11 rounded-xl flex items-center justify-center shadow-glow"
@@ -829,6 +894,7 @@ const Receitas: React.FC = () => {
             open={formOpen}
             onClose={handleCloseForm}
             receita={editingReceita}
+            editarLote={editarLote}
             receitas={hook.allData}
             opcoesContas={hook.opcoesContas}
             opcoesUnidades={hook.opcoesUnidades}
@@ -986,7 +1052,28 @@ const Receitas: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {pageData.map(row => (
+                    {pageData.map(group => (
+                      <React.Fragment key={group.key}>
+                        {group.isLote && <tr className="bg-muted/40">
+                          <td colSpan={canManageReceitas ? 12 : 11}>
+                            <div className="flex flex-wrap items-center gap-3">
+                              <Button variant="ghost" size="icon" aria-label={expandedLotes.has(group.key) ? 'Recolher rateios' : 'Expandir rateios'} title={expandedLotes.has(group.key) ? 'Recolher rateios' : 'Expandir rateios'} aria-expanded={expandedLotes.has(group.key)} onClick={() => setExpandedLotes(previous => {
+                                const next = new Set(previous);
+                                if (next.has(group.key)) next.delete(group.key); else next.add(group.key);
+                                return next;
+                              })}>{expandedLotes.has(group.key) ? <ChevronDown /> : <ChevronRight />}</Button>
+                              <span>{fmtDate(group.row.data_recebimento)}</span>
+                              <strong>{group.row.rateio_cliente_geral || group.row.cliente}</strong>
+                              <span>{group.items.length} rateio(s) nos filtros</span>
+                              <strong>{fmtBRL(group.items.reduce((sum, row) => sum + receitaCents(row.valor), 0) / 100)}</strong>
+                              {group.row.parcela_total && <span>Parcela {group.row.parcela_numero}/{group.row.parcela_total}</span>}
+                              {canManageReceitas && <Button variant="outline" size="sm" className="gap-1" title="Editar lote completo, incluindo itens fora dos filtros" onClick={() => {
+                                setEditingReceita(group.row); setEditarLote(true); setFormOpen(true);
+                              }}><Pencil className="h-3 w-3" />Editar lote completo</Button>}
+                            </div>
+                          </td>
+                        </tr>}
+                        {(!group.isLote || expandedLotes.has(group.key)) && group.items.map(row => (
                       <tr key={row.id} className="group">
                         {canManageReceitas && (
                           <td>
@@ -996,6 +1083,7 @@ const Receitas: React.FC = () => {
                               className="h-6 w-6 p-0"
                               onClick={() => {
                                 setEditingReceita(row);
+                                setEditarLote(false);
                                 setFormOpen(true);
                               }}
                               title="Editar receita"
@@ -1004,7 +1092,9 @@ const Receitas: React.FC = () => {
                             </Button>
                           </td>
                         )}
-                        <td className="whitespace-nowrap font-medium">{fmtDate(row.data_recebimento)}</td>
+                        <td className="whitespace-nowrap font-medium">{fmtDate(row.data_recebimento)}
+                          {row.parcela_total && <div className="text-[10px] text-muted-foreground">Parcela {row.parcela_numero}/{row.parcela_total}</div>}
+                        </td>
                         <td className="font-medium">{row.cliente || '-'}</td>
                         <td>{row.unidade_nome ? `${row.unidade_codigo} - ${row.unidade_nome}` : '-'}</td>
                         <td>{row.setor_nome || '-'}</td>
@@ -1025,6 +1115,8 @@ const Receitas: React.FC = () => {
                           {fmtBRL(row.valor)}
                         </td>
                       </tr>
+                        ))}
+                      </React.Fragment>
                     ))}
                     {pageData.length === 0 && (
                       <tr>

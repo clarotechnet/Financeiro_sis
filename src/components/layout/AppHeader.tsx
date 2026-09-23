@@ -34,8 +34,13 @@ export const AppHeader: React.FC = () => {
     const canAccessSettings = isAdmin || profile?.role === ROLE_RH || profile?.role === ROLE_FINANCE_ASSISTANT;
 
     return (
-        <header className="h-16 border-b border-border bg-surface/80 backdrop-blur-xl sticky top-0 z-50 flex items-center px-4 gap-3">
-            <SidebarTrigger className="text-foreground" />
+        <header className="app-header min-h-16 border-b border-border bg-surface/80 backdrop-blur-xl sticky top-0 z-40 flex items-center px-3 md:px-4 gap-1 md:gap-3">
+            <SidebarTrigger className="text-foreground shrink-0" />
+
+            <div className="min-w-0 ml-1 md:hidden">
+                <div className="text-sm font-extrabold text-foreground">TECHNET</div>
+                <div className="text-xs text-muted-foreground">Financeiro</div>
+            </div>
 
             <div className="hidden md:flex items-center gap-2 text-muted-foreground text-sm ml-2">
                 <Calendar className="w-4 h-4" />
@@ -65,7 +70,7 @@ export const AppHeader: React.FC = () => {
 
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                    <button className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-muted/60 transition-colors">
+                    <button aria-label="Abrir menu da conta" className="flex shrink-0 items-center gap-2 min-h-11 md:min-h-0 px-2 py-1.5 rounded-lg hover:bg-muted/60 transition-colors">
                         <Avatar className="w-9 h-9 ring-1 ring-border">
                             <AvatarImage src={profile?.avatar_url || undefined} alt={`Foto de ${displayName}`} className="object-cover" />
                             <AvatarFallback className="bg-primary text-primary-foreground text-sm font-bold">
@@ -76,7 +81,7 @@ export const AppHeader: React.FC = () => {
                             <span className="text-sm font-semibold text-foreground max-w-[160px] truncate">{displayName}</span>
                             <span className="text-[11px] text-muted-foreground">{profileTypeLabel}</span>
                         </div>
-                        <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                        <ChevronDown className="hidden sm:block w-4 h-4 text-muted-foreground" />
                     </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56">

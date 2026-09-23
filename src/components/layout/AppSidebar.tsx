@@ -37,8 +37,12 @@ const BENEFICIOS_TABS: SubItem[] = [
 export const AppSidebar: React.FC = () => {
     const { pathname, search } = useLocation();
     const { isAdmin, profile } = useAuth();
-    const { state } = useSidebar();
-    const collapsed = state === 'collapsed';
+    const { state, isMobile, setOpenMobile } = useSidebar();
+    const collapsed = !isMobile && state === 'collapsed';
+
+    React.useEffect(() => {
+        setOpenMobile(false);
+    }, [pathname, search, setOpenMobile]);
 
     const currentTab = new URLSearchParams(search).get('tab') || 'frentes';
     const isRh = profile?.role === ROLE_RH;
@@ -97,9 +101,13 @@ export const AppSidebar: React.FC = () => {
     };
 
     return (
-        <Sidebar collapsible="icon">
+        <Sidebar collapsible="icon" onClickCapture={event => {
+            if (isMobile && (event.target as HTMLElement).closest('a[href]')) {
+                setOpenMobile(false);
+            }
+        }}>
             <SidebarHeader className="border-b border-sidebar-border">
-                <div className="flex items-center gap-3 px-2 py-3">
+                <div className="flex items-center gap-3 pl-2 pr-14 md:pr-2 py-3">
                     <div
                         className="w-10 h-10 rounded-lg flex items-center justify-center overflow-hidden shadow-glow bg-background/40"
                     >
@@ -205,7 +213,7 @@ export const AppSidebar: React.FC = () => {
                                             <Activity className="h-4 w-4 flex-shrink-0" />
                                             {!collapsed && (
                                                 <span className="text-[13px] leading-tight whitespace-normal break-words">
-                                                    Monitoramento de Colaboradores
+                                                    Monitoramento
                                                 </span>
                                             )}
                                         </NavLink>

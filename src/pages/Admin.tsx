@@ -720,7 +720,7 @@ export default function Admin() {
     <div className="min-h-full p-4 md:p-6">
       <div className="w-full max-w-[1600px] mx-auto space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-bold flex items-center gap-2">
               <Shield className="h-6 w-6 text-primary" />
@@ -734,11 +734,11 @@ export default function Admin() {
             <Button
               onClick={() => {
                 if (canViewUsers) fetchUsers();
-                if (canAccessDepartment) {
-                  fetchRegistrosDados();
-                  fetchUnidades();
-                  fetchSubgruposPlanoContas();
-                }
+                  if (canAccessDepartment) {
+                    fetchRegistrosDados();
+                    fetchUnidades();
+                    fetchSetores();
+                  }
                 fetchPlanoContas();
               }}
               variant="outline"

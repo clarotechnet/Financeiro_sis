@@ -1363,8 +1363,8 @@ const DREConsolidado: React.FC = () => {
         }
       `}</style>
 
-      <div className="max-w-[1400px] mx-auto p-6 md:p-8 space-y-6 dre-print-page">
-        <div className="flex items-center justify-between gap-4 dre-no-print">
+      <div className="max-w-[1400px] mx-auto p-4 md:p-8 space-y-4 md:space-y-6 dre-print-page">
+        <div className="flex flex-wrap items-center justify-between gap-4 dre-no-print">
           <div className="flex items-center gap-3">
             <div
               className="w-11 h-11 rounded-xl flex items-center justify-center shadow-glow"
@@ -1749,8 +1749,8 @@ const DREConsolidado: React.FC = () => {
                 </div>
               )}
 
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[760px] text-sm dre-print-table">
+              <div className="financial-report-container overflow-x-auto">
+                <table className="w-full min-w-[760px] text-sm dre-print-table dre-responsive-table">
                   <thead>
                     <tr className="border-b border-border text-left text-muted-foreground">
                       <th className="py-2 px-2">Descrição</th>
@@ -1772,7 +1772,7 @@ const DREConsolidado: React.FC = () => {
                           key={row.key}
                           className={[
                             'border-b border-border/40',
-                            isGrupo ? 'bg-muted/35 uppercase font-extrabold text-foreground' : '',
+                            isGrupo ? 'dre-group-row bg-muted/35 uppercase font-extrabold text-foreground' : '',
                             isDetail ? 'text-xs text-muted-foreground' : '',
                             isRateio ? 'bg-muted/20 font-semibold' : '',
                             isTotal ? 'font-extrabold bg-primary/5' : '',
@@ -1780,15 +1780,15 @@ const DREConsolidado: React.FC = () => {
                           ].join(' ')}
                         >
                           <td
-                            className={isDetail ? 'py-1.5 px-2' : 'py-2 px-2'}
+                            className={`dre-description ${isDetail ? 'py-1.5 px-2' : 'py-2 px-2'}`}
                             style={{ paddingLeft: `${Math.max(row.nivel - 1, 0) * 24 + (isDetail ? 24 : 8)}px` }}
                           >
                             <span className={isDetail ? 'text-foreground/90' : ''}>{row.descricao}</span>
                           </td>
-                          <td className={`${isDetail ? 'py-1.5' : 'py-2'} pl-2 pr-8 text-right font-semibold whitespace-nowrap ${total < 0 ? 'text-red-400' : 'text-foreground'}`}>
+                          <td data-label="Valor" className={`${isDetail ? 'py-1.5' : 'py-2'} pl-2 pr-8 text-right font-semibold whitespace-nowrap ${total < 0 ? 'text-red-400' : 'text-foreground'}`}>
                             {isGrupo ? '' : fmtBRLDre(total)}
                           </td>
-                          <td className={`${isDetail ? 'py-1.5' : 'py-2'} px-2 text-right font-semibold whitespace-nowrap ${total < 0 ? 'text-red-400' : 'text-foreground'}`}>
+                          <td data-label="% Receita Bruta" className={`${isDetail ? 'py-1.5' : 'py-2'} px-2 text-right font-semibold whitespace-nowrap ${total < 0 ? 'text-red-400' : 'text-foreground'}`}>
                             {isGrupo ? '' : fmtDisplayRowPercent(row, receitaBrutaDre)}
                           </td>
                         </tr>
@@ -1821,8 +1821,8 @@ const DREConsolidado: React.FC = () => {
                 )}
               </div>
 
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[1080px] text-sm">
+              <div className="financial-report-container overflow-x-auto">
+                <table className="w-full min-w-[1080px] text-sm mobile-record-table">
                   <thead>
                     <tr className="border-b border-border text-left text-muted-foreground">
                       <th className="py-2 px-2">Data</th>
@@ -1839,24 +1839,26 @@ const DREConsolidado: React.FC = () => {
                       const total = Number(row.valor) || 0;
                       return (
                         <tr key={row.id} className="border-b border-border/40 hover:bg-muted/30">
-                          <td className="py-2 px-2 whitespace-nowrap">{fmtDate(row.data_movimento)}</td>
-                          <td className="py-2 px-2 text-foreground">{row.descricao || '-'}</td>
-                          <td className="py-2 px-2">{row.unidade_nome || row.unidade_codigo || '-'}</td>
-                          <td className="py-2 px-2">{row.setor_nome || row.setor_codigo || '-'}</td>
-                          <td className="py-2 px-2">
-                            <div className="font-semibold">{contaLabel(row)}</div>
-                            <div className="text-xs text-muted-foreground">
-                              {[row.grupo_codigo, row.subgrupo_codigo].filter(Boolean).join(' / ') || '-'}
+                          <td data-label="Data" className="py-2 px-2 whitespace-nowrap">{fmtDate(row.data_movimento)}</td>
+                          <td data-label="Descrição" className="py-2 px-2 text-foreground">{row.descricao || '-'}</td>
+                          <td data-label="Unidade" className="py-2 px-2">{row.unidade_nome || row.unidade_codigo || '-'}</td>
+                          <td data-label="Setor" className="py-2 px-2">{row.setor_nome || row.setor_codigo || '-'}</td>
+                          <td data-label="Conta Analítica" className="py-2 px-2">
+                            <div className="min-w-0">
+                              <div className="font-semibold">{contaLabel(row)}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {[row.grupo_codigo, row.subgrupo_codigo].filter(Boolean).join(' / ') || '-'}
+                              </div>
                             </div>
                           </td>
-                          <td className="py-2 px-2">
+                          <td data-label="Linha DRE" className="py-2 px-2">
                             {row.dre_linha_codigo && row.dre_linha_descricao ? (
                               <span>{row.dre_linha_codigo} - {row.dre_linha_descricao}</span>
                             ) : (
                               <span className="text-amber-400 font-semibold">Sem linha DRE</span>
                             )}
                           </td>
-                          <td className={`py-2 px-2 text-right font-semibold ${total < 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+                          <td data-label="Valor" className={`py-2 px-2 text-right font-semibold ${total < 0 ? 'text-red-400' : 'text-emerald-400'}`}>
                             {fmtBRLDre(total)}
                           </td>
                         </tr>

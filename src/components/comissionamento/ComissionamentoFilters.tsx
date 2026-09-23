@@ -1,8 +1,8 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useId } from 'react';
 import { Label } from '@/components/ui/label';
 import { MonthPeriodNavigator } from '@/components/MonthPeriodNavigator';
 import { ComissionamentoFilters as FiltersType, LancamentoPix, OperationalReportImportResult, OperationalReportImportRow, OpcaoSelect } from '@/types/comissionamento';
-import { X, FileEdit, Download, FileText, UserPlus, Search } from 'lucide-react';
+import { X, FileEdit, Download, FileText, UserPlus, Search, SlidersHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ComissionamentoFormDialog } from './ComissionamentoFormDialog';
 import { ComissionamentoImportExcel } from './ComissionamentoImportExcel';
@@ -129,6 +129,8 @@ export const ComissionamentoFilters: React.FC<Props> = ({
     || filters.status.length > 0;
 
   const [formOpen, setFormOpen] = useState(false);
+  const [mobileFiltersExpanded, setMobileFiltersExpanded] = useState(false);
+  const filtersId = useId();
   const [fornecedorOpen, setFornecedorOpen] = useState(false);
   const statusOptions = ['PAGO', 'A PAGAR'];
 
@@ -288,6 +290,19 @@ export const ComissionamentoFilters: React.FC<Props> = ({
     <div className="card relative z-20">
       <div className={`flex flex-wrap justify-between items-center gap-3 ${actionsOnly ? 'mb-0' : 'mb-4'}`}>
         <h3 className="text-lg font-bold text-foreground">Filtros</h3>
+        {!actionsOnly && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2 md:hidden"
+            aria-expanded={mobileFiltersExpanded}
+            aria-controls={filtersId}
+            onClick={() => setMobileFiltersExpanded(value => !value)}
+          >
+            <SlidersHorizontal className="h-4 w-4" />
+            {mobileFiltersExpanded ? 'Menos filtros' : 'Mais filtros'}
+          </Button>
+        )}
         <div className="flex items-center gap-3 flex-wrap">
           {showActions && showNewEntry && (
             <Button variant="outline" size="sm" onClick={() => setFormOpen(true)} className="gap-1">
@@ -348,7 +363,7 @@ export const ComissionamentoFilters: React.FC<Props> = ({
         </>
       )}
       {!actionsOnly && (
-      <div className="filter-section">
+      <div id={filtersId} className={`filter-section ${mobileFiltersExpanded ? '' : 'mobile-filters-collapsed'}`}>
           {showGeneralSearch && (
             <div className="form-group md:col-span-2">
               <Label className="form-label">Buscar Geral</Label>

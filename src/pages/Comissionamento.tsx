@@ -201,10 +201,10 @@ const Comissionamento: React.FC = () => {
 
   return (
     <div className="min-h-full">
-      <div className="max-w-[1400px] mx-auto p-6 md:p-8 space-y-6">
+      <div className="max-w-[1400px] mx-auto p-4 md:p-8 space-y-4 md:space-y-6">
         <div className="flex items-center gap-3">
           <div
-            className="w-11 h-11 rounded-xl flex items-center justify-center shadow-glow"
+            className="w-11 h-11 shrink-0 rounded-xl flex items-center justify-center shadow-glow"
             style={{ background: pageMeta.gradient }}
           >
             <HeaderIcon className="w-5 h-5 text-white" />
