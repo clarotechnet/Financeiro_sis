@@ -21,7 +21,13 @@ import { LoadingSpinner } from '@/components/comissionamento/LoadingSpinner';
 import { MonthPeriodNavigator } from '@/components/MonthPeriodNavigator';
 import { useBeneficios } from '@/hooks/useBeneficios';
 import { useToast } from '@/hooks/use-toast';
-import { BeneficioImportPayload, BeneficioImportRow, BeneficioTipo } from '@/types/beneficios';
+import {
+  BeneficioImportPayload,
+  BeneficioImportRow,
+  BeneficioTipo,
+  FLASH_BENEFICIO_TIPOS,
+  FlashBeneficioTipo,
+} from '@/types/beneficios';
 import { OpcaoSelect } from '@/types/comissionamento';
 import { downloadOperationalReport, OperationalReportSource } from '@/lib/operationalReports';
 import { useAuth } from '@/contexts/useAuth';
@@ -87,6 +93,11 @@ const parseNum = (value: any): number => {
 };
 
 const parseBenefitRows = async (file: File, tipo: BeneficioTipo): Promise<BeneficioImportRow[]> => {
+  if (tipo === 'flash') {
+    const { parseFlashPdf } = await import('@/lib/flashPdf');
+    return parseFlashPdf(file);
+  }
+
   const buffer = await file.arrayBuffer();
   const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -230,12 +241,14 @@ interface ImportDialogProps {
 
 const ImportDialog: React.FC<ImportDialogProps> = ({ open, tipo, importing, onClose, onImport }) => {
   const [dataBeneficio, setDataBeneficio] = useState(todayInput());
+  const [flashBeneficioTipo, setFlashBeneficioTipo] = useState<FlashBeneficioTipo | ''>('');
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
     if (!open) return;
     setDataBeneficio(todayInput());
+    setFlashBeneficioTipo('');
     setFile(null);
     setError('');
   }, [open, tipo]);
@@ -246,11 +259,22 @@ const ImportDialog: React.FC<ImportDialogProps> = ({ open, tipo, importing, onCl
       setError('Informe a data do benefício.');
       return;
     }
+    if (tipo === 'flash' && !flashBeneficioTipo) {
+      setError('Selecione o tipo de benefício Flash.');
+      return;
+    }
     if (!file) {
       setError(tipo === 'combustivel'
         ? 'Selecione um arquivo Excel com CPF, Placa e Valor.'
-        : 'Selecione um arquivo Excel com CPF e Valor.'
+        : tipo === 'flash'
+          ? 'Selecione o relatório PDF da Flash.'
+          : 'Selecione um arquivo Excel com CPF e Valor.'
       );
+      return;
+    }
+
+    if (tipo === 'flash' && !file.name.toLowerCase().endsWith('.pdf')) {
+      setError('O relatório da Flash deve estar no formato PDF.');
       return;
     }
 
@@ -259,13 +283,16 @@ const ImportDialog: React.FC<ImportDialogProps> = ({ open, tipo, importing, onCl
       if (rows.length === 0) {
         setError(tipo === 'combustivel'
           ? 'Nenhuma linha com CPF, Placa e Valor foi encontrada.'
-          : 'Nenhuma linha com CPF e Valor foi encontrada.'
+          : tipo === 'flash'
+            ? 'Nenhum CPF com valor foi encontrado no relatório PDF da Flash.'
+            : 'Nenhuma linha com CPF e Valor foi encontrada.'
         );
         return;
       }
 
       await onImport({
         data_beneficio: dataBeneficio,
+        tipo_beneficio: tipo === 'flash' ? flashBeneficioTipo || null : null,
         arquivo_nome: file.name,
         rows,
       });
@@ -294,16 +321,36 @@ const ImportDialog: React.FC<ImportDialogProps> = ({ open, tipo, importing, onCl
               onChange={event => setDataBeneficio(event.target.value)}
             />
           </div>
+          {tipo === 'flash' && (
+            <div className="space-y-1">
+              <Label htmlFor="flash-beneficio-tipo">Tipo de benefício *</Label>
+              <select
+                id="flash-beneficio-tipo"
+                value={flashBeneficioTipo}
+                onChange={event => setFlashBeneficioTipo(event.target.value as FlashBeneficioTipo | '')}
+                className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <option value="">Selecione...</option>
+                {FLASH_BENEFICIO_TIPOS.map(option => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="space-y-1">
-            <Label>Arquivo Excel *</Label>
+            <Label>{tipo === 'flash' ? 'Relatório PDF da Flash *' : 'Arquivo Excel *'}</Label>
             <Input
               type="file"
-              accept=".xlsx,.xls"
+              accept={tipo === 'flash' ? '.pdf,application/pdf' : '.xlsx,.xls'}
               onChange={event => setFile(event.target.files?.[0] || null)}
             />
             {tipo === 'combustivel' ? (
               <p className="text-xs text-muted-foreground">
                 Use uma planilha com as colunas CPF, Placa e Valor. Nome, unidade e centro de custo serao buscados pelo CPF.
+              </p>
+            ) : tipo === 'flash' ? (
+              <p className="text-xs text-muted-foreground">
+                Use o relatório PDF gerado pela Flash. O CPF e o valor total de cada beneficiário serão identificados automaticamente.
               </p>
             ) : (
               <p className="text-xs text-muted-foreground">
@@ -474,6 +521,7 @@ const Beneficios: React.FC = () => {
       Nome: row.nome,
       CPF: fmtCpf(row.cpf),
       ...(tipo === 'combustivel' ? { Placa: row.placa || '' } : {}),
+      ...(tipo === 'flash' ? { 'Tipo de benefício': row.tipo_beneficio || 'Flash (legado)' } : {}),
       'Centro de Custo': row.setor_nome || '',
       Valor: Number(row.valor) || 0,
       'Importado em': fmtDateTime(row.created_at),
@@ -564,7 +612,7 @@ const Beneficios: React.FC = () => {
             <div className="flex items-center gap-2 flex-wrap">
               <Button onClick={() => setImportOpen(true)} size="sm" className="gap-1">
                 <Upload className="w-4 h-4" />
-                Importar Excel
+                Importar
               </Button>
               <Button variant="outline" size="sm" onClick={handleGenerateReport} disabled={data.length === 0} className="gap-1">
                 <Download className="w-4 h-4" />
@@ -733,6 +781,9 @@ const Beneficios: React.FC = () => {
                     {tipo === 'combustivel' && (
                       <th className="text-left py-3 px-3 font-semibold">Placa</th>
                     )}
+                    {tipo === 'flash' && (
+                      <th className="text-left py-3 px-3 font-semibold">Tipo de benefício</th>
+                    )}
                     <th className="text-left py-3 px-3 font-semibold">Centro de Custo</th>
                     <th className="text-right py-3 px-3 font-semibold">Valor</th>
                     <th className="text-left py-3 px-3 font-semibold">Importado em</th>
@@ -756,6 +807,9 @@ const Beneficios: React.FC = () => {
                       <td className="py-3 px-3">{row.cpf}</td>
                       {tipo === 'combustivel' && (
                         <td className="py-3 px-3 font-semibold">{row.placa || '-'}</td>
+                      )}
+                      {tipo === 'flash' && (
+                        <td className="py-3 px-3 font-semibold">{row.tipo_beneficio || 'Flash (legado)'}</td>
                       )}
                       <td className="py-3 px-3">{row.setor_nome || '-'}</td>
                       <td className="py-3 px-3 text-right font-bold text-primary">{fmtBRL(row.valor)}</td>

@@ -8,6 +8,7 @@ import {
   BeneficioOpcoes,
   BeneficioRegistro,
   BeneficioTipo,
+  FlashBeneficioTipo,
 } from '@/types/beneficios';
 
 const TABLE_BY_TIPO: Record<BeneficioTipo, string> = {
@@ -209,6 +210,20 @@ export function useBeneficios(tipo: BeneficioTipo) {
     let inserted = 0;
 
     try {
+      const flashBeneficioTipo: FlashBeneficioTipo | null = tipo === 'flash'
+        ? payload.tipo_beneficio || null
+        : null;
+
+      if (tipo === 'flash' && !flashBeneficioTipo) {
+        return {
+          inserted: 0,
+          skipped: payload.rows.length,
+          duplicateCount: 0,
+          duplicateCpfs: [],
+          errors: ['Selecione o tipo de benefício Flash antes de importar.'],
+        };
+      }
+
       const normalizedRows = payload.rows
         .map(row => ({
           cpf: normalizeCpf(row.cpf),
@@ -241,7 +256,7 @@ export function useBeneficios(tipo: BeneficioTipo) {
       while (true) {
         const { data: existingRows, error: existingError } = await externalSupabase
           .from(table)
-          .select('id, cpf, valor')
+          .select(tipo === 'flash' ? 'id, cpf, valor, tipo_beneficio' : 'id, cpf, valor')
           .eq('data_beneficio', payload.data_beneficio)
           .order('id', { ascending: true })
           .range(
@@ -254,7 +269,14 @@ export function useBeneficios(tipo: BeneficioTipo) {
         (existingRows || []).forEach((row: any) => {
           const cpf = normalizeCpf(row.cpf);
           const valueInCents = Math.round((Number(row.valor) || 0) * 100);
-          if (cpf && valueInCents > 0) existingKeys.add(`${cpf}:${valueInCents}`);
+          if (!cpf || valueInCents <= 0) return;
+
+          const baseKey = `${cpf}:${valueInCents}`;
+          existingKeys.add(
+            tipo === 'flash'
+              ? `${baseKey}:${row.tipo_beneficio || '*'}`
+              : baseKey,
+          );
         });
 
         if (!existingRows || existingRows.length < existingPageSize) break;
@@ -263,8 +285,10 @@ export function useBeneficios(tipo: BeneficioTipo) {
 
       const uniqueRows = normalizedRows.filter(row => {
         const valueInCents = Math.round(row.valor * 100);
-        const key = `${row.cpf}:${valueInCents}`;
-        if (existingKeys.has(key)) {
+        const baseKey = `${row.cpf}:${valueInCents}`;
+        const key = tipo === 'flash' ? `${baseKey}:${flashBeneficioTipo}` : baseKey;
+        const matchesLegacyFlash = tipo === 'flash' && existingKeys.has(`${baseKey}:*`);
+        if (existingKeys.has(key) || matchesLegacyFlash) {
           duplicateCount++;
           skipped++;
           duplicateCpfs.add(row.cpf);
@@ -333,7 +357,9 @@ export function useBeneficios(tipo: BeneficioTipo) {
         return [
           tipo === 'combustivel'
             ? { ...baseRow, placa: row.placa }
-            : baseRow,
+            : tipo === 'flash'
+              ? { ...baseRow, tipo_beneficio: flashBeneficioTipo }
+              : baseRow,
         ];
       });
 
