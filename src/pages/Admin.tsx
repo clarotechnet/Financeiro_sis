@@ -3,6 +3,8 @@ import * as XLSX from 'xlsx';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/useAuth';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
+import DepartmentQuarkControls from '@/components/DepartmentQuarkControls';
+import { DepartmentFilter, departmentMatchesFilter } from '@/lib/departmentQuark';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -79,6 +81,13 @@ interface RegistroDados {
   unidade_codigo: string | null;
   created_at: string;
   updated_at: string | null;
+  ativo: boolean | null;
+  origem: string | null;
+  ultima_origem_atualizacao: string | null;
+  quark_setor_nome: string | null;
+  quark_unidade_nome: string | null;
+  quark_setor_pendente: boolean;
+  quark_unidade_pendente: boolean;
 }
 
 interface UnidadeOpcao {
@@ -140,6 +149,8 @@ export default function Admin() {
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [savingRegistroId, setSavingRegistroId] = useState<string | null>(null);
   const [isImportingRegistros, setIsImportingRegistros] = useState(false);
+  const [isBusyQuark, setIsBusyQuark] = useState(false);
+  const [departmentFilter, setDepartmentFilter] = useState<DepartmentFilter>('todos');
   const [registroSearch, setRegistroSearch] = useState('');
   const [planoContasSearch, setPlanoContasSearch] = useState('');
   const [planoContasQuickFilter, setPlanoContasQuickFilter] = useState<PlanoContasQuickFilter>('todos');
@@ -278,13 +289,16 @@ export default function Admin() {
 
     setIsLoadingRegistros(true);
     try {
-      const { data, error } = await externalSupabase
-        .from('registros_dados')
-        .select('id,nome,cpf,setor,setor_codigo,unidade_codigo,created_at,updated_at')
-        .order('nome', { ascending: true });
-
-      if (error) throw error;
-      setRegistrosDados(data || []);
+      const rows: RegistroDados[] = [];
+      for (let start = 0; ; start += 1000) {
+        const { data, error } = await externalSupabase.from('registros_dados')
+          .select('id,nome,cpf,setor,setor_codigo,unidade_codigo,created_at,updated_at,ativo,origem,ultima_origem_atualizacao,quark_setor_nome,quark_unidade_nome,quark_setor_pendente,quark_unidade_pendente')
+          .order('nome', { ascending: true }).order('id', { ascending: true }).range(start, start + 999);
+        if (error) throw error;
+        rows.push(...(data || []) as RegistroDados[]);
+        if ((data || []).length < 1000) break;
+      }
+      setRegistrosDados(rows);
     } catch (error) {
       console.error('Erro ao buscar registros do departamento pessoal:', error);
       toast({
@@ -446,26 +460,26 @@ export default function Admin() {
 
   const updateRegistroField = (
     id: string,
-    field: 'nome' | 'cpf' | 'setor_codigo' | 'unidade_codigo',
+    field: 'nome' | 'cpf' | 'setor_codigo' | 'unidade_codigo' | 'ativo',
     value: string,
   ) => {
     setRegistrosDados(prev =>
       prev.map(registro =>
-        registro.id === id ? { ...registro, [field]: value } : registro,
+        registro.id === id ? { ...registro, [field]: field === 'ativo' ? (value === '' ? null : value === 'true') : value } : registro,
       ),
     );
   };
 
   const saveRegistro = async (registro: RegistroDados) => {
-    if (!canEditDepartment) return;
+    if (!canEditDepartment || isBusyQuark || isImportingRegistros) return;
 
     const nome = (registro.nome || '').trim();
-    const cpf = (registro.cpf || '').trim();
+    const cpf = (registro.cpf || '').replace(/\D/g, '');
     const setor_codigo = (registro.setor_codigo || '').trim();
     const setor = opcoesSetores.find(opcao => opcao.codigo === setor_codigo)?.setor || (registro.setor || '').trim();
     const unidade_codigo = (registro.unidade_codigo || '').trim();
 
-    if (!nome || !cpf || !setor_codigo || !unidade_codigo) {
+    if (!nome || cpf.length !== 11 || !setor_codigo || !unidade_codigo) {
       toast({
         title: 'Campos obrigatorios',
         description: 'Preencha nome, CPF, setor e unidade antes de salvar.',
@@ -484,6 +498,9 @@ export default function Admin() {
           setor,
           setor_codigo,
           unidade_codigo,
+          ativo: registro.ativo,
+          origem: registro.origem || 'Manual',
+          ultima_origem_atualizacao: 'Manual',
           updated_at: new Date().toISOString(),
         })
         .eq('id', registro.id);
@@ -535,7 +552,7 @@ export default function Admin() {
     const file = event.target.files?.[0];
     event.target.value = '';
 
-    if (!file || !canEditDepartment) return;
+    if (!file || !canEditDepartment || isBusyQuark || savingRegistroId) return;
 
     setIsImportingRegistros(true);
     try {
@@ -568,6 +585,9 @@ export default function Admin() {
             setor: setorPorCodigo?.setor || setorPorNome?.setor || setorNome,
             setor_codigo: setorPorCodigo?.codigo || setorPorNome?.codigo || '',
             unidade_codigo: unidadeCodigo || unidadePorNome?.codigo || '',
+            origem: 'Excel',
+            ultima_origem_atualizacao: 'Excel',
+            updated_at: new Date().toISOString(),
           };
         })
         .filter(row => row.nome && row.cpf && row.setor_codigo && row.unidade_codigo);
@@ -616,12 +636,16 @@ export default function Admin() {
 
   const filteredRegistrosDados = useMemo(() => {
     const searchTerm = registroSearch.trim().toLowerCase();
-    if (!searchTerm) return registrosDados;
+    const selectedRows = registrosDados.filter(r => departmentMatchesFilter(r, departmentFilter));
+    if (!searchTerm) return selectedRows;
 
-    return registrosDados.filter(registro =>
+    return selectedRows.filter(registro =>
       [
         registro.nome,
         registro.cpf,
+        registro.quark_setor_nome,
+        registro.quark_unidade_nome,
+        registro.origem,
         registro.setor,
         registro.setor_codigo,
         registro.setor_codigo ? setorNomeByCodigo.get(registro.setor_codigo) : '',
@@ -630,7 +654,7 @@ export default function Admin() {
       ]
         .some(value => (value || '').toLowerCase().includes(searchTerm)),
     );
-  }, [registrosDados, registroSearch, setorNomeByCodigo, unidadeNomeByCodigo]);
+  }, [registrosDados, registroSearch, departmentFilter, setorNomeByCodigo, unidadeNomeByCodigo]);
 
   const planoContaById = useMemo(() => {
     return new Map(planoContas.map(conta => [conta.id, conta]));
@@ -688,7 +712,7 @@ export default function Admin() {
 
   useEffect(() => {
     setRegistroPage(0);
-  }, [registroSearch]);
+  }, [registroSearch, departmentFilter]);
 
   useEffect(() => {
     setRegistroPage(currentPage => Math.min(currentPage, totalRegistroPages - 1));
@@ -1029,7 +1053,7 @@ export default function Admin() {
                         <Button
                           type="button"
                           onClick={() => fileInputRef.current?.click()}
-                          disabled={isImportingRegistros}
+                          disabled={isImportingRegistros || isBusyQuark || !!savingRegistroId}
                           className="gap-2"
                         >
                           {isImportingRegistros ? (
@@ -1045,6 +1069,10 @@ export default function Admin() {
                 </div>
               </CardHeader>
               <CardContent className="flex flex-col gap-3 px-4 pb-4">
+                <DepartmentQuarkControls rows={registrosDados} canEdit={canEditDepartment}
+                  busy={isBusyQuark || isImportingRegistros || !!savingRegistroId} setBusy={setIsBusyQuark}
+                  filter={departmentFilter} setFilter={setDepartmentFilter} onRefresh={fetchRegistrosDados}
+                  setores={opcoesSetores} unidades={opcoesUnidades} />
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <div className="relative w-full md:max-w-sm">
                     <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -1094,14 +1122,16 @@ export default function Admin() {
                   </div>
                 </div>
 
-                <div className="w-full overflow-auto rounded-md border border-border max-h-[calc(100vh-330px)]">
-                  <Table className="min-w-[930px] text-xs">
+                <div className="w-full overflow-auto rounded-md border border-border max-h-[60vh]">
+                  <Table className="min-w-[1150px] text-xs">
                     <TableHeader className="sticky top-0 z-10 bg-card">
                       <TableRow>
                         <TableHead className="h-8 px-2 text-xs">Nome</TableHead>
                         <TableHead className="h-8 px-2 text-xs">CPF</TableHead>
                         <TableHead className="h-8 px-2 text-xs">Setor</TableHead>
                         <TableHead className="h-8 px-2 text-xs">Unidade</TableHead>
+                        <TableHead className="h-8 px-2 text-xs">Ativo</TableHead>
+                        <TableHead className="h-8 px-2 text-xs">Origem</TableHead>
                         <TableHead className="h-8 px-2 text-xs">Atualizado em</TableHead>
                         {canEditDepartment && <TableHead className="h-8 px-2 text-right text-xs">Acao</TableHead>}
                       </TableRow>
@@ -1109,14 +1139,14 @@ export default function Admin() {
                     <TableBody>
                       {isLoadingRegistros ? (
                         <TableRow>
-                          <TableCell colSpan={canEditDepartment ? 6 : 5} className="py-8 text-center text-muted-foreground">
+                          <TableCell colSpan={canEditDepartment ? 8 : 7} className="py-8 text-center text-muted-foreground">
                             <Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin" />
                             Carregando registros...
                           </TableCell>
                         </TableRow>
                       ) : filteredRegistrosDados.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={canEditDepartment ? 6 : 5} className="py-8 text-center text-muted-foreground">
+                          <TableCell colSpan={canEditDepartment ? 8 : 7} className="py-8 text-center text-muted-foreground">
                             Nenhum registro encontrado.
                           </TableCell>
                         </TableRow>
@@ -1127,7 +1157,7 @@ export default function Admin() {
                               <Input
                                 value={registro.nome || ''}
                                 onChange={(event) => updateRegistroField(registro.id, 'nome', event.target.value)}
-                                disabled={!canEditDepartment || savingRegistroId === registro.id}
+                                disabled={!canEditDepartment || !!savingRegistroId || isBusyQuark || isImportingRegistros}
                                 className="h-8 px-2 text-xs"
                               />
                             </TableCell>
@@ -1135,7 +1165,7 @@ export default function Admin() {
                               <Input
                                 value={registro.cpf || ''}
                                 onChange={(event) => updateRegistroField(registro.id, 'cpf', event.target.value)}
-                                disabled={!canEditDepartment || savingRegistroId === registro.id}
+                                disabled={!canEditDepartment || !!savingRegistroId || isBusyQuark || isImportingRegistros}
                                 className="h-8 px-2 text-xs"
                               />
                             </TableCell>
@@ -1143,7 +1173,7 @@ export default function Admin() {
                               <select
                                 value={registro.setor_codigo || ''}
                                 onChange={(event) => updateRegistroField(registro.id, 'setor_codigo', event.target.value)}
-                                disabled={!canEditDepartment || savingRegistroId === registro.id}
+                                disabled={!canEditDepartment || !!savingRegistroId || isBusyQuark || isImportingRegistros}
                                 className="h-8 w-full rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground disabled:cursor-not-allowed disabled:opacity-50"
                               >
                                 <option value="">Selecione...</option>
@@ -1153,12 +1183,13 @@ export default function Admin() {
                                   </option>
                                 ))}
                               </select>
+                              {registro.quark_setor_pendente && <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">Não mapeado — {registro.quark_setor_nome || 'Equipe não informada'}{registro.setor_codigo ? ' (vínculo atual preservado)' : ''}</p>}
                             </TableCell>
                             <TableCell className="min-w-[210px] px-2 py-1.5">
                               <select
                                 value={registro.unidade_codigo || ''}
                                 onChange={(event) => updateRegistroField(registro.id, 'unidade_codigo', event.target.value)}
-                                disabled={!canEditDepartment || savingRegistroId === registro.id}
+                                disabled={!canEditDepartment || !!savingRegistroId || isBusyQuark || isImportingRegistros}
                                 className="h-8 w-full rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground disabled:cursor-not-allowed disabled:opacity-50"
                               >
                                 <option value="">Selecione...</option>
@@ -1168,7 +1199,17 @@ export default function Admin() {
                                   </option>
                                 ))}
                               </select>
+                              {registro.quark_unidade_pendente && <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">Não mapeada — {registro.quark_unidade_nome || 'Unidade não informada'}{registro.unidade_codigo ? ' (vínculo atual preservado)' : ''}</p>}
                             </TableCell>
+                            <TableCell className="px-2 py-1.5">
+                              <select aria-label={`Situação de ${registro.nome}`} value={registro.ativo == null ? '' : String(registro.ativo)}
+                                onChange={e => updateRegistroField(registro.id, 'ativo', e.target.value)}
+                                disabled={!canEditDepartment || !!savingRegistroId || isBusyQuark || isImportingRegistros}
+                                className={`h-8 rounded-md border bg-background px-2 text-xs ${registro.ativo === true ? 'text-emerald-600 dark:text-emerald-400' : registro.ativo === false ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}>
+                                <option value="">Não informado</option><option value="true">Ativo</option><option value="false">Inativo</option>
+                              </select>
+                            </TableCell>
+                            <TableCell className="px-2 py-1.5"><Badge variant="secondary">{registro.origem || 'Não informada'}</Badge><p className="mt-1 text-[10px] text-muted-foreground">Última alteração: {registro.ultima_origem_atualizacao || 'Não informada'}</p></TableCell>
                             <TableCell className="whitespace-nowrap px-2 py-1.5 text-xs">
                               {registro.updated_at ? formatDate(registro.updated_at) : '-'}
                             </TableCell>
@@ -1178,7 +1219,7 @@ export default function Admin() {
                                   type="button"
                                   size="sm"
                                   onClick={() => saveRegistro(registro)}
-                                  disabled={savingRegistroId === registro.id}
+                                  disabled={!!savingRegistroId || isBusyQuark || isImportingRegistros}
                                   className="h-8 gap-1 px-2 text-xs"
                                 >
                                   {savingRegistroId === registro.id ? (
