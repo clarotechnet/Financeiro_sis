@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/useAuth';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
 import DepartmentQuarkControls from '@/components/DepartmentQuarkControls';
 import { DepartmentFilter, departmentMatchesFilter } from '@/lib/departmentQuark';
+import { ExcelDepartmentRow, normalizeDepartmentExcelKey, prepareDepartmentExcel } from '@/lib/departmentExcel';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -114,24 +115,10 @@ interface PlanoContaRow {
   updated_at: string | null;
 }
 
-type ExcelRow = Record<string, unknown>;
 type PlanoContasQuickFilter = 'todos' | 'grupo' | 'subgrupo' | 'analitica' | 'inativa';
 
 const REGISTROS_TEMPLATE_HEADERS = ['nome', 'cpf', 'setor_codigo', 'unidade_codigo'];
 const REGISTROS_PAGE_SIZE = 50;
-
-const normalizeExcelKey = (value: string) =>
-  value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, '');
-
-const getExcelValue = (row: ExcelRow, key: string) => {
-  const entry = Object.entries(row).find(([column]) => normalizeExcelKey(column) === key);
-  return entry?.[1] == null ? '' : String(entry[1]).trim();
-};
 
 export default function Admin() {
   const navigate = useNavigate();
@@ -551,76 +538,40 @@ export default function Admin() {
   const importRegistrosExcel = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = '';
-
-    if (!file || !canEditDepartment || isBusyQuark || savingRegistroId) return;
-
+    if (!file || !canEditDepartment || isBusyQuark || isImportingRegistros || savingRegistroId) return;
     setIsImportingRegistros(true);
     try {
       const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' });
-      const firstSheet = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[firstSheet];
-      const rows = XLSX.utils.sheet_to_json<ExcelRow>(worksheet, {
-        defval: '',
-        raw: false,
-      });
-
-      const registros = rows
-        .map(row => {
-          const setorCodigo = getExcelValue(row, 'setorcodigo') || getExcelValue(row, 'codigosetor');
-          const setorNome = getExcelValue(row, 'setor');
-          const setorPorCodigo = opcoesSetores.find(opcao =>
-            opcao.codigo.trim().toLowerCase() === setorCodigo.trim().toLowerCase()
-          );
-          const setorPorNome = opcoesSetores.find(opcao =>
-            opcao.setor.trim().toLowerCase() === setorNome.trim().toLowerCase()
-          );
-          const unidadeCodigo = getExcelValue(row, 'unidadecodigo') || getExcelValue(row, 'codigounidade');
-          const unidadeNome = getExcelValue(row, 'unidade');
-          const unidadePorNome = opcoesUnidades.find(opcao =>
-            opcao.unidade.trim().toLowerCase() === unidadeNome.trim().toLowerCase()
-          );
-          return {
-            nome: getExcelValue(row, 'nome'),
-            cpf: getExcelValue(row, 'cpf').replace(/\D/g, ''),
-            setor: setorPorCodigo?.setor || setorPorNome?.setor || setorNome,
-            setor_codigo: setorPorCodigo?.codigo || setorPorNome?.codigo || '',
-            unidade_codigo: unidadeCodigo || unidadePorNome?.codigo || '',
-            origem: 'Excel',
-            ultima_origem_atualizacao: 'Excel',
-            updated_at: new Date().toISOString(),
-          };
-        })
-        .filter(row => row.nome && row.cpf && row.setor_codigo && row.unidade_codigo);
-
-      if (registros.length === 0) {
-        toast({
-          title: 'Planilha sem dados validos',
-          description: 'Use as colunas nome, cpf, setor_codigo e unidade_codigo no arquivo de importacao.',
-          variant: 'destructive',
-        });
-        return;
+      const sheetName = workbook.SheetNames.find(name => normalizeDepartmentExcelKey(name) === 'registrosdados') || workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      if (!worksheet) throw new Error('A planilha não possui uma aba de registros.');
+      const header = XLSX.utils.sheet_to_json<unknown[]>(worksheet, { header: 1, raw: true })[0] || [];
+      const keys = header.map(value => normalizeDepartmentExcelKey(String(value ?? '')));
+      if (!keys.includes('nome') || !keys.includes('cpf') ||
+          !keys.some(key => ['setorcodigo', 'codigosetor', 'setor'].includes(key)) ||
+          !keys.some(key => ['unidadecodigo', 'codigounidade', 'unidade'].includes(key))) {
+        throw new Error('Use as colunas nome, cpf, setor_codigo e unidade_codigo na aba registros_dados.');
       }
-
-      const chunkSize = 500;
-      for (let index = 0; index < registros.length; index += chunkSize) {
-        const chunk = registros.slice(index, index + chunkSize);
-        const { error } = await externalSupabase.from('registros_dados').insert(chunk);
-        if (error) throw error;
+      const rows = XLSX.utils.sheet_to_json<ExcelDepartmentRow>(worksheet, { defval: '', raw: true });
+      const prepared = prepareDepartmentExcel(rows, opcoesSetores, opcoesUnidades);
+      if (prepared.errors.length) {
+        throw new Error(prepared.errors.slice(0, 3).join(' ') +
+          (prepared.errors.length > 3 ? ` Há mais ${prepared.errors.length - 3} linha(s) com erro.` : '') +
+          ' Nenhum cadastro foi alterado.');
       }
-
-      const ignoredRows = rows.length - registros.length;
+      if (!prepared.records.length) throw new Error('A aba registros_dados está vazia. Preencha os colaboradores antes de importar.');
+      const { data, error } = await externalSupabase.rpc('import_department_excel', { p_records: prepared.records });
+      if (error) throw error;
       toast({
-        title: 'Importacao concluida',
-        description: `${registros.length} tecnico(s) importado(s)${ignoredRows > 0 ? `; ${ignoredRows} linha(s) ignorada(s)` : ''}.`,
+        title: 'Importação concluída',
+        description: `${data.created} novo(s) · ${data.updated} atualizado(s)${prepared.duplicates ? ` · ${prepared.duplicates} linha(s) repetida(s) idêntica(s) consolidada(s)` : ''}.`,
       });
-      fetchRegistrosDados();
+      await fetchRegistrosDados();
     } catch (error) {
       console.error('Erro ao importar registros do departamento pessoal:', error);
-      toast({
-        title: 'Erro na importacao',
-        description: 'Nao foi possivel importar a planilha. Confira o modelo e tente novamente.',
-        variant: 'destructive',
-      });
+      const message = error && typeof error === 'object' && 'message' in error
+        ? String(error.message) : 'Não foi possível ler a planilha. Confira o arquivo e tente novamente.';
+      toast({ title: 'Erro na importação', description: message, variant: 'destructive' });
     } finally {
       setIsImportingRegistros(false);
     }

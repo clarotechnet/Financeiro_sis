@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import { prepareDepartmentExcel } from '../../src/lib/departmentExcel.ts';
+const setores=[{codigo:'S001',setor:'Técnico de Campo — ADS & SERVIÇOS'}],unidades=[{codigo:'2',unidade:'FILIAL 01 - NATAL'}];
+const row={nome:'Pessoa teste',cpf:'012.345.678-90',setor_codigo:'S001',unidade_codigo:2};
+let result=prepareDepartmentExcel([row],setores,unidades);assert.equal(result.records[0].cpf,'01234567890');assert.ok(!('ativo' in result.records[0]));
+result=prepareDepartmentExcel([{...row,cpf:1234567890}],setores,unidades);assert.equal(result.records[0].cpf,'01234567890');
+result=prepareDepartmentExcel([row,row],setores,unidades);assert.equal(result.records.length,1);assert.equal(result.duplicates,1);
+result=prepareDepartmentExcel([row,{...row,nome:'Nome diferente'}],setores,unidades);assert.equal(result.errors.length,1);
+result=prepareDepartmentExcel([{...row,unidade_codigo:'999'}],setores,unidades);assert.equal(result.errors.length,1);
+result=prepareDepartmentExcel([{...row,ativo:'Inativo'}],setores,unidades);assert.equal(result.records[0].ativo,false);
+result=prepareDepartmentExcel([{...row,ativo:false}],setores,unidades);assert.equal(result.records[0].ativo,false);
+result=prepareDepartmentExcel([{...row,cpf:'1.23E+10'}],setores,unidades);assert.equal(result.errors.length,1);
+console.log('Excel: CPF formatado/número, zeros, duplicatas, códigos e situação passaram.');
