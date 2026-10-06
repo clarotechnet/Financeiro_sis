@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { LoadingSpinner } from '@/components/comissionamento/LoadingSpinner';
@@ -310,6 +310,9 @@ const ImportDialog: React.FC<ImportDialogProps> = ({ open, tipo, importing, onCl
             <Upload className="w-5 h-5 text-primary" />
             Importar {tipo === 'combustivel' ? 'Combustível' : tipo === 'flash' ? 'Flash' : 'Agregamento'}
           </DialogTitle>
+          <DialogDescription className="sr-only">
+            Importação de benefícios por CPF para a data selecionada.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="grid grid-cols-1 gap-4">
@@ -834,6 +837,9 @@ const Beneficios: React.FC = () => {
           <DialogContent className="max-w-xl bg-card border-border">
             <DialogHeader>
               <DialogTitle>Resumo da importação</DialogTitle>
+              <DialogDescription className="sr-only">
+                Quantidade de registros importados, ignorados e duplicados, com avisos da importação.
+              </DialogDescription>
             </DialogHeader>
             {importResult && (
               <div className="space-y-4">
