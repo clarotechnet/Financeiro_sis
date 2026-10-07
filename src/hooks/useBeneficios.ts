@@ -8,6 +8,7 @@ import {
   BeneficioOpcoes,
   BeneficioRegistro,
   BeneficioTipo,
+  FLASH_BENEFICIO_TIPOS,
   FlashBeneficioTipo,
 } from '@/types/beneficios';
 
@@ -46,6 +47,7 @@ const getDefaultFilters = (): BeneficioFilters => ({
   unidade: [],
   setor: [],
   nome: [],
+  tipoBeneficio: [],
   placa: '',
   busca: '',
 });
@@ -173,6 +175,9 @@ export function useBeneficios(tipo: BeneficioTipo) {
     if ((tipo === 'flash' || tipo === 'agregamento') && filters.nome.length > 0) {
       rows = rows.filter(row => filters.nome.includes(row.nome));
     }
+    if (tipo === 'flash' && filters.tipoBeneficio.length > 0) {
+      rows = rows.filter(row => filters.tipoBeneficio.includes(row.tipo_beneficio || 'Flash (legado)'));
+    }
     if (tipo === 'combustivel' && filters.placa.trim()) {
       const placa = normalizePlacaSearch(filters.placa);
       rows = rows.filter(row => normalizePlacaSearch(row.placa).includes(placa));
@@ -194,6 +199,12 @@ export function useBeneficios(tipo: BeneficioTipo) {
       .sort((a, b) => a.localeCompare(b, 'pt-BR'))
       .map(nome => ({ id: nome, nome }))
   ), [data]);
+
+  const opcoesTiposBeneficio = useMemo(() => {
+    const tipos: string[] = [...FLASH_BENEFICIO_TIPOS];
+    if (data.some(row => !row.tipo_beneficio)) tipos.push('Flash (legado)');
+    return tipos.map(nome => ({ id: nome, nome }));
+  }, [data]);
 
   const kpis = useMemo(() => ({
     totalRegistros: filteredData.length,
@@ -434,6 +445,7 @@ export function useBeneficios(tipo: BeneficioTipo) {
     deleteSelected,
     opcoes,
     opcoesNomes,
+    opcoesTiposBeneficio,
     kpis,
   };
 }

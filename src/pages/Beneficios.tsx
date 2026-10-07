@@ -400,6 +400,7 @@ const Beneficios: React.FC = () => {
     deleteSelected,
     opcoes,
     opcoesNomes,
+    opcoesTiposBeneficio,
     kpis,
   } = useBeneficios(tipo);
   const { profile } = useAuth();
@@ -635,7 +636,7 @@ const Beneficios: React.FC = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-[minmax(220px,1.6fr)_repeat(6,minmax(0,1fr))]">
+          <div className={`grid grid-cols-1 gap-4 md:grid-cols-3 ${tipo === 'flash' ? 'xl:grid-cols-4' : 'xl:grid-cols-[minmax(220px,1.6fr)_repeat(6,minmax(0,1fr))]'}`}>
             <MonthPeriodNavigator
               startDate={filters.dataInicio}
               endDate={filters.dataFim}
@@ -668,6 +669,14 @@ const Beneficios: React.FC = () => {
                 options={opcoesNomes}
                 selected={filters.nome}
                 onChange={value => setFilters({ nome: value })}
+              />
+            )}
+            {tipo === 'flash' && (
+              <MultiSelect
+                label="Tipo de benefício"
+                options={opcoesTiposBeneficio}
+                selected={filters.tipoBeneficio}
+                onChange={value => setFilters({ tipoBeneficio: value })}
               />
             )}
             {tipo === 'combustivel' && (

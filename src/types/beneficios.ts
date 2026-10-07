@@ -66,6 +66,7 @@ export interface BeneficioFilters {
   unidade: string[];
   setor: string[];
   nome: string[];
+  tipoBeneficio: string[];
   placa: string;
   busca: string;
 }
