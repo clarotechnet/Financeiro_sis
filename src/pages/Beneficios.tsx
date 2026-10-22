@@ -23,7 +23,6 @@ import { useBeneficios } from '@/hooks/useBeneficios';
 import { useToast } from '@/hooks/use-toast';
 import {
   BeneficioImportPayload,
-  BeneficioImportRow,
   BeneficioTipo,
   FLASH_BENEFICIO_TIPOS,
   FlashBeneficioTipo,
@@ -32,6 +31,7 @@ import { OpcaoSelect } from '@/types/comissionamento';
 import { downloadOperationalReport, OperationalReportSource } from '@/lib/operationalReports';
 import { useAuth } from '@/contexts/useAuth';
 import { canManageExistingFinancialData } from '@/lib/profileRoles';
+import { normalizeCpf, parseBenefitRows } from '@/lib/beneficioImport';
 
 const PAGE_SIZE = 50;
 
@@ -63,81 +63,10 @@ const todayInput = () => {
   return `${year}-${month}-${day}`;
 };
 
-const normKey = (key: string) =>
-  key
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toUpperCase()
-    .replace(/[Â°Âº]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-const normalizeCpf = (value: any) => {
-  const digits = String(value ?? '').replace(/\D/g, '');
-  if (!digits) return '';
-  return digits.length < 11 ? digits.padStart(11, '0') : digits;
-};
-
 const fmtCpf = (value: string) => {
   const cpf = normalizeCpf(value);
   if (cpf.length !== 11) return value;
   return cpf.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4');
-};
-
-const parseNum = (value: any): number => {
-  if (value == null || value === '') return 0;
-  if (typeof value === 'number') return value;
-  const normalized = String(value).replace(/[R$\s.]/g, '').replace(',', '.');
-  const parsed = parseFloat(normalized);
-  return Number.isFinite(parsed) ? parsed : 0;
-};
-
-const parseBenefitRows = async (file: File, tipo: BeneficioTipo): Promise<BeneficioImportRow[]> => {
-  if (tipo === 'flash') {
-    const { parseFlashPdf } = await import('@/lib/flashPdf');
-    return parseFlashPdf(file);
-  }
-
-  const buffer = await file.arrayBuffer();
-  const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
-  const sheet = workbook.Sheets[workbook.SheetNames[0]];
-  const raw: Record<string, any>[] = XLSX.utils.sheet_to_json(sheet, { defval: null, raw: true });
-
-  return raw.flatMap(row => {
-    const entries = Object.entries(row);
-    let cpfValue: any = null;
-    let placaValue: any = null;
-    let valorValue: any = null;
-
-    for (const [key, value] of entries) {
-      const normalizedKey = normKey(key);
-      if (cpfValue == null && normalizedKey.includes('CPF')) cpfValue = value;
-      if (tipo === 'combustivel' && placaValue == null && normalizedKey.includes('PLACA')) placaValue = value;
-      if (
-        valorValue == null &&
-        (
-          normalizedKey === 'VALOR' ||
-          normalizedKey.includes('VALOR') ||
-          normalizedKey.includes('COMBUSTIVEL') ||
-          normalizedKey.includes('AGREGAMENTO') ||
-          normalizedKey.includes('FLASH')
-        )
-      ) {
-        valorValue = value;
-      }
-    }
-
-    if (cpfValue == null) cpfValue = entries[0]?.[1] ?? null;
-    if (tipo === 'combustivel' && placaValue == null) placaValue = entries[1]?.[1] ?? null;
-    if (valorValue == null) valorValue = entries[tipo === 'combustivel' ? 2 : 1]?.[1] ?? null;
-
-    const cpf = normalizeCpf(cpfValue);
-    const placa = String(placaValue ?? '').trim().replace(/\s+/g, ' ').toUpperCase();
-    const valor = parseNum(valorValue);
-    if (!cpf && !placa && valor <= 0) return [];
-
-    return tipo === 'combustivel' ? [{ cpf, placa, valor }] : [{ cpf, valor }];
-  });
 };
 
 interface MultiSelectProps {
@@ -267,14 +196,9 @@ const ImportDialog: React.FC<ImportDialogProps> = ({ open, tipo, importing, onCl
       setError(tipo === 'combustivel'
         ? 'Selecione um arquivo Excel com CPF, Placa e Valor.'
         : tipo === 'flash'
-          ? 'Selecione o relatório PDF da Flash.'
+          ? 'Selecione um arquivo PDF ou XLSX da Flash.'
           : 'Selecione um arquivo Excel com CPF e Valor.'
       );
-      return;
-    }
-
-    if (tipo === 'flash' && !file.name.toLowerCase().endsWith('.pdf')) {
-      setError('O relatório da Flash deve estar no formato PDF.');
       return;
     }
 
@@ -284,7 +208,7 @@ const ImportDialog: React.FC<ImportDialogProps> = ({ open, tipo, importing, onCl
         setError(tipo === 'combustivel'
           ? 'Nenhuma linha com CPF, Placa e Valor foi encontrada.'
           : tipo === 'flash'
-            ? 'Nenhum CPF com valor foi encontrado no relatório PDF da Flash.'
+            ? 'Nenhum CPF com valor foi encontrado no arquivo da Flash.'
             : 'Nenhuma linha com CPF e Valor foi encontrada.'
         );
         return;
@@ -341,10 +265,11 @@ const ImportDialog: React.FC<ImportDialogProps> = ({ open, tipo, importing, onCl
             </div>
           )}
           <div className="space-y-1">
-            <Label>{tipo === 'flash' ? 'Relatório PDF da Flash *' : 'Arquivo Excel *'}</Label>
+            <Label htmlFor="beneficio-arquivo">{tipo === 'flash' ? 'Arquivo Flash (PDF ou XLSX) *' : 'Arquivo Excel *'}</Label>
             <Input
+              id="beneficio-arquivo"
               type="file"
-              accept={tipo === 'flash' ? '.pdf,application/pdf' : '.xlsx,.xls'}
+              accept={tipo === 'flash' ? '.pdf,.xlsx,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : '.xlsx,.xls'}
               onChange={event => setFile(event.target.files?.[0] || null)}
             />
             {tipo === 'combustivel' ? (
@@ -353,7 +278,7 @@ const ImportDialog: React.FC<ImportDialogProps> = ({ open, tipo, importing, onCl
               </p>
             ) : tipo === 'flash' ? (
               <p className="text-xs text-muted-foreground">
-                Use o relatório PDF gerado pela Flash. O CPF e o valor total de cada beneficiário serão identificados automaticamente.
+                Use o relatório PDF da Flash ou uma planilha XLSX com as colunas CPF e Valor (ou Total). O tipo de benefício selecionado será aplicado aos registros do arquivo.
               </p>
             ) : (
               <p className="text-xs text-muted-foreground">

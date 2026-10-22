@@ -4,13 +4,16 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/useAuth';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
 import DepartmentQuarkControls from '@/components/DepartmentQuarkControls';
+import DepartmentFilterSelect, { DepartmentFilterOption } from '@/components/DepartmentFilterSelect';
 import { DepartmentFilter, departmentMatchesFilter } from '@/lib/departmentQuark';
 import { ExcelDepartmentRow, normalizeDepartmentExcelKey, prepareDepartmentExcel } from '@/lib/departmentExcel';
+import { sortUnidadesParaFiltro } from '@/lib/unidades';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 import {
   Table,
@@ -119,6 +122,8 @@ type PlanoContasQuickFilter = 'todos' | 'grupo' | 'subgrupo' | 'analitica' | 'in
 
 const REGISTROS_TEMPLATE_HEADERS = ['nome', 'cpf', 'setor_codigo', 'unidade_codigo'];
 const REGISTROS_PAGE_SIZE = 50;
+const SEM_SETOR = '__sem_setor__';
+const SEM_UNIDADE = '__sem_unidade__';
 
 export default function Admin() {
   const navigate = useNavigate();
@@ -139,6 +144,9 @@ export default function Admin() {
   const [isBusyQuark, setIsBusyQuark] = useState(false);
   const [departmentFilter, setDepartmentFilter] = useState<DepartmentFilter>('todos');
   const [registroSearch, setRegistroSearch] = useState('');
+  const [registroNomes, setRegistroNomes] = useState<string[]>([]);
+  const [registroSetores, setRegistroSetores] = useState<string[]>([]);
+  const [registroUnidades, setRegistroUnidades] = useState<string[]>([]);
   const [planoContasSearch, setPlanoContasSearch] = useState('');
   const [planoContasQuickFilter, setPlanoContasQuickFilter] = useState<PlanoContasQuickFilter>('todos');
   const [registroPage, setRegistroPage] = useState(0);
@@ -585,9 +593,49 @@ export default function Admin() {
     return new Map(opcoesSetores.map(setor => [setor.codigo, setor.setor]));
   }, [opcoesSetores]);
 
+  const registroFilterOptions = useMemo(() => {
+    const nomes = new Set<string>();
+    const setores = new Map(opcoesSetores.map(setor => [setor.codigo, setor.setor]));
+    const unidades = new Map(opcoesUnidades.map(unidade => [unidade.codigo, `${unidade.codigo} - ${unidade.unidade}`]));
+
+    registrosDados.forEach(registro => {
+      const setor = registro.setor_codigo || SEM_SETOR;
+      const unidade = registro.unidade_codigo || SEM_UNIDADE;
+      if (registro.nome?.trim() && (registroUnidades.length === 0 || registroUnidades.includes(unidade))) {
+        nomes.add(registro.nome.trim());
+      }
+      if (!setores.has(setor)) setores.set(setor, setor === SEM_SETOR ? 'Sem setor' : registro.setor || setor);
+      if (!unidades.has(unidade)) unidades.set(unidade, unidade === SEM_UNIDADE ? 'Sem unidade' : unidade);
+    });
+
+    const byLabel = (a: DepartmentFilterOption, b: DepartmentFilterOption) => a.label.localeCompare(b.label, 'pt-BR', { numeric: true });
+    return {
+      nomes: [...nomes].map(nome => ({ value: nome, label: nome })).sort(byLabel),
+      setores: [...setores].map(([value, label]) => ({ value, label })).sort(byLabel),
+      unidades: sortUnidadesParaFiltro(
+        [...unidades].map(([value, label]) => ({ value, label })),
+        option => option.value,
+        option => unidadeNomeByCodigo.get(option.value) || option.label,
+      ),
+    };
+  }, [registrosDados, registroUnidades, opcoesSetores, opcoesUnidades, unidadeNomeByCodigo]);
+
+  useEffect(() => {
+    const nomesDisponiveis = new Set(registroFilterOptions.nomes.map(option => option.value));
+    setRegistroNomes(current => {
+      const validos = current.filter(nome => nomesDisponiveis.has(nome));
+      return validos.length === current.length ? current : validos;
+    });
+  }, [registroFilterOptions.nomes]);
+
   const filteredRegistrosDados = useMemo(() => {
     const searchTerm = registroSearch.trim().toLowerCase();
-    const selectedRows = registrosDados.filter(r => departmentMatchesFilter(r, departmentFilter));
+    const selectedRows = registrosDados.filter(registro =>
+      departmentMatchesFilter(registro, departmentFilter) &&
+      (registroNomes.length === 0 || registroNomes.includes(registro.nome?.trim() || '')) &&
+      (registroSetores.length === 0 || registroSetores.includes(registro.setor_codigo || SEM_SETOR)) &&
+      (registroUnidades.length === 0 || registroUnidades.includes(registro.unidade_codigo || SEM_UNIDADE))
+    );
     if (!searchTerm) return selectedRows;
 
     return selectedRows.filter(registro =>
@@ -605,7 +653,7 @@ export default function Admin() {
       ]
         .some(value => (value || '').toLowerCase().includes(searchTerm)),
     );
-  }, [registrosDados, registroSearch, departmentFilter, setorNomeByCodigo, unidadeNomeByCodigo]);
+  }, [registrosDados, registroSearch, registroNomes, registroSetores, registroUnidades, departmentFilter, setorNomeByCodigo, unidadeNomeByCodigo]);
 
   const planoContaById = useMemo(() => {
     return new Map(planoContas.map(conta => [conta.id, conta]));
@@ -663,7 +711,7 @@ export default function Admin() {
 
   useEffect(() => {
     setRegistroPage(0);
-  }, [registroSearch, departmentFilter]);
+  }, [registroSearch, registroNomes, registroSetores, registroUnidades, departmentFilter]);
 
   useEffect(() => {
     setRegistroPage(currentPage => Math.min(currentPage, totalRegistroPages - 1));
@@ -1024,16 +1072,39 @@ export default function Admin() {
                   busy={isBusyQuark || isImportingRegistros || !!savingRegistroId} setBusy={setIsBusyQuark}
                   filter={departmentFilter} setFilter={setDepartmentFilter} onRefresh={fetchRegistrosDados}
                   setores={opcoesSetores} unidades={opcoesUnidades} />
-                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                  <div className="relative w-full md:max-w-sm">
-                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      value={registroSearch}
-                      onChange={(event) => setRegistroSearch(event.target.value)}
-                      placeholder="Buscar por nome, CPF, setor ou unidade"
-                      className="h-9 pl-9 text-sm"
-                    />
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  <DepartmentFilterSelect label="Nome" options={registroFilterOptions.nomes} selected={registroNomes} onChange={setRegistroNomes} />
+                  <DepartmentFilterSelect label="Setor" options={registroFilterOptions.setores} selected={registroSetores} onChange={setRegistroSetores} />
+                  <DepartmentFilterSelect label="Unidade" options={registroFilterOptions.unidades} selected={registroUnidades} onChange={setRegistroUnidades} />
+                  <div className="min-w-0 space-y-1">
+                    <Label htmlFor="departamento-busca">Buscar geral</Label>
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        id="departamento-busca"
+                        value={registroSearch}
+                        onChange={(event) => setRegistroSearch(event.target.value)}
+                        placeholder="Buscar por nome, CPF, setor ou unidade"
+                        className="h-9 pl-9 text-sm"
+                      />
+                    </div>
                   </div>
+                </div>
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setRegistroSearch('');
+                      setRegistroNomes([]);
+                      setRegistroSetores([]);
+                      setRegistroUnidades([]);
+                      setDepartmentFilter('todos');
+                    }}
+                  >
+                    Limpar filtros
+                  </Button>
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge variant="secondary">
                       {filteredRegistrosDados.length} registro(s)
