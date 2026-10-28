@@ -2,18 +2,7 @@ import { OpcaoSelect } from '@/types/comissionamento';
 
 export type BeneficioTipo = 'combustivel' | 'agregamento' | 'flash';
 
-export const FLASH_BENEFICIO_TIPOS = [
-  'Flash Hora Extra',
-  'Flash Bonificação',
-  'Flash Tec Consultivo',
-  'Flash Gatilho',
-  'Flash Ind de vendas',
-  'Flash Produtividade',
-  'Flash VT',
-  'Flash VA',
-] as const;
-
-export type FlashBeneficioTipo = typeof FLASH_BENEFICIO_TIPOS[number];
+export type FlashBeneficioTipo = string;
 
 export interface BeneficioRegistro {
   tipo: BeneficioTipo;
@@ -43,6 +32,7 @@ export interface BeneficioImportRow {
   cpf: string;
   placa?: string | null;
   valor: number;
+  data_beneficio?: string;
 }
 
 export interface BeneficioImportPayload {

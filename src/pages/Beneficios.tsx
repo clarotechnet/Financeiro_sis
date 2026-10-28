@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { AlertCircle, CheckCircle, ChevronDown, ChevronLeft, ChevronRight, Download, FileSpreadsheet, Fuel, Gift, ListChecks, Loader2, PackagePlus, RefreshCw, Trash2, Upload, X, Zap } from 'lucide-react';
+import { AlertCircle, CheckCircle, ChevronDown, ChevronLeft, ChevronRight, Download, FileSpreadsheet, Fuel, Gift, ListChecks, Loader2, PackagePlus, Plus, RefreshCw, Trash2, Upload, X, Zap } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import {
   AlertDialog,
@@ -18,13 +18,13 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { LoadingSpinner } from '@/components/comissionamento/LoadingSpinner';
+import FlashTipoDialog from '@/components/FlashTipoDialog';
 import { MonthPeriodNavigator } from '@/components/MonthPeriodNavigator';
 import { useBeneficios } from '@/hooks/useBeneficios';
 import { useToast } from '@/hooks/use-toast';
 import {
   BeneficioImportPayload,
   BeneficioTipo,
-  FLASH_BENEFICIO_TIPOS,
   FlashBeneficioTipo,
 } from '@/types/beneficios';
 import { OpcaoSelect } from '@/types/comissionamento';
@@ -166,9 +166,11 @@ interface ImportDialogProps {
   importing: boolean;
   onClose: () => void;
   onImport: (payload: BeneficioImportPayload) => Promise<void>;
+  flashTipos: OpcaoSelect[];
+  isLoadingFlashTipos: boolean;
 }
 
-const ImportDialog: React.FC<ImportDialogProps> = ({ open, tipo, importing, onClose, onImport }) => {
+const ImportDialog: React.FC<ImportDialogProps> = ({ open, tipo, importing, onClose, onImport, flashTipos, isLoadingFlashTipos }) => {
   const [dataBeneficio, setDataBeneficio] = useState(todayInput());
   const [flashBeneficioTipo, setFlashBeneficioTipo] = useState<FlashBeneficioTipo | ''>('');
   const [file, setFile] = useState<File | null>(null);
@@ -184,7 +186,7 @@ const ImportDialog: React.FC<ImportDialogProps> = ({ open, tipo, importing, onCl
 
   const handleSubmit = async () => {
     setError('');
-    if (!dataBeneficio) {
+    if (tipo !== 'combustivel' && !dataBeneficio) {
       setError('Informe a data do benefício.');
       return;
     }
@@ -194,7 +196,7 @@ const ImportDialog: React.FC<ImportDialogProps> = ({ open, tipo, importing, onCl
     }
     if (!file) {
       setError(tipo === 'combustivel'
-        ? 'Selecione um arquivo Excel com CPF, Placa e Valor.'
+        ? 'Selecione um arquivo Excel com Data, Veículo (ou Placa), Valor Total e CPF.'
         : tipo === 'flash'
           ? 'Selecione um arquivo PDF ou XLSX da Flash.'
           : 'Selecione um arquivo Excel com CPF e Valor.'
@@ -206,7 +208,7 @@ const ImportDialog: React.FC<ImportDialogProps> = ({ open, tipo, importing, onCl
       const rows = await parseBenefitRows(file, tipo);
       if (rows.length === 0) {
         setError(tipo === 'combustivel'
-          ? 'Nenhuma linha com CPF, Placa e Valor foi encontrada.'
+          ? 'Nenhuma linha com Data, CPF, Veículo (ou Placa) e Valor foi encontrada.'
           : tipo === 'flash'
             ? 'Nenhum CPF com valor foi encontrado no arquivo da Flash.'
             : 'Nenhuma linha com CPF e Valor foi encontrada.'
@@ -235,31 +237,34 @@ const ImportDialog: React.FC<ImportDialogProps> = ({ open, tipo, importing, onCl
             Importar {tipo === 'combustivel' ? 'Combustível' : tipo === 'flash' ? 'Flash' : 'Agregamento'}
           </DialogTitle>
           <DialogDescription className="sr-only">
-            Importação de benefícios por CPF para a data selecionada.
+            {tipo === 'combustivel' ? 'Importação de abastecimentos por CPF com a data de cada linha da planilha.' : 'Importação de benefícios por CPF para a data selecionada.'}
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid grid-cols-1 gap-4">
-          <div className="space-y-1">
-            <Label>Data do benefício *</Label>
-            <Input
-              type="date"
-              value={dataBeneficio}
-              onChange={event => setDataBeneficio(event.target.value)}
-            />
-          </div>
+          {tipo !== 'combustivel' && (
+            <div className="space-y-1">
+              <Label>Data do benefício *</Label>
+              <Input
+                type="date"
+                value={dataBeneficio}
+                onChange={event => setDataBeneficio(event.target.value)}
+              />
+            </div>
+          )}
           {tipo === 'flash' && (
             <div className="space-y-1">
               <Label htmlFor="flash-beneficio-tipo">Tipo de benefício *</Label>
               <select
                 id="flash-beneficio-tipo"
                 value={flashBeneficioTipo}
+                disabled={isLoadingFlashTipos || flashTipos.length === 0}
                 onChange={event => setFlashBeneficioTipo(event.target.value as FlashBeneficioTipo | '')}
                 className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
-                <option value="">Selecione...</option>
-                {FLASH_BENEFICIO_TIPOS.map(option => (
-                  <option key={option} value={option}>{option}</option>
+                <option value="">{isLoadingFlashTipos ? 'Carregando tipos...' : 'Selecione...'}</option>
+                {flashTipos.map(option => (
+                  <option key={option.id} value={option.id}>{option.nome}</option>
                 ))}
               </select>
             </div>
@@ -274,7 +279,7 @@ const ImportDialog: React.FC<ImportDialogProps> = ({ open, tipo, importing, onCl
             />
             {tipo === 'combustivel' ? (
               <p className="text-xs text-muted-foreground">
-                Use uma planilha com as colunas CPF, Placa e Valor. Nome, unidade e centro de custo serao buscados pelo CPF.
+                Use as colunas Data, Veículo (ou Placa), Valor Total e CPF. Cada abastecimento usa a data da própria linha, e o mesmo CPF pode aparecer em vários dias. Nome, unidade e centro de custo serão buscados pelo CPF.
               </p>
             ) : tipo === 'flash' ? (
               <p className="text-xs text-muted-foreground">
@@ -321,6 +326,10 @@ const Beneficios: React.FC = () => {
     setFilters,
     clearFilters,
     fetchData,
+    flashTipos,
+    isLoadingFlashTipos,
+    fetchFlashTipos,
+    createFlashTipo,
     importExcel,
     deleteSelected,
     opcoes,
@@ -330,9 +339,11 @@ const Beneficios: React.FC = () => {
   } = useBeneficios(tipo);
   const { profile } = useAuth();
   const canDelete = canManageExistingFinancialData(profile?.role);
+  const canCreateFlashTipo = canManageExistingFinancialData(profile?.role);
   const { toast } = useToast();
   const [page, setPage] = useState(1);
   const [importOpen, setImportOpen] = useState(false);
+  const [flashTipoOpen, setFlashTipoOpen] = useState(false);
   const [importResult, setImportResult] = useState<Awaited<ReturnType<typeof importExcel>> | null>(null);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -366,6 +377,11 @@ const Beneficios: React.FC = () => {
       description: `${result.inserted} importado(s), ${result.skipped} ignorado(s).${hasDuplicates ? ` ${result.duplicateCount} duplicado(s) não foram gravados.` : ''}${hasErrors ? ` ${result.errors[0]}` : ''}`,
       variant: hasErrors ? 'destructive' : 'default',
     });
+  };
+
+  const handleCreateFlashTipo = async (nome: string) => {
+    const createdName = await createFlashTipo(nome);
+    toast({ title: 'Tipo de benefício cadastrado', description: `${createdName} já está disponível para importação e filtros do Flash.` });
   };
 
   const togglePageSelection = (selected: boolean) => {
@@ -539,10 +555,16 @@ const Beneficios: React.FC = () => {
               </p>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
-              <Button onClick={() => setImportOpen(true)} size="sm" className="gap-1">
+              <Button onClick={() => setImportOpen(true)} size="sm" className="gap-1" disabled={tipo === 'flash' && (isLoadingFlashTipos || flashTipos.length === 0)}>
                 <Upload className="w-4 h-4" />
                 Importar
               </Button>
+              {tipo === 'flash' && canCreateFlashTipo && (
+                <Button variant="outline" size="sm" onClick={() => setFlashTipoOpen(true)} className="gap-1">
+                  <Plus className="h-4 w-4" />
+                  Novo tipo de benefício
+                </Button>
+              )}
               <Button variant="outline" size="sm" onClick={handleGenerateReport} disabled={data.length === 0} className="gap-1">
                 <Download className="w-4 h-4" />
                 Gerar Relatorio
@@ -551,7 +573,7 @@ const Beneficios: React.FC = () => {
                 <FileSpreadsheet className="w-4 h-4" />
                 Exportar Excel
               </Button>
-              <Button variant="outline" size="sm" onClick={() => fetchData()} className="gap-1">
+              <Button variant="outline" size="sm" onClick={() => { fetchData(); fetchFlashTipos(); }} className="gap-1">
                 <RefreshCw className="w-4 h-4" />
                 Atualizar
               </Button>
@@ -765,7 +787,12 @@ const Beneficios: React.FC = () => {
           importing={isImporting}
           onClose={() => setImportOpen(false)}
           onImport={handleImport}
+          flashTipos={flashTipos}
+          isLoadingFlashTipos={isLoadingFlashTipos}
         />
+        {tipo === 'flash' && canCreateFlashTipo && (
+          <FlashTipoDialog open={flashTipoOpen} onClose={() => setFlashTipoOpen(false)} onCreate={handleCreateFlashTipo} />
+        )}
 
         <Dialog open={importResult !== null} onOpenChange={open => !open && setImportResult(null)}>
           <DialogContent className="max-w-xl bg-card border-border">

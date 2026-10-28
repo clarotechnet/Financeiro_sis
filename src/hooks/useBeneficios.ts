@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { sortUnidadesParaFiltro } from '@/lib/unidades';
+import { getCombustivelImportKey, parseCombustivelDate } from '@/lib/beneficioImport';
+import { sortFlashBeneficioTipos, validateFlashBeneficioTipo } from '@/lib/flashBeneficioTipos';
+import type { OpcaoSelect } from '@/types/comissionamento';
 import {
   BeneficioFilters,
   BeneficioImportPayload,
@@ -8,7 +11,6 @@ import {
   BeneficioOpcoes,
   BeneficioRegistro,
   BeneficioTipo,
-  FLASH_BENEFICIO_TIPOS,
   FlashBeneficioTipo,
 } from '@/types/beneficios';
 
@@ -73,6 +75,9 @@ const chunkArray = <T,>(items: T[], size: number) => {
 export function useBeneficios(tipo: BeneficioTipo) {
   const [data, setData] = useState<BeneficioRegistro[]>([]);
   const [opcoes, setOpcoes] = useState<BeneficioOpcoes>(EMPTY_OPCOES);
+  const [flashTipos, setFlashTipos] = useState<OpcaoSelect[]>([]);
+  const [isLoadingFlashTipos, setIsLoadingFlashTipos] = useState(false);
+  const [flashTiposError, setFlashTiposError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -154,6 +159,43 @@ export function useBeneficios(tipo: BeneficioTipo) {
     }
   }, []);
 
+  const fetchFlashTipos = useCallback(async () => {
+    if (tipo !== 'flash') return;
+    setIsLoadingFlashTipos(true);
+    setFlashTiposError(null);
+    try {
+      const { data: rows, error: fetchError } = await externalSupabase
+        .from('beneficios_flash_tipos')
+        .select('nome, ordem')
+        .order('ordem')
+        .order('nome');
+      if (fetchError) throw fetchError;
+      setFlashTipos(sortFlashBeneficioTipos((rows || []).map(row => ({ id: row.nome, nome: row.nome, ordem: row.ordem }))));
+    } catch (err) {
+      console.error('Erro ao buscar tipos de benefício Flash:', err);
+      setFlashTiposError('Não foi possível carregar os tipos de benefício Flash. Clique em Atualizar para tentar novamente.');
+    } finally {
+      setIsLoadingFlashTipos(false);
+    }
+  }, [tipo]);
+
+  const createFlashTipo = useCallback(async (value: string): Promise<string> => {
+    const nome = validateFlashBeneficioTipo(value, flashTipos);
+    const { data: row, error: createError } = await externalSupabase
+      .from('beneficios_flash_tipos')
+      .insert({ nome })
+      .select('nome, ordem')
+      .single();
+    if (createError) {
+      if (createError.code === '23505') throw new Error('Já existe um tipo de benefício com esse nome.');
+      if (createError.code === '42501') throw new Error('Seu perfil não tem permissão para cadastrar tipos de benefício.');
+      throw new Error(createError.message || 'Não foi possível cadastrar o tipo de benefício.');
+    }
+    setFlashTipos(previous => sortFlashBeneficioTipos([...previous.filter(option => option.id !== row.nome), { id: row.nome, nome: row.nome, ordem: row.ordem }]));
+    return row.nome;
+  }, [flashTipos]);
+
+  useEffect(() => { fetchFlashTipos(); }, [fetchFlashTipos]);
   useEffect(() => { fetchOpcoes(); }, [fetchOpcoes]);
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -201,10 +243,10 @@ export function useBeneficios(tipo: BeneficioTipo) {
   ), [data]);
 
   const opcoesTiposBeneficio = useMemo(() => {
-    const tipos: string[] = [...FLASH_BENEFICIO_TIPOS];
+    const tipos = flashTipos.map(option => option.nome);
     if (data.some(row => !row.tipo_beneficio)) tipos.push('Flash (legado)');
     return tipos.map(nome => ({ id: nome, nome }));
-  }, [data]);
+  }, [data, flashTipos]);
 
   const kpis = useMemo(() => ({
     totalRegistros: filteredData.length,
@@ -234,15 +276,19 @@ export function useBeneficios(tipo: BeneficioTipo) {
           errors: ['Selecione o tipo de benefício Flash antes de importar.'],
         };
       }
+      if (tipo === 'flash' && !flashTipos.some(option => option.id === flashBeneficioTipo)) {
+        return { inserted: 0, skipped: payload.rows.length, duplicateCount: 0, duplicateCpfs: [], errors: ['Selecione um tipo de benefício Flash cadastrado.'] };
+      }
 
       const normalizedRows = payload.rows
         .map(row => ({
           cpf: normalizeCpf(row.cpf),
           placa: normalizePlaca(row.placa),
           valor: Number(row.valor) || 0,
+          data_beneficio: tipo === 'combustivel' ? parseCombustivelDate(row.data_beneficio) : payload.data_beneficio,
         }))
         .filter(row => {
-          if (!row.cpf || row.valor <= 0 || (tipo === 'combustivel' && !row.placa)) {
+          if (!row.cpf || row.valor <= 0 || (tipo === 'combustivel' && (!row.placa || !row.data_beneficio))) {
             skipped++;
             return false;
           }
@@ -261,43 +307,52 @@ export function useBeneficios(tipo: BeneficioTipo) {
 
       const table = TABLE_BY_TIPO[tipo];
       const existingKeys = new Set<string>();
-      let existingPage = 0;
       const existingPageSize = 1000;
+      const dateChunks = tipo === 'combustivel'
+        ? chunkArray(Array.from(new Set(normalizedRows.map(row => row.data_beneficio))), 100)
+        : [[payload.data_beneficio]];
 
-      while (true) {
-        const { data: existingRows, error: existingError } = await externalSupabase
-          .from(table)
-          .select(tipo === 'flash' ? 'id, cpf, valor, tipo_beneficio' : 'id, cpf, valor')
-          .eq('data_beneficio', payload.data_beneficio)
-          .order('id', { ascending: true })
-          .range(
-            existingPage * existingPageSize,
-            (existingPage + 1) * existingPageSize - 1,
+      for (const dates of dateChunks) {
+        let existingPage = 0;
+        while (true) {
+          let query = externalSupabase.from(table).select(
+            tipo === 'combustivel' ? 'id, cpf, placa, valor, data_beneficio'
+              : tipo === 'flash' ? 'id, cpf, valor, tipo_beneficio' : 'id, cpf, valor'
           );
+          query = tipo === 'combustivel'
+            ? query.in('data_beneficio', dates)
+            : query.eq('data_beneficio', payload.data_beneficio);
+          const { data: existingRows, error: existingError } = await query
+            .order('id', { ascending: true })
+            .range(
+              existingPage * existingPageSize,
+              (existingPage + 1) * existingPageSize - 1,
+            );
 
-        if (existingError) throw existingError;
+          if (existingError) throw existingError;
 
-        (existingRows || []).forEach((row: any) => {
-          const cpf = normalizeCpf(row.cpf);
-          const valueInCents = Math.round((Number(row.valor) || 0) * 100);
-          if (!cpf || valueInCents <= 0) return;
+          (existingRows || []).forEach((row: any) => {
+            const cpf = normalizeCpf(row.cpf);
+            const valueInCents = Math.round((Number(row.valor) || 0) * 100);
+            if (!cpf || valueInCents <= 0) return;
 
-          const baseKey = `${cpf}:${valueInCents}`;
-          existingKeys.add(
-            tipo === 'flash'
-              ? `${baseKey}:${row.tipo_beneficio || '*'}`
-              : baseKey,
-          );
-        });
+            const baseKey = `${cpf}:${valueInCents}`;
+            existingKeys.add(
+              tipo === 'combustivel' ? getCombustivelImportKey(row)
+                : tipo === 'flash' ? `${baseKey}:${row.tipo_beneficio || '*'}` : baseKey,
+            );
+          });
 
-        if (!existingRows || existingRows.length < existingPageSize) break;
-        existingPage++;
+          if (!existingRows || existingRows.length < existingPageSize) break;
+          existingPage++;
+        }
       }
 
       const uniqueRows = normalizedRows.filter(row => {
         const valueInCents = Math.round(row.valor * 100);
         const baseKey = `${row.cpf}:${valueInCents}`;
-        const key = tipo === 'flash' ? `${baseKey}:${flashBeneficioTipo}` : baseKey;
+        const key = tipo === 'combustivel' ? getCombustivelImportKey(row)
+          : tipo === 'flash' ? `${baseKey}:${flashBeneficioTipo}` : baseKey;
         const matchesLegacyFlash = tipo === 'flash' && existingKeys.has(`${baseKey}:*`);
         if (existingKeys.has(key) || matchesLegacyFlash) {
           duplicateCount++;
@@ -356,7 +411,7 @@ export function useBeneficios(tipo: BeneficioTipo) {
         }
 
         const baseRow = {
-          data_beneficio: payload.data_beneficio,
+          data_beneficio: row.data_beneficio,
           cpf: registro.cpf,
           nome: registro.nome,
           unidade_codigo: registro.unidade_codigo,
@@ -402,7 +457,7 @@ export function useBeneficios(tipo: BeneficioTipo) {
     } finally {
       setIsImporting(false);
     }
-  }, [fetchData, tipo]);
+  }, [fetchData, tipo, flashTipos]);
 
   const deleteSelected = useCallback(async (ids: string[]) => {
     const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
@@ -436,11 +491,15 @@ export function useBeneficios(tipo: BeneficioTipo) {
     isLoading,
     isImporting,
     isDeleting,
-    error,
+    error: error || (tipo === 'flash' ? flashTiposError : null),
     filters,
     setFilters: (patch: Partial<BeneficioFilters>) => setFiltersState(prev => ({ ...prev, ...patch })),
     clearFilters: () => setFiltersState(getDefaultFilters()),
     fetchData,
+    flashTipos,
+    isLoadingFlashTipos,
+    fetchFlashTipos,
+    createFlashTipo,
     importExcel,
     deleteSelected,
     opcoes,

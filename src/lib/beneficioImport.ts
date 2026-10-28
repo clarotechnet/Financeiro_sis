@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx';
+import { SSF } from 'xlsx/xlsx.mjs';
 import type { BeneficioImportRow, BeneficioTipo } from '@/types/beneficios';
 
 const normKey = (key: string) =>
@@ -24,6 +25,41 @@ const parseNum = (value: unknown): number => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
+export const parseCombustivelDate = (value: unknown, date1904 = false): string => {
+  let year: number;
+  let month: number;
+  let day: number;
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const parsed = SSF.parse_date_code(value, { date1904 });
+    if (!parsed) return '';
+    year = parsed.y;
+    month = parsed.m;
+    day = parsed.d;
+  } else if (value instanceof Date && Number.isFinite(value.getTime())) {
+    year = value.getUTCFullYear();
+    month = value.getUTCMonth() + 1;
+    day = value.getUTCDate();
+  } else {
+    const text = String(value ?? '').trim();
+    const brazilian = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!brazilian && !iso) return '';
+    year = Number(brazilian ? brazilian[3] : iso![1]);
+    month = Number(brazilian ? brazilian[2] : iso![2]);
+    day = Number(brazilian ? brazilian[1] : iso![3]);
+  }
+
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (year < 1900 || year > 9999 || date.getUTCFullYear() !== year || date.getUTCMonth() + 1 !== month || date.getUTCDate() !== day) return '';
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+};
+
+export const getCombustivelImportKey = (row: BeneficioImportRow): string => {
+  const placa = String(row.placa || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+  return `${row.data_beneficio}:${normalizeCpf(row.cpf)}:${placa}:${Math.round(row.valor * 100)}`;
+};
+
 export const parseBenefitRows = async (file: File, tipo: BeneficioTipo): Promise<BeneficioImportRow[]> => {
   if (tipo === 'flash') {
     if (/\.pdf$/i.test(file.name)) {
@@ -36,7 +72,7 @@ export const parseBenefitRows = async (file: File, tipo: BeneficioTipo): Promise
   }
 
   const buffer = await file.arrayBuffer();
-  const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
+  const workbook = XLSX.read(buffer, { type: 'array', cellDates: tipo !== 'combustivel' });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
   if (!sheet) return [];
   const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: null, raw: true });
@@ -48,7 +84,12 @@ export const parseBenefitRows = async (file: File, tipo: BeneficioTipo): Promise
     throw new Error('A planilha Flash deve conter as colunas CPF e Valor (ou Total).');
   }
 
-  return raw.flatMap(row => {
+  const fuelDateColumn = headers.find(key => normKey(key) === 'DATA');
+  if (tipo === 'combustivel' && raw.length > 0 && !fuelDateColumn) {
+    throw new Error('A planilha de Combustível deve conter a coluna Data de cada abastecimento.');
+  }
+
+  return raw.flatMap((row, index) => {
     const entries = Object.entries(row);
     let cpfValue: unknown = null;
     let placaValue: unknown = null;
@@ -57,7 +98,7 @@ export const parseBenefitRows = async (file: File, tipo: BeneficioTipo): Promise
     for (const [key, value] of entries) {
       const normalizedKey = normKey(key);
       if (cpfValue == null && normalizedKey.includes('CPF')) cpfValue = value;
-      if (tipo === 'combustivel' && placaValue == null && normalizedKey.includes('PLACA')) placaValue = value;
+      if (tipo === 'combustivel' && placaValue == null && (normalizedKey.includes('PLACA') || normalizedKey.includes('VEICULO'))) placaValue = value;
       if (
         tipo !== 'flash' && valorValue == null &&
         (
@@ -80,6 +121,14 @@ export const parseBenefitRows = async (file: File, tipo: BeneficioTipo): Promise
     const valor = parseNum(valorValue);
     if (!cpf && !placa && valor <= 0) return [];
 
-    return tipo === 'combustivel' ? [{ cpf, placa, valor }] : [{ cpf, valor }];
+    if (tipo === 'combustivel') {
+      const data_beneficio = parseCombustivelDate(row[fuelDateColumn!], !!workbook.Workbook?.WBProps?.date1904);
+      if (!data_beneficio) {
+        const line = typeof row.__rowNum__ === 'number' ? row.__rowNum__ + 1 : index + 2;
+        throw new Error(`Linha ${line}: informe uma Data válida para o abastecimento (dd/mm/aaaa).`);
+      }
+      return [{ cpf, placa, valor, data_beneficio }];
+    }
+    return [{ cpf, valor }];
   });
 };
