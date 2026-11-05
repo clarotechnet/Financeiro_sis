@@ -7,40 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from '@/hooks/use-toast';
-
-const collectRecoveryParams = () => {
-  const params = new URLSearchParams(window.location.search);
-  const hash = window.location.hash.slice(1);
-
-  const mergeParams = (raw: string) => {
-    const cleaned = raw.replace(/^[#?&]/, '');
-    if (!cleaned) return;
-
-    new URLSearchParams(cleaned).forEach((value, key) => {
-      if (!params.has(key)) params.set(key, value);
-    });
-  };
-
-  const queryIndex = hash.indexOf('?');
-  if (queryIndex >= 0) mergeParams(hash.slice(queryIndex + 1));
-
-  const nestedHashIndex = hash.indexOf('#');
-  if (nestedHashIndex >= 0) mergeParams(hash.slice(nestedHashIndex + 1));
-
-  const tokenStarts = ['access_token=', 'refresh_token=', 'code=']
-    .map((marker) => hash.indexOf(marker))
-    .filter((index) => index >= 0);
-
-  if (tokenStarts.length > 0) {
-    mergeParams(hash.slice(Math.min(...tokenStarts)));
-  }
-
-  return {
-    code: params.get('code'),
-    accessToken: params.get('access_token'),
-    refreshToken: params.get('refresh_token'),
-  };
-};
+import { collectRecoveryParams, PASSWORD_RESET_PATH } from '@/lib/passwordRecovery';
 
 export default function ResetPassword() {
   const navigate = useNavigate();
@@ -71,7 +38,11 @@ export default function ResetPassword() {
       setRecoveryError('');
 
       try {
-        const { code, accessToken, refreshToken } = collectRecoveryParams();
+        const { code, accessToken, refreshToken, hasError } = collectRecoveryParams(window.location);
+
+        if (hasError || Boolean(accessToken) !== Boolean(refreshToken)) {
+          throw new Error('Link de redefinição inválido ou expirado. Solicite um novo link pela tela de login.');
+        }
 
         if (code) {
           const { error } = await externalSupabase.auth.exchangeCodeForSession(code);
@@ -94,6 +65,7 @@ export default function ResetPassword() {
         const recoveredEmail = data.user.email ?? '';
         setSessionEmail(recoveredEmail);
         setEmail(recoveredEmail);
+        navigate(PASSWORD_RESET_PATH, { replace: true });
       } catch (error) {
         if (!active) return;
         setRecoveryError(getRecoveryErrorMessage(error));
@@ -107,7 +79,7 @@ export default function ResetPassword() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [navigate]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();

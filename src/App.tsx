@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import PasswordRecoveryRedirect from "@/components/PasswordRecoveryRedirect";
 import Login from "./pages/Login";
 import Admin from "./pages/Admin";
 import Comissionamento from "./pages/Comissionamento";
@@ -42,6 +43,7 @@ const App = () => (
           <Sonner />
 
           <BrowserRouter basename="/">
+            <PasswordRecoveryRedirect>
             <Routes>
               <Route path="/login" element={<Login />} />
               <Route path="/redefinir-senha" element={<ResetPassword />} />
@@ -139,6 +141,7 @@ const App = () => (
               </Route>
               <Route path="*" element={<NotFound />} />
             </Routes>
+            </PasswordRecoveryRedirect>
           </BrowserRouter>
         </TooltipProvider>
       </AuthProvider>
