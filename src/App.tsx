@@ -17,6 +17,7 @@ import Perfil from "./pages/Perfil";
 import FolhaPagamento from "./pages/FolhaPagamento";
 import Beneficios from "./pages/Beneficios";
 import ResetPassword from "./pages/ResetPassword";
+import FinancialApprovals from "./pages/FinancialApprovals";
 import DREConsolidado from "./pages/DREConsolidado";
 import FluxoCaixa from "./pages/FluxoCaixa";
 import MonitoramentoColaboradores from "./pages/MonitoramentoColaboradores";
@@ -123,9 +124,13 @@ const App = () => (
                   }
                 />
                 <Route
+                  path="/aprovacoes"
+                  element={<ProtectedRoute allowedRoles={[ROLE_ADMIN, ROLE_RH]}><FinancialApprovals /></ProtectedRoute>}
+                />
+                <Route
                   path="/monitoramento-colaboradores"
                   element={
-                    <ProtectedRoute allowedRoles={[ROLE_ADMIN, ROLE_RH, ROLE_FINANCE_ASSISTANT]}>
+                    <ProtectedRoute allowedRoles={[ROLE_ADMIN, ROLE_FINANCE_ASSISTANT]}>
                       <MonitoramentoColaboradores />
                     </ProtectedRoute>
                   }
@@ -133,7 +138,7 @@ const App = () => (
                 <Route
                   path="/configuracoes/monitoramento"
                   element={
-                    <ProtectedRoute allowedRoles={[ROLE_ADMIN, ROLE_RH, ROLE_FINANCE_ASSISTANT]}>
+                    <ProtectedRoute allowedRoles={[ROLE_ADMIN, ROLE_FINANCE_ASSISTANT]}>
                       <Navigate to="/monitoramento-colaboradores" replace />
                     </ProtectedRoute>
                   }

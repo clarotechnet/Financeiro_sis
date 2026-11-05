@@ -10,6 +10,7 @@ import { ComissionamentoImportReports } from './ComissionamentoImportReports';
 import { FornecedorDialog } from './FornecedorDialog';
 import { useAuth } from '@/contexts/useAuth';
 import { ROLE_RH } from '@/lib/profileRoles';
+import type { ImportOutcome } from '@/lib/financialApprovals';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -103,7 +104,7 @@ interface Props {
   filteredData: LancamentoPix[];
   allData?: LancamentoPix[];
   opcoes: OpcoesData;
-  onImportExcel?: (rows: Record<string, any>[]) => Promise<{ inserted: number; skipped: number; errors: string[] }>;
+  onImportExcel?: (rows: Record<string, any>[], fileName?: string) => Promise<ImportOutcome>;
   onImportReports?: (rows: OperationalReportImportRow[], planoContaId: string, fileName: string) => Promise<OperationalReportImportResult>;
   showActions?: boolean;
   showNewEntry?: boolean;

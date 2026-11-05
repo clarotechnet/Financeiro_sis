@@ -65,6 +65,7 @@ export interface OperationalReportImportRow {
 }
 
 export interface OperationalReportImportResult {
+  pendingApproval?: number;
   inserted: number;
   skipped: number;
   errors: string[];

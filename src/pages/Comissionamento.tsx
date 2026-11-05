@@ -10,7 +10,8 @@ import { ComissionamentoValores } from '@/components/comissionamento/Comissionam
 import { LoadingSpinner } from '@/components/comissionamento/LoadingSpinner';
 import { useAuth } from '@/contexts/useAuth';
 import { BarChart3, DollarSign, FileText, Layers, Loader2 } from 'lucide-react';
-import { canManageExistingFinancialData, ROLE_RH } from '@/lib/profileRoles';
+import { canManageApprovedFinancialData, ROLE_RH } from '@/lib/profileRoles';
+import FinancialApprovalNotice from '@/components/FinancialApprovalNotice';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -51,7 +52,7 @@ const Comissionamento: React.FC = () => {
   const [isLoadingNotificationRecords, setIsLoadingNotificationRecords] = useState(false);
   const { profile } = useAuth();
   const isRh = profile?.role === ROLE_RH;
-  const canManageRecords = canManageExistingFinancialData(profile?.role);
+  const canManageRecords = canManageApprovedFinancialData(profile?.role);
   const isDashboard = activeTab === 'frentes';
   const isRhPaymentInclusion = isRh && activeTab === 'kpis';
   const pageMeta = {
@@ -202,6 +203,7 @@ const Comissionamento: React.FC = () => {
   return (
     <div className="min-h-full">
       <div className="max-w-[1400px] mx-auto p-4 md:p-8 space-y-4 md:space-y-6">
+        <FinancialApprovalNotice />
         <div className="flex items-center gap-3">
           <div
             className="w-11 h-11 shrink-0 rounded-xl flex items-center justify-center shadow-glow"

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { sortUnidadesParaFiltro } from '@/lib/unidades';
+import { useFinancialSubmission } from '@/hooks/useFinancialSubmission';
 
 export interface DadoFinanceiro {
     id: string;
@@ -319,6 +320,7 @@ const fetchAllRows = async <T,>(table: string, dateColumn: string): Promise<T[]>
 };
 
 export function useFolhaPagamento() {
+    const { requiresApproval, submitForApproval } = useFinancialSubmission();
     const [data, setData] = useState<DadoFinanceiro[]>([]);
     const [pagamentos, setPagamentos] = useState<FolhaPagamentoFonte[]>([]);
     const [receitas, setReceitas] = useState<FolhaReceitaFonte[]>([]);
@@ -697,7 +699,7 @@ export function useFolhaPagamento() {
         return { kpis, centrosCusto, composicaoDespesas, unidadesDetalhe };
     }, [cadastros, data, filtered, filters, opcoesUnidades, pagamentos, receitas]);
 
-    const importExcel = useCallback(async (rows: Record<string, any>[]) => {
+    const importExcel = useCallback(async (rows: Record<string, any>[], fileName?: string) => {
         const errors: string[] = [];
         let inserted = 0;
         let skipped = 0;
@@ -716,6 +718,10 @@ export function useFolhaPagamento() {
         });
 
         const records = Array.from(recordsByKey.values());
+        if (requiresApproval && records.length > 0) {
+            const pendingApproval = await submitForApproval('dados_financeiro', records, fileName);
+            return { inserted: 0, skipped, errors, pendingApproval };
+        }
         for (let i = 0; i < records.length; i += 200) {
             const chunk = records.slice(i, i + 200);
             const { error: err } = await externalSupabase
@@ -729,7 +735,7 @@ export function useFolhaPagamento() {
         }
         await fetchData();
         return { inserted, skipped, errors };
-    }, [fetchData]);
+    }, [fetchData, requiresApproval, submitForApproval]);
 
     const deleteSelected = useCallback(async (ids: string[]) => {
         const uniqueIds = Array.from(new Set(ids.filter(Boolean)));

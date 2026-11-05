@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import { Upload, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import * as XLSX from 'xlsx';
+import { formatImportOutcome, ImportOutcome } from '@/lib/financialApprovals';
 import {
     Dialog,
     DialogContent,
@@ -12,7 +13,7 @@ import {
 } from '@/components/ui/dialog';
 
 interface Props {
-    onImport: (rows: Record<string, any>[]) => Promise<{ inserted: number; skipped: number; errors: string[] }>;
+    onImport: (rows: Record<string, any>[], fileName?: string) => Promise<ImportOutcome>;
 }
 
 const normalizeKey = (k: string) =>
@@ -146,8 +147,8 @@ if (errosValidacao.length > 0) {
                 return;
             }
 
-            const res = await onImport(mapped);
-            const msg = `${res.inserted} importados${res.skipped ? `, ${res.skipped} ignorados` : ''}${res.errors.length ? ` — ${res.errors.length} erro(s)` : ''}.`;
+            const res = await onImport(mapped, file.name);
+            const msg = formatImportOutcome(res);
             setResult({ ok: res.errors.length === 0, message: msg });
         } catch (err: any) {
             setResult({ ok: false, message: err.message || 'Erro ao importar planilha.' });
@@ -172,7 +173,7 @@ if (errosValidacao.length > 0) {
                 onClick={() => inputRef.current?.click()}
                 disabled={loading}
                 className="gap-1 border-primary/40 text-primary hover:bg-primary/10"
-                title="Importar planilha Excel (somente admin)"
+                title="Importar planilha Excel"
             >
                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
                 Importar Excel

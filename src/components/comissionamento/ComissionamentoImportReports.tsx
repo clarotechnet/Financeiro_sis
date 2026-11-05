@@ -243,7 +243,7 @@ export const ComissionamentoImportReports: React.FC<Props> = ({ contas, onImport
               ? 'border-amber-500/40 bg-amber-500/10 text-amber-500'
               : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-500'
               }`}>
-              <div>{result.inserted} linha(s) importadas e {result.skipped} ignorada(s).</div>
+              <div>{result.pendingApproval ? `${result.pendingApproval} linha(s) enviada(s) para aprovação do administrador` : `${result.inserted} linha(s) importadas`} e {result.skipped} ignorada(s).</div>
               {result.errors.map((resultError, index) => (
                 <div key={`${resultError}-${index}`} className="mt-1">{resultError}</div>
               ))}

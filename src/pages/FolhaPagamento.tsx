@@ -17,7 +17,8 @@ import { FolhaTable } from '@/components/folha/FolhaTable';
 import { useAuth } from '@/contexts/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { downloadOperationalReport } from '@/lib/operationalReports';
-import { canManageExistingFinancialData, ROLE_RH } from '@/lib/profileRoles';
+import { canManageApprovedFinancialData, ROLE_RH } from '@/lib/profileRoles';
+import FinancialApprovalNotice from '@/components/FinancialApprovalNotice';
 
 interface MultiSelectProps {
   label: string;
@@ -114,7 +115,7 @@ const FolhaPagamento: React.FC = () => {
   const activeTab = params.get('tab') || 'kpis';
   const { isAdmin, profile } = useAuth();
   const canImport = isAdmin || profile?.role === ROLE_RH;
-  const canDelete = canManageExistingFinancialData(profile?.role);
+  const canDelete = canManageApprovedFinancialData(profile?.role);
   const { toast } = useToast();
   const {
     data, isLoading, isDeleting, error, filters, setFilters, clearFilters,
@@ -192,6 +193,7 @@ const FolhaPagamento: React.FC = () => {
   return (
     <div className="min-h-full">
       <div className="max-w-[1400px] mx-auto p-4 md:p-8 space-y-4 md:space-y-6">
+        <FinancialApprovalNotice />
         <div className="flex items-center gap-3">
           <div className="w-11 h-11 rounded-xl flex items-center justify-center shadow-glow"
             style={{ background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)' }}>

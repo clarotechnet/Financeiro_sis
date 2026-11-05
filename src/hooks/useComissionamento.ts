@@ -13,6 +13,7 @@ import {
 } from '@/types/comissionamento';
 import { buildMonthlyDates, clampMonthlyOccurrences } from '@/utils/monthlyDates';
 import { removePaymentReceipt, uploadPaymentReceipt } from '@/lib/paymentReceipt';
+import { useFinancialSubmission } from '@/hooks/useFinancialSubmission';
 
 interface OpcoesData {
   cnpj: OpcaoSelect[];
@@ -182,6 +183,7 @@ const chunkArray = <T,>(items: T[], size: number) => {
 };
 
 export function useComissionamento() {
+  const { requiresApproval, submitForApproval } = useFinancialSubmission();
   const [data, setData] = useState<LancamentoPix[]>([]);
   const [opcoes, setOpcoes] = useState<OpcoesData>(EMPTY_OPCOES);
   const [isLoading, setIsLoading] = useState(false);
@@ -506,6 +508,11 @@ export function useComissionamento() {
         : [buildRecord(dataLancamento, null, parcelaNumero)];
     });
     try {
+      if (requiresApproval) {
+        await submitForApproval('lancamentos_pix', records);
+        recordsInserted = true;
+        return;
+      }
       const { error: insertError } = await externalSupabase
         .from('lancamentos_pix')
         .insert(records);
@@ -518,7 +525,7 @@ export function useComissionamento() {
       }
       throw submitError;
     }
-  }, [fetchData]);
+  }, [fetchData, requiresApproval, submitForApproval]);
 
   const updateRecord = useCallback(async (id: string, updates: Partial<LancamentoPix> & Record<string, any>) => {
     const {
@@ -639,7 +646,7 @@ export function useComissionamento() {
     await fetchData();
   }, [fetchData]);
 
-  const importExcel = useCallback(async (rows: Record<string, any>[]) => {
+  const importExcel = useCallback(async (rows: Record<string, any>[], fileName?: string) => {
     // Helper: resolve option name -> id, auto-creating when missing
     const resolverCache: Record<string, Map<string, string>> = {};
     let unidadesCache: Map<string, string> | null = null;
@@ -805,6 +812,10 @@ export function useComissionamento() {
       }
     }
 
+    if (records.length > 0 && requiresApproval) {
+      const pendingApproval = await submitForApproval('lancamentos_pix', records, fileName);
+      return { inserted: 0, skipped, errors, pendingApproval };
+    }
     if (records.length > 0) {
       // Insert in chunks of 200
       for (let i = 0; i < records.length; i += 200) {
@@ -817,7 +828,7 @@ export function useComissionamento() {
 
     await fetchData();
     return { inserted, skipped, errors };
-  }, [fetchData]);
+  }, [fetchData, requiresApproval, submitForApproval]);
 
   const importOperationalReport = useCallback(async (
     rows: OperationalReportImportRow[],
@@ -1006,6 +1017,10 @@ export function useComissionamento() {
       }
       : undefined;
 
+    if (requiresApproval && records.length > 0) {
+      const pendingApproval = await submitForApproval('lancamentos_pix', records.map(item => item.payload), fileName);
+      return { inserted: 0, skipped, errors, pendingApproval };
+    }
     for (const recordChunk of chunkArray(records, 200)) {
       const { error: insertError } = await externalSupabase
         .from('lancamentos_pix')
@@ -1031,7 +1046,7 @@ export function useComissionamento() {
 
     await fetchData();
     return { inserted, skipped, errors, payrollSummary };
-  }, [fetchData, opcoes.centro_de_custo, opcoes.plano_contas, opcoes.unidade]);
+  }, [fetchData, opcoes.centro_de_custo, opcoes.plano_contas, opcoes.unidade, requiresApproval, submitForApproval]);
 
 
 

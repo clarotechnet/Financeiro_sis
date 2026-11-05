@@ -4,6 +4,8 @@ import { sortUnidadesParaFiltro } from '@/lib/unidades';
 import { getCombustivelImportKey, parseCombustivelDate } from '@/lib/beneficioImport';
 import { sortFlashBeneficioTipos, validateFlashBeneficioTipo } from '@/lib/flashBeneficioTipos';
 import type { OpcaoSelect } from '@/types/comissionamento';
+import { useFinancialSubmission } from '@/hooks/useFinancialSubmission';
+import type { FinancialSource } from '@/lib/financialApprovals';
 import {
   BeneficioFilters,
   BeneficioImportPayload,
@@ -14,7 +16,7 @@ import {
   FlashBeneficioTipo,
 } from '@/types/beneficios';
 
-const TABLE_BY_TIPO: Record<BeneficioTipo, string> = {
+const TABLE_BY_TIPO: Record<BeneficioTipo, FinancialSource> = {
   combustivel: 'beneficios_combustivel',
   agregamento: 'beneficios_agregamento',
   flash: 'beneficios_flash',
@@ -73,6 +75,7 @@ const chunkArray = <T,>(items: T[], size: number) => {
 };
 
 export function useBeneficios(tipo: BeneficioTipo) {
+  const { requiresApproval, submitForApproval } = useFinancialSubmission();
   const [data, setData] = useState<BeneficioRegistro[]>([]);
   const [opcoes, setOpcoes] = useState<BeneficioOpcoes>(EMPTY_OPCOES);
   const [flashTipos, setFlashTipos] = useState<OpcaoSelect[]>([]);
@@ -429,6 +432,10 @@ export function useBeneficios(tipo: BeneficioTipo) {
         ];
       });
 
+      if (requiresApproval && insertRows.length > 0) {
+        const pendingApproval = await submitForApproval(TABLE_BY_TIPO[tipo], insertRows, payload.arquivo_nome);
+        return { inserted: 0, skipped, duplicateCount, duplicateCpfs: Array.from(duplicateCpfs), errors, pendingApproval };
+      }
       for (const chunk of chunkArray(insertRows, 200)) {
         const { error: insertError } = await externalSupabase
           .from(table)
@@ -457,7 +464,7 @@ export function useBeneficios(tipo: BeneficioTipo) {
     } finally {
       setIsImporting(false);
     }
-  }, [fetchData, tipo, flashTipos]);
+  }, [fetchData, tipo, flashTipos, requiresApproval, submitForApproval]);
 
   const deleteSelected = useCallback(async (ids: string[]) => {
     const uniqueIds = Array.from(new Set(ids.filter(Boolean)));

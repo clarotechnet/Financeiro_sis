@@ -31,3 +31,7 @@ export const canManageExistingFinancialData = (role: string | null | undefined) 
   const normalizedRole = getProfileRole(role);
   return normalizedRole === ROLE_ADMIN || normalizedRole === ROLE_RH;
 };
+
+export const canManageApprovedFinancialData = (role: string | null | undefined) => role === ROLE_ADMIN;
+export const canAccessEmployeeMonitoring = (role: string | null | undefined) =>
+  role === ROLE_ADMIN || role === ROLE_FINANCE_ASSISTANT;

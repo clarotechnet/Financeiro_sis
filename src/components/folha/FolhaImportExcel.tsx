@@ -5,9 +5,10 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { formatImportOutcome, ImportOutcome } from '@/lib/financialApprovals';
 
 interface Props {
-    onImport: (rows: Record<string, any>[]) => Promise<{ inserted: number; skipped: number; errors: string[] }>;
+    onImport: (rows: Record<string, any>[], fileName?: string) => Promise<ImportOutcome>;
 }
 
 const todayInput = () => {
@@ -205,8 +206,8 @@ export const FolhaImportExcel: React.FC<Props> = ({ onImport }) => {
             const rows = await readPayrollRows(file, dataFolha);
             if (rows.length === 0) throw new Error('Nenhuma linha valida encontrada no arquivo.');
 
-            const response = await onImport(rows);
-            const message = `${response.inserted} sincronizado(s), ${response.skipped} ignorado(s).${response.errors.length ? ` ${response.errors[0]}` : ''}`;
+            const response = await onImport(rows, file.name);
+            const message = formatImportOutcome(response);
             const ok = response.errors.length === 0;
             setResult({ ok, message });
         } catch (error: any) {

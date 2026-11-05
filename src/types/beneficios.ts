@@ -43,6 +43,7 @@ export interface BeneficioImportPayload {
 }
 
 export interface BeneficioImportResult {
+  pendingApproval?: number;
   inserted: number;
   skipped: number;
   duplicateCount: number;

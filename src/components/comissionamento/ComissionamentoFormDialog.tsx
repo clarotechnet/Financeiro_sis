@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { CheckCircle, Loader2, Minus, Plus, Search, Trash2 } from 'lucide-react';
 import { LancamentoPix, OpcaoSelect } from '@/types/comissionamento';
 import { useAuth } from '@/contexts/useAuth';
+import { ROLE_RH } from '@/lib/profileRoles';
 import { externalSupabase } from '@/integrations/supabase/externalClient';
 import { SearchableSelect } from './SearchableSelect';
 import { PaymentReceiptField } from './PaymentReceiptField';
@@ -690,7 +691,7 @@ export const ComissionamentoFormDialog: React.FC<Props> = ({
           <div className="flex flex-col items-center gap-3 py-8">
             <CheckCircle className="w-12 h-12 text-primary" />
             <p className="text-lg font-semibold text-foreground">
-              {usarMultiplasDespesas
+              {profile?.role === ROLE_RH ? 'Envio pendente de aprovação do administrador.' : usarMultiplasDespesas
                 ? `${quantidadeFinal} lançamentos registrados com sucesso!`
                 : initialRecord
                   ? 'Cópia registrada com sucesso!'

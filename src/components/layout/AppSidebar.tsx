@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/sidebar';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useAuth } from '@/contexts/useAuth';
-import { canAccessFinancialReports, ROLE_FINANCE_ASSISTANT, ROLE_RH } from '@/lib/profileRoles';
+import { canAccessFinancialReports, canAccessEmployeeMonitoring, ROLE_FINANCE_ASSISTANT, ROLE_RH } from '@/lib/profileRoles';
 
 interface SubItem { id: string; label: string; icon: React.ComponentType<{ className?: string }>; }
 
@@ -202,7 +202,7 @@ export const AppSidebar: React.FC = () => {
                                     </SidebarMenuButton>
                                 </SidebarMenuItem>
                             )}
-                            {canAccessSettings && (
+                            {canAccessEmployeeMonitoring(profile?.role) && (
                                 <SidebarMenuItem>
                                     <SidebarMenuButton
                                         asChild
@@ -217,6 +217,13 @@ export const AppSidebar: React.FC = () => {
                                                 </span>
                                             )}
                                         </NavLink>
+                                    </SidebarMenuButton>
+                                </SidebarMenuItem>
+                            )}
+                            {(isAdmin || isRh) && (
+                                <SidebarMenuItem>
+                                    <SidebarMenuButton asChild isActive={pathname === '/aprovacoes'}>
+                                        <NavLink to="/aprovacoes"><FileBarChart className="h-4 w-4 shrink-0" />{!collapsed && <span className="text-[13px]">{isAdmin ? 'Aprovações' : 'Meus envios'}</span>}</NavLink>
                                     </SidebarMenuButton>
                                 </SidebarMenuItem>
                             )}

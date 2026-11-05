@@ -31,6 +31,9 @@ import { OpcaoSelect } from '@/types/comissionamento';
 import { downloadOperationalReport, OperationalReportSource } from '@/lib/operationalReports';
 import { useAuth } from '@/contexts/useAuth';
 import { canManageExistingFinancialData } from '@/lib/profileRoles';
+import { canManageApprovedFinancialData } from '@/lib/profileRoles';
+import FinancialApprovalNotice from '@/components/FinancialApprovalNotice';
+import { formatImportOutcome } from '@/lib/financialApprovals';
 import { normalizeCpf, parseBenefitRows } from '@/lib/beneficioImport';
 
 const PAGE_SIZE = 50;
@@ -338,7 +341,7 @@ const Beneficios: React.FC = () => {
     kpis,
   } = useBeneficios(tipo);
   const { profile } = useAuth();
-  const canDelete = canManageExistingFinancialData(profile?.role);
+  const canDelete = canManageApprovedFinancialData(profile?.role);
   const canCreateFlashTipo = canManageExistingFinancialData(profile?.role);
   const { toast } = useToast();
   const [page, setPage] = useState(1);
@@ -373,8 +376,8 @@ const Beneficios: React.FC = () => {
     const hasDuplicates = result.duplicateCount > 0;
     setImportResult(result);
     toast({
-      title: hasErrors || hasDuplicates ? 'Importação concluída com avisos' : 'Importação concluída',
-      description: `${result.inserted} importado(s), ${result.skipped} ignorado(s).${hasDuplicates ? ` ${result.duplicateCount} duplicado(s) não foram gravados.` : ''}${hasErrors ? ` ${result.errors[0]}` : ''}`,
+      title: result.pendingApproval ? 'Envio pendente de aprovação' : hasErrors || hasDuplicates ? 'Importação concluída com avisos' : 'Importação concluída',
+      description: formatImportOutcome(result),
       variant: hasErrors ? 'destructive' : 'default',
     });
   };
@@ -514,6 +517,7 @@ const Beneficios: React.FC = () => {
   return (
     <div className="min-h-full">
       <div className="max-w-[1500px] mx-auto p-4 md:p-8 space-y-4 md:space-y-6">
+        <FinancialApprovalNotice />
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div
@@ -806,8 +810,8 @@ const Beneficios: React.FC = () => {
               <div className="space-y-4">
                 <div className="grid grid-cols-3 gap-3">
                   <div className="rounded-lg border border-border bg-muted/20 p-3">
-                    <p className="text-xs font-semibold uppercase text-muted-foreground">Importados</p>
-                    <strong className="text-xl text-foreground">{importResult.inserted}</strong>
+                    <p className="text-xs font-semibold uppercase text-muted-foreground">{importResult.pendingApproval ? 'Aguardando aprovação' : 'Importados'}</p>
+                    <strong className="text-xl text-foreground">{importResult.pendingApproval || importResult.inserted}</strong>
                   </div>
                   <div className="rounded-lg border border-border bg-muted/20 p-3">
                     <p className="text-xs font-semibold uppercase text-muted-foreground">Ignorados</p>

@@ -51,7 +51,7 @@ export function useNotifications() {
 
     setIsLoading(true);
     try {
-      const [paymentCount, payrollCount, pendingProfilesCount] = await Promise.all([
+      const [paymentCount, payrollCount, pendingProfilesCount, pendingFinancialCount] = await Promise.all([
         safeCount(
           externalSupabase
             .from('lancamentos_pix')
@@ -72,9 +72,13 @@ export function useNotifications() {
                 .eq('approved', false)
             )
           : Promise.resolve(0),
+        isAdmin ? safeCount(externalSupabase.from('financial_approval_requests').select('id', { count: 'exact', head: true }).eq('status', 'pending')) : Promise.resolve(0),
       ]);
 
       const nextItems: NotificationItem[] = [];
+      if (pendingFinancialCount > 0) {
+        nextItems.push({ id: 'pending-financial-approvals', title: 'Aprovação pendente', description: `${pendingFinancialCount} envio(s) de RH aguardando análise.`, count: pendingFinancialCount, href: '/aprovacoes' });
+      }
 
       if (paymentCount > 0) {
         nextItems.push({
